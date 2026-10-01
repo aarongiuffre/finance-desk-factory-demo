@@ -474,18 +474,18 @@ def last_price_at(bars, d):
 
 
 # --------------------------------------------------------------------- report
-def stats(monthly, spy):
+def stats(monthly, spy, per_year=12):
     if not monthly:
         return {}
     n = len(monthly)
     tot = 1.0
     for r in monthly:
         tot *= 1 + r
-    yrs = n / 12
+    yrs = n / per_year
     cagr = tot ** (1 / yrs) - 1 if tot > 0 else -1.0
     mu = statistics.mean(monthly)
     sd = statistics.stdev(monthly) if n > 1 else 0.0
-    sharpe = (mu / sd * (12 ** 0.5)) if sd else 0.0
+    sharpe = (mu / sd * (per_year ** 0.5)) if sd else 0.0
     peak, v, mdd = 1.0, 1.0, 0.0
     for r in monthly:
         v *= 1 + r
@@ -496,28 +496,29 @@ def stats(monthly, spy):
     cov = statistics.mean([(a - mu) * (b - statistics.mean(spy))
                            for a, b in zip(monthly, spy)]) if n > 1 else 0
     beta = cov / (sd ** 2) if sd else 0.0
-    return {"months": n, "total": tot - 1, "cagr": cagr, "vol_ann": sd * 12 ** 0.5,
+    return {"months": n, "total": tot - 1, "cagr": cagr, "vol_ann": sd * per_year ** 0.5,
             "sharpe": sharpe, "maxdd": mdd, "hit_vs_spy": hit,
             "rel_mean_m": statistics.mean(rel), "beta": beta}
 
 
-def report_block(name, monthly, spy, labels):
-    s = stats(monthly, spy)
+def report_block(name, monthly, spy, labels, per_year=12):
+    s = stats(monthly, spy, per_year)
     if not s:
         return f"{name}: no data"
     h1, h2 = monthly[:len(monthly) // 2], monthly[len(monthly) // 2:]
-    s1, s2 = stats(h1, spy[:len(h1)]), stats(h2, spy[len(monthly) // 2:])
+    s1, s2 = stats(h1, spy[:len(h1)], per_year), stats(h2, spy[len(monthly) // 2:], per_year)
+    unit = "mo" if per_year == 12 else "wk"
     up = [a for a, b, lab in zip(monthly, spy, labels) if lab == "up"]
     dn = [a for a, b, lab in zip(monthly, spy, labels) if lab == "down"]
-    up_s = f"{statistics.mean(up)*100:+.1f}%/mo (n={len(up)})" if up else "n/a"
-    dn_s = f"{statistics.mean(dn)*100:+.1f}%/mo (n={len(dn)})" if dn else "n/a"
+    up_s = f"{statistics.mean(up)*100:+.1f}%/{unit} (n={len(up)})" if up else "n/a"
+    dn_s = f"{statistics.mean(dn)*100:+.1f}%/{unit} (n={len(dn)})" if dn else "n/a"
     lines = [
         f"{name}: CAGR {s['cagr']*100:+6.1f}%  vol {s['vol_ann']*100:5.1f}%  "
         f"Sharpe {s['sharpe']:4.2f}  maxDD {s['maxdd']*100:6.1f}%  "
-        f"hit vs SPY {s['hit_vs_spy']*100:4.0f}%  rel/mo {s['rel_mean_m']*100:+.2f}%  "
-        f"beta {s['beta']:.2f}  (n={s['months']}m)",
+        f"hit vs SPY {s['hit_vs_spy']*100:4.0f}%  rel/{unit} {s['rel_mean_m']*100:+.2f}%  "
+        f"beta {s['beta']:.2f}  (n={s['months']}{unit})",
         f"    halves: 1st CAGR {s1.get('cagr', 0)*100:+.1f}% / 2nd CAGR {s2.get('cagr', 0)*100:+.1f}%   "
-        f"SPY-up months: {up_s}   SPY-down months: {dn_s}",
+        f"SPY-up {unit}s: {up_s}   SPY-down {unit}s: {dn_s}",
     ]
     return "\n".join(lines)
 
@@ -680,12 +681,13 @@ def main():
                 rets[v].append(gross - 2 * (args.cost_bps / 1e4) * turn)
         prev = row
 
+    py = 52 if args.cadence == "weekly" else 12
     print()
     print("=" * 78)
     print(f"WALK-FORWARD REPORT  {rb[0]} .. {rb[-1]}  N={args.n}  "
-          f"cost {args.cost_bps}bps/side  rebalance monthly")
+          f"cost {args.cost_bps}bps/side  rebalance {args.cadence}")
     print("=" * 78)
-    print(f"SPY:    CAGR {stats(spy_r, spy_r).get('cagr', 0)*100:+6.1f}%  "
+    print(f"SPY:    CAGR {stats(spy_r, spy_r, py).get('cagr', 0)*100:+6.1f}%  "
           f"(costless benchmark)")
     for v in variants:
         label = {"S1": "S1 clean+uptrend, top-N P/E",
@@ -693,7 +695,7 @@ def main():
                  "S3": "S3 CONTROL: top-N P/E, no filters",
                  "S4": "S4 clean+quality, top-N P/E",
                  "S5": "S5 quality, top-N P/E (no flags)"}[v]
-        print(report_block(label, rets[v], spy_r, labels))
+        print(report_block(label, rets[v], spy_r, labels, py))
     print()
     print("caveats: today's screen rules replayed on history (rules-drift);")
     print("pre-2023 facts = restated values; dead-name facts often lack EPS")
