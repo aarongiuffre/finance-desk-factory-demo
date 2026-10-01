@@ -149,7 +149,9 @@ def main():
         have = pos.get(t, 0.0)
         delta = want - have
         if abs(delta * px) > a.equity * 0.01:      # 1% notional tolerance
-            orders.append((t, "buy" if delta > 0 else "sell", abs(delta), px))
+            q = int(round(abs(delta)))
+            if q > 0:
+                orders.append((t, "buy" if delta > 0 else "sell", q, px))
     for t, have in pos.items():
         if t not in tgt_syms:
             orders.append((t, "sell", int(have), None))
