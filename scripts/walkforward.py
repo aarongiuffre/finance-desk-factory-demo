@@ -177,6 +177,23 @@ def ttm_via_engine(t, asof_dict, metric):
         es.load = orig
 
 
+def ttm_chain(t, asof_dict, metric):
+    """es.ttm + the chain of period entries it used (for per-entry split
+    basis correction).  Returns (value, end, method, chain)."""
+    buf = io.StringIO()
+    orig = es.load
+    es.load = lambda x, _d=asof_dict: _d  # noqa: ARG005
+    try:
+        with contextlib.redirect_stdout(buf):
+            val, end, meth = es.ttm(asof_dict, metric)
+            chain = es.ttm_periods(asof_dict, metric)
+    except Exception:
+        return None, None, "error", []
+    finally:
+        es.load = orig
+    return val, end, meth, chain or []
+
+
 def flags_asof(t, asof_dict):
     """Screen's own flag logic on the PIT view (verdict_replay pattern)."""
     buf = io.StringIO()
@@ -234,6 +251,75 @@ def quality_position(eq, d):
     return pos, len(win)
 
 
+SPLIT_CACHE = {}
+
+
+def eps_split_factors(t):
+    """Split calendar from raw/splits/<T>.json (built by split_pull.py:
+    EODHD close/adjusted-close jump detection, known-splits validated).
+    Returns {eff_date_iso: factor}, factor = pre-split shares per post-split
+    share (4:1 -> 4.0)."""
+    if t in SPLIT_CACHE:
+        return SPLIT_CACHE[t]
+    p = os.path.join(ROOT, "raw", "splits", f"{t}.json")
+    out = {}
+    if os.path.exists(p):
+        out = json.load(open(p)).get("splits", {})
+    SPLIT_CACHE[t] = out
+    return out
+
+
+def split_factor_after(t, d):
+    """Cumulative factor for splits effective AFTER date d (price-basis
+    un-adjustment: as_traded_px(d) = adjusted_px(d) * this)."""
+    diso = d.isoformat()
+    fac = 1.0
+    for eff, k in eps_split_factors(t).items():
+        if eff > diso:
+            fac *= k
+    return fac
+
+
+def basis_factor(t, d, filed):
+    """Share-basis divisor for a filing vintage: splits effective on/before
+    decision date d whose effective date is AFTER the entry's filed date —
+    the entry was as-filed on the older (pre-split) share basis.  1.0 when
+    no such split.  GAAP restates only the comparative period, so a TTM
+    spanning a split mixes bases without this correction."""
+    diso = d.isoformat()
+    fac = 1.0
+    for eff, k in eps_split_factors(t).items():
+        if eff <= diso and filed < eff:
+            fac *= k
+    return fac
+
+
+def q_by_tag_filed(unit_dict, want=None):
+    """Quarterly (<=100d) entries as (val, filed) pairs per period end —
+    keeps the filed date so callers can apply split-basis corrections per
+    vintage.  Structure: {tag: {end: {(val, filed), ...}}}."""
+    out = {}
+    for tag, ents in unit_dict.items():
+        if not isinstance(ents, list):
+            continue
+        if want and want not in tag.lower():
+            continue
+        m = {}
+        for e in ents:
+            if not (isinstance(e, dict) and e.get("start") and e.get("end")):
+                continue
+            try:
+                dur = (datetime.date.fromisoformat(e["end"])
+                       - datetime.date.fromisoformat(e["start"])).days
+            except Exception:
+                continue
+            if 80 <= dur <= 100:
+                m.setdefault(e["end"], set()).add((e["val"], e.get("filed", "")))
+        if m:
+            out[tag] = m
+    return out
+
+
 def candidate_value(t, d, px=None):
     """(pe, eps_ttm, ni_ttm, eps_end, qpos, nh) or None — point-in-time, gated.
     pe = px / eps_ttm when px given (the ranking key, UNITS: $/$ — verified
@@ -246,12 +332,34 @@ def candidate_value(t, d, px=None):
     ush = asof.get("units", {}).get("USD/shares")
     if not usd or not ush:          # IFRS/TWD (TSM) and tag-less names out
         return None
-    eps, eps_end, _ = ttm_via_engine(t, asof, "EarningsPerShareDiluted")
+    eps, eps_end, _meth, chain = ttm_chain(t, asof, "EarningsPerShareDiluted")
     ni, ni_end, _ = ttm_via_engine(t, asof, "NetIncomeLoss")
     if ni is None:                  # ProfitLoss-only reporters (ITW/MNST/SPG)
         ni, ni_end, _ = ttm_via_engine(t, asof, "ProfitLoss")
     if not eps or not ni or eps <= 0 or ni <= 0:
         return None
+    # per-quarter EPS basis correction: an entry filed BEFORE a split that is
+    # already effective at D was as-filed on the pre-split basis -> divide by
+    # that split's factor.  NI is currency (basis-free).  The price term
+    # arrives as-traded (caller multiplies by splits effective after D), so
+    # price and EPS meet on one share basis at D.
+    if chain:
+        eps_corr = 0.0
+        for e in chain:
+            if not isinstance(e, dict) or e.get("val") is None:
+                continue
+            ef = e.get("filed") or ""
+            if not ef:
+                # derived quarter (FY-YTD synthesis, the audited calendar-filer
+                # path): basis = the FY 10-K filing date, ~75d after period end
+                try:
+                    ef = (datetime.date.fromisoformat(e["end"])
+                          + datetime.timedelta(days=75)).isoformat()
+                except ValueError:
+                    ef = "0000"     # unknown vintage -> conservative pre-basis
+            eps_corr += e["val"] / basis_factor(t, d, ef)
+        if eps_corr > 0:
+            eps = eps_corr
     # freshness: the TTM window must end near D (within ~7 months)
     horizon = (d - datetime.timedelta(days=220)).isoformat()
     if (eps_end or "") < horizon:
@@ -295,22 +403,26 @@ def candidate_value(t, d, px=None):
 
     nl_tag = ("NetIncomeLoss" if isinstance(usd_all.get("NetIncomeLoss"), list)
               else "ProfitLoss")
-    nq_t = q_by_tag(usd_all).get(nl_tag, {})
+    nq_t = q_by_tag_filed(usd_all).get(nl_tag, {})
     eq = {}
-    for _tag, m in q_by_tag(ush, want="diluted").items():
-        for end, vals in m.items():
-            eq.setdefault(end, set()).update(vals)
+    for _tag, m in q_by_tag_filed(ush, want="diluted").items():
+        for end, pairs in m.items():
+            eq.setdefault(end, set()).update(pairs)
     ends = sorted(set(nq_t) & set(eq))
     if len(ends) >= 4:
         impl = []
         for end in ends[-4:]:
-            e_vals, n_vals = eq[end], nq_t[end]
-            ev, nv = max(e_vals), max(n_vals)
-            if ev:
-                impl.append(nv / ev)
+            ev, ef = max(eq[end])           # max EPS val, its filed date
+            nv = max(v for v, _ in nq_t[end])
+            ev_corr = ev / basis_factor(t, d, ef)
+            if ev_corr:
+                impl.append(nv / ev_corr)
         if impl and max(impl) / min(impl) > 1.25:
             return None
-    qpos, nh = quality_position(eq, d)
+    # quality trajectory on the corrected basis
+    eq_corr = {end: {v / basis_factor(t, d, ef) for v, ef in pairs}
+               for end, pairs in eq.items()}
+    qpos, nh = quality_position(eq_corr, d)
     pe = (px / eps) if (px and px > 0) else None
     if pe is None or not (1.0 <= pe <= 500.0):
         return None                     # units guard: real P/Es live here
@@ -455,9 +567,11 @@ def main():
             bars = bars_of(t)
             if not bars or len([b for b in bars if b["d"] <= d.isoformat()]) < 30:
                 continue
-            px = last_price_at(bars, d)
-            if not px or px <= 0:
+            px_adj = last_price_at(bars, d)
+            if not px_adj or px_adj <= 0:
                 continue
+            # as-traded basis: undo forward splits effective AFTER d
+            px = px_adj * split_factor_after(t, d)
             eligible.append((t, px))
         cand = []
         for t, px in eligible:
@@ -508,7 +622,7 @@ def main():
             print(f"    note {d}: bucket walk hit the 150 cap ({short})", flush=True)
         last_px = {}
         for t, px in sum(buckets.values(), []):
-            last_px[t] = last_price_at(bars_of(t), d)
+            last_px[t] = last_price_at(bars_of(t), d) * split_factor_after(t, d)
         rows.append({"date": d.isoformat(),
                      "holdings": buckets,
                      "last_px": last_px,

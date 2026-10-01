@@ -32,7 +32,8 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import watchlist_lib                                   # noqa: E402
 from walkforward import (facts_of, load_membership, member_at,  # noqa: E402
-                         candidate_value, last_price_at, bars_of)
+                         candidate_value, last_price_at, bars_of,
+                         split_factor_after)
 
 PAPER_BASE = "https://paper-api.alpaca.markets"
 KEY_FILE = os.path.expanduser("~/.alpaca_key")
@@ -69,7 +70,10 @@ def target_portfolio(n, d):
         bars = bars_of(t)
         if not bars or len([b for b in bars if b["d"] <= d.isoformat()]) < 30:
             continue
-        px = last_price_at(bars, d)
+        px_adj = last_price_at(bars, d)
+        if not px_adj or px_adj <= 0:
+            continue
+        px = px_adj * split_factor_after(t, d)
         if not px or px <= 0:
             continue
         v = candidate_value(t, d, px)
