@@ -18,3 +18,4 @@ __pycache__/
 *.pyc
 *.lock
 *.ckpt
+.alpaca_key
