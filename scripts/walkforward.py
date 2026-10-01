@@ -234,8 +234,10 @@ def quality_position(eq, d):
     return pos, len(win)
 
 
-def candidate_value(t, d):
-    """(pe, eps_ttm, ni_ttm, eps_end) or None — point-in-time, gated."""
+def candidate_value(t, d, px=None):
+    """(pe, eps_ttm, ni_ttm, eps_end, qpos, nh) or None — point-in-time, gated.
+    pe = px / eps_ttm when px given (the ranking key, UNITS: $/$ — verified
+    by paper-bridge surface on 2026-10-01 after the ni/eps/eps birth-bug)."""
     f = facts_of(t)
     if not f:
         return None
@@ -256,6 +258,15 @@ def candidate_value(t, d):
         return None
     implied = ni / eps              # shares implied by the TTM pair
     if not (1e6 <= implied <= 1e11):
+        return None
+    # the two TTM windows must describe the SAME period (BKNG-style stale-NI
+    # chimera: eps_end 2026 vs ni_end 2012 -> nonsense implied shares)
+    try:
+        gap = abs((datetime.date.fromisoformat(ni_end or "") -
+                   datetime.date.fromisoformat(eps_end or "")).days)
+        if gap > 100:
+            return None
+    except ValueError:
         return None
     # split-mix guard on the last 4 common quarterly ends (if present)
     usd_all = asof["units"].get("USD", {})
@@ -300,7 +311,10 @@ def candidate_value(t, d):
         if impl and max(impl) / min(impl) > 1.25:
             return None
     qpos, nh = quality_position(eq, d)
-    return ni / eps / eps, eps, ni, eps_end, qpos, nh
+    pe = (px / eps) if (px and px > 0) else None
+    if pe is None or not (1.0 <= pe <= 500.0):
+        return None                     # units guard: real P/Es live here
+    return pe, eps, ni, eps_end, qpos, nh
 
 
 # ------------------------------------------------------------------ portfolio
@@ -447,7 +461,7 @@ def main():
             eligible.append((t, px))
         cand = []
         for t, px in eligible:
-            v = candidate_value(t, d)
+            v = candidate_value(t, d, px)
             if v:
                 cand.append((t, px, v))
         cand.sort(key=lambda x: x[2][0])
