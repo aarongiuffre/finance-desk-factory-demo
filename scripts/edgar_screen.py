@@ -427,6 +427,66 @@ def cmd_comps(args):
     print("caveats: P/E vs GM% can diverge for AVGO (NI includes one-offs); TSM ratios unit-consistent but IFRS/TWD + SEC-side lag; delayed quotes.")
 
 
+def compute_flags_for(f):
+    """Flag logic for one ticker (extracted verbatim from cmd_screen's loop
+    so paper_driver can reuse it on PIT-filtered facts dicts).
+    Returns a list of human-readable flag strings ([] when clean)."""
+    flags = []
+    inv, inv_end, inv_prev, inv_prev_end = latest_pt(f, "inventory")
+    rev, rev_end, rm = ttm(f, "revenue")
+    rev_g, rev_g_end = rev_yoy(f)
+    if inv is not None and inv_prev:
+        ig = inv / inv_prev - 1
+        rg = rev_g if rev_g is not None else 0.0
+        if ig > 0.25 and rg > 0:
+            spread = (ig - rg) * 100
+            # a spread of >=0 is the actual signal: inventory outgrowing demand.
+            # inventory +27% against revenue +50% is the OPPOSITE of a warning.
+            if spread >= 0:
+                sev = "HIGH" if spread > 30 else ""
+                flags.append(f"INVENTORY {ig*100:+.0f}% vs REVENUE {rg*100:+.0f}% yoy (spread {spread:+.0f}pts, inv {inv/1e9:.1f}B @ {inv_end}) {sev}".strip())
+        elif ig > 0.25:
+            flags.append(f"INVENTORY {ig*100:+.0f}% yoy (to {inv/1e9:.1f}B @ {inv_end}), rev growth n/a")
+    # gross-margin trend on comparable annual spans
+    gp_rows = [e for e in metric_entries(f, "gross_profit") if e.get("start") and 300 < _span(e) <= 400]
+    rv_rows = [e for e in metric_entries(f, "revenue") if e.get("start") and 300 < _span(e) <= 400]
+    gp_by = sorted({e["end"]: e["val"] for e in gp_rows}.items())
+    rv_by = {e["end"]: e["val"] for e in rv_rows}
+    shared = [(d, gp_by_map) for d, gp_by_map in gp_by if d in rv_by and rv_by[d]]
+    if len(shared) >= 2:
+        (d2, g2), (d1, g1) = shared[-2], shared[-1]
+        gm2, gm1 = g2 / rv_by[d2], g1 / rv_by[d1]
+        if gm1 - gm2 < -0.03:
+            flags.append(f"GROSS MARGIN {gm1*100:.1f}% vs {gm2*100:.1f}% prior FY ({(gm1-gm2)*100:+.1f}pts, FY ends {d2}->{d1})")
+    # net income YoY (annual spans)
+    ni_rows = [e for e in metric_entries(f, "net_income") if e.get("start") and 300 < _span(e) <= 400]
+    ni_by = sorted({e["end"]: e["val"] for e in ni_rows}.items())
+    if len(ni_by) >= 2 and ni_by[-2][1] > 0:
+        ch = ni_by[-1][1] / ni_by[-2][1] - 1
+        if ch < -0.10:
+            flags.append(f"NET INCOME {ch*100:.0f}% yoy (FY {ni_by[-1][0]})")
+    # quarterly NI trend from TTM method sanity: NI TTM vs prior TTM via chains is heavy; use quarterly yoy on NI
+    ni_g, ni_g_end = None, None
+    try:
+        ni_entries = [e for e in metric_entries(f, "net_income") if e.get("start") and _span(e) <= 110]
+        by_end = {}
+        for e in ni_entries:
+            by_end[e["end"]] = e
+        ends = sorted(by_end)
+        if len(ends) >= 5:
+            cur, prv = by_end[ends[-1]], by_end[ends[-5]]
+            recent = (datetime.date.today() - datetime.date.fromisoformat(cur["end"])).days < 200
+            if prv["val"] > 0 and recent:
+                q = cur["val"] / prv["val"] - 1
+                if q < -0.25:
+                    flags.append(f"QUARTERLY NET INCOME {q*100:.0f}% yoy (qtr end {cur['end']})")
+    except Exception:  # noqa: BLE001
+        pass
+    if rev is None:
+        flags.append("no usable revenue duration series (IFRS lag?) -> read 6-K/20-F text via filing_delta")
+    return flags
+
+
 def cmd_screen(args):
     tickers = [t.strip().upper() for t in (args.tickers or "").split(",") if t.strip()] or watchlist()
     findings = []
@@ -434,59 +494,7 @@ def cmd_screen(args):
         f = load(t)
         if not f:
             continue
-        flags = []
-        inv, inv_end, inv_prev, inv_prev_end = latest_pt(f, "inventory")
-        rev, rev_end, rm = ttm(f, "revenue")
-        rev_g, rev_g_end = rev_yoy(f)
-        if inv is not None and inv_prev:
-            ig = inv / inv_prev - 1
-            rg = rev_g if rev_g is not None else 0.0
-            if ig > 0.25 and rg > 0:
-                spread = (ig - rg) * 100
-                # a spread of >=0 is the actual signal: inventory outgrowing demand.
-                # inventory +27% against revenue +50% is the OPPOSITE of a warning.
-                if spread >= 0:
-                    sev = "HIGH" if spread > 30 else ""
-                    flags.append(f"INVENTORY {ig*100:+.0f}% vs REVENUE {rg*100:+.0f}% yoy (spread {spread:+.0f}pts, inv {inv/1e9:.1f}B @ {inv_end}) {sev}".strip())
-            elif ig > 0.25:
-                flags.append(f"INVENTORY {ig*100:+.0f}% yoy (to {inv/1e9:.1f}B @ {inv_end}), rev growth n/a")
-        # gross-margin trend on comparable annual spans
-        gp_rows = [e for e in metric_entries(f, "gross_profit") if e.get("start") and 300 < _span(e) <= 400]
-        rv_rows = [e for e in metric_entries(f, "revenue") if e.get("start") and 300 < _span(e) <= 400]
-        gp_by = sorted({e["end"]: e["val"] for e in gp_rows}.items())
-        rv_by = {e["end"]: e["val"] for e in rv_rows}
-        shared = [(d, gp_by_map) for d, gp_by_map in gp_by if d in rv_by and rv_by[d]]
-        if len(shared) >= 2:
-            (d2, g2), (d1, g1) = shared[-2], shared[-1]
-            gm2, gm1 = g2 / rv_by[d2], g1 / rv_by[d1]
-            if gm1 - gm2 < -0.03:
-                flags.append(f"GROSS MARGIN {gm1*100:.1f}% vs {gm2*100:.1f}% prior FY ({(gm1-gm2)*100:+.1f}pts, FY ends {d2}->{d1})")
-        # net income YoY (annual spans)
-        ni_rows = [e for e in metric_entries(f, "net_income") if e.get("start") and 300 < _span(e) <= 400]
-        ni_by = sorted({e["end"]: e["val"] for e in ni_rows}.items())
-        if len(ni_by) >= 2 and ni_by[-2][1] > 0:
-            ch = ni_by[-1][1] / ni_by[-2][1] - 1
-            if ch < -0.10:
-                flags.append(f"NET INCOME {ch*100:.0f}% yoy (FY {ni_by[-1][0]})")
-        # quarterly NI trend from TTM method sanity: NI TTM vs prior TTM via chains is heavy; use quarterly yoy on NI
-        ni_g, ni_g_end = None, None
-        try:
-            ni_entries = [e for e in metric_entries(f, "net_income") if e.get("start") and _span(e) <= 110]
-            by_end = {}
-            for e in ni_entries:
-                by_end[e["end"]] = e
-            ends = sorted(by_end)
-            if len(ends) >= 5:
-                cur, prv = by_end[ends[-1]], by_end[ends[-5]]
-                recent = (datetime.date.today() - datetime.date.fromisoformat(cur["end"])).days < 200
-                if prv["val"] > 0 and recent:
-                    q = cur["val"] / prv["val"] - 1
-                    if q < -0.25:
-                        flags.append(f"QUARTERLY NET INCOME {q*100:.0f}% yoy (qtr end {cur['end']})")
-        except Exception:  # noqa: BLE001
-            pass
-        if rev is None:
-            flags.append("no usable revenue duration series (IFRS lag?) -> read 6-K/20-F text via filing_delta")
+        flags = compute_flags_for(f)
         if flags:
             findings.append((t, flags))
     if not findings:
