@@ -136,6 +136,8 @@ def main():
     eq = float(acct.get("equity", 0))
     bp = float(acct.get("buying_power", 0))
     print(f"\npaper account ACTIVE: equity {eq:.2f}, buying power {bp:.2f}")
+    # size from the REAL account equity (a.equity was only the preview basis)
+    a.equity = eq
 
     pos = {p["symbol"]: float(p["qty"]) for p in api("/v2/positions", keys)}
     print(f"current paper positions: {pos or '(none)'}")
