@@ -652,9 +652,16 @@ def main():
                 old = dict(prev["holdings"][v])
                 new = dict(row["holdings"][v])
                 rs = []
+                d1d = datetime.date.fromisoformat(d1)
                 for t, px0 in old.items():
-                    px1 = new.get(t) or row["last_px"].get(t) or \
-                        last_price_at(bars_of(t), datetime.date.fromisoformat(d1))
+                    px1 = new.get(t) or row["last_px"].get(t)
+                    if not px1:
+                        # exit fallback: stored adjusted close must get the
+                        # same as-traded basis as every other price term
+                        # (ETR/COO-class bug: exits with pending future
+                        # splits read as crashes without this)
+                        p = last_price_at(bars_of(t), d1d)
+                        px1 = p * split_factor_after(t, d1d) if p else None
                     rs.append((px1 / px0 - 1) if px1 else 0.0)
                 gross = statistics.mean(rs) if rs else 0.0
                 k = len(set(old) & set(new))
