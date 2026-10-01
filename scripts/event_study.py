@@ -20,21 +20,26 @@ Method (Fama-style event study, self-controlled):
     seasonality); block bootstrap p-values; magnitude dose-response splits;
     recent-era (2023+) re-test
 
-Headline result (2015-2026, 2952 ledger days, 499 tickers):
-  NI-DOWN events (n=1245): 63d abnormal +3.75% median / +3.78% mean,
-    p~0.000, monotone in magnitude (-20..-35% -> +3.9%, <-35% -> +4.5%),
-    tape-up subset +4.15%, 2023+ era +1.95% p=0.001.
-  INV events (n=1843): 63d abnormal -2.24% median (CI [-4.4,-3.0]),
-    dose-responsive (>=30% builds worse), but 2023+ era MEDIAN-ONLY
-    (mean ~ 0) -> treat as weak/legacy.
-Interpretation: the market overpunishes earnings-decline FILINGS and the
-name drifts back over a quarter (event = first print; the old episode
-backtests measured persistent flag STATE, which averages the drift-in
-with the recovery and dilutes the signal).  Inventory builds continue
-bleeding post-filing - consistent with the screen's avoid doctrine.
+Headline result (2015-2026, 2952 ledger days, 499 tickers) — CORRECTED
+after the truncated-control-pool artifact was caught (see lesson below):
+  INV events (n~1977): 63d abnormal -2.28% median / -2.89% mean vs
+    month+rs63-matched same-name controls, p=1.000 (one-sided <0),
+    stable across matching schemes, dose-responsive (>=30% builds worse:
+    -2.42% vs -1.03%), but 2023+ era MEDIAN-ONLY (mean ~0) -> weak recently.
+  NI-DOWN events: NULL after full-pool matching (-0.07% rs63-matched,
+    +0.30% med p=0.518 month-matched).  An earlier +3.75% "rebound" was
+    an ERA-CONFOUND ARTIFACT: control pools truncated to the first 400
+    days/ticker (= 2015-16 slice) while events span all eras.  "Filing =
+    trough, buy the dip" is NOT supported.
 
-Usage: python3 scripts/event_study.py [--full]
-Writes /tmp/ev_rows.json + /tmp/ctrl_pools.json caches on --full rebuild.
+LESSON (audit rule): matched-control pools must span the same era
+distribution as the events.  Any [:N] truncation of chronologically
+ordered pools silently turns a cross-era comparison into an era bet.
+Print pool sizes; diff control-era histograms against event-era
+histograms before trusting a matched-pair event study.
+
+Usage: python3 scripts/event_study.py
+Prints pool sizes and per-class results; no network, no caches required.
 """
 import json
 import re
