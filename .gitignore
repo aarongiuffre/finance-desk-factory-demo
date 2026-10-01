@@ -1,0 +1,20 @@
+# credentials (runtime files, read by path — NEVER commit)
+.eodhd_key
+.sec_user_agent
+
+# data layers (regenerable via finance_refresh.sh / timers; too large for git)
+raw/
+parsed/
+index/
+facts/
+logs/
+pageindex-mirror/
+universe/
+
+# environments + caches
+.venv-embed/
+.venv-pageindex/
+__pycache__/
+*.pyc
+*.lock
+*.ckpt

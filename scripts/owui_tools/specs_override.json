@@ -1,0 +1,14 @@
+{
+ "screen_fundamentals": {
+  "fundamentals": {
+   "mode": {
+    "enum": [
+     "comps",
+     "value",
+     "screen"
+    ],
+    "description": "comps=peer valuation table, value=multiples, screen=anomaly flags"
+   }
+  }
+ }
+}
