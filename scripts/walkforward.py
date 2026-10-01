@@ -534,6 +534,8 @@ def main():
                     help="S4/S5 quality gate: quarterly-EPS-beat median position "
                          "in [0,1] over trailing 3y (0=off, 0.5=top half)")
     ap.add_argument("--tag", default="")
+    ap.add_argument("--cadence", choices=["monthly", "weekly"], default="monthly",
+                    help="weekly = re-rank every Monday (tests price-churn cadence)")
     args = ap.parse_args()
 
     membership = load_membership()
@@ -546,15 +548,21 @@ def main():
         return 1
 
     # rebalance dates: first trading day of each month in window
+    # (weekly cadence: every Monday in the window — price-driven churn test)
     rb, seen = [], set()
-    for d in days:
-        key = (d.year, d.month)
-        if key not in seen:
-            seen.add(key)
-            rb.append(d)
+    if args.cadence == "weekly":
+        for d in days:
+            if d.weekday() == 0:
+                rb.append(d)
+    else:
+        for d in days:
+            key = (d.year, d.month)
+            if key not in seen:
+                seen.add(key)
+                rb.append(d)
     if args.limit:
         rb = rb[:args.limit]
-    print(f"walk-forward: {rb[0]} .. {rb[-1]}  ({len(rb)} monthly rebalances, "
+    print(f"walk-forward: {rb[0]} .. {rb[-1]}  ({len(rb)} {args.cadence} rebalances, "
           f"N={args.n}, cost {args.cost_bps}bps/side)", flush=True)
 
     all_tickers = sorted(set(list(membership) + list(watchlist_lib.read_watchlist())))

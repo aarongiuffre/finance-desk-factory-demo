@@ -246,6 +246,14 @@ def main():
     else:
         log("rebalance not due this month")
 
+    # daily INV-event tracker (simulated shorts; ledger + status file)
+    try:
+        import paper_event_tracker as pet
+        pet.main()
+        log("event tracker ran")
+    except Exception as e:
+        log(f"event tracker FAILED: {e}")
+
     # status file (plain language)
     lines = [f"PAPER PROGRAM STATUS — {today}", "=" * 46]
     try:
