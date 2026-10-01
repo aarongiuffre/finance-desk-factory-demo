@@ -186,17 +186,35 @@ def do_rebalance():
         if t not in tgt_set and int(have) > 0:
             orders.append((t, "sell", int(have), None))
     results = []
-    for t, side, q, _ in orders:
+    for t, side, q, dec_px in orders:
         try:
             r = api("/v2/orders", "POST", {"symbol": t, "qty": q, "side": side,
                                            "type": "market", "time_in_force": "day"})
-            results.append({"sym": t, "side": side, "qty": q,
-                            "order_id": r.get("id", "")[:8],
-                            "status": r.get("status", "?")})
+            rec = {"sym": t, "side": side, "qty": q,
+                   "order_id": r.get("id", "")[:8],
+                   "status": r.get("status", "?")}
+            if dec_px:
+                rec["decision_px"] = round(dec_px, 2)
+            results.append(rec)
         except Exception as e:
             results.append({"sym": t, "side": side, "qty": q, "error": str(e)})
-    # post-trade verification
-    time.sleep(6)
+    # fill reconciliation: record realized fill vs decision quote (bps/side)
+    time.sleep(8)
+    try:
+        for rec in results:
+            if "order_id" not in rec:
+                continue
+            o = api(f"/v2/orders/{rec['order_id']}")
+            rec["status"] = o.get("status", rec["status"])
+            if o.get("filled_avg_price"):
+                fp = float(o["filled_avg_price"])
+                rec["fill_px"] = round(fp, 2)
+                if rec.get("decision_px"):
+                    drift = (fp / rec["decision_px"] - 1) * 1e4
+                    rec["bps_vs_decision"] = round(
+                        drift if rec["side"] == "buy" else -drift, 1)
+    except Exception as e:
+        results.append({"fill_reconcile_error": str(e)})
     try:
         pos2 = {p["symbol"]: float(p["qty"]) for p in api("/v2/positions")}
         acct2 = api("/v2/account")

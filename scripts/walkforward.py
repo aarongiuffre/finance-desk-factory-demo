@@ -430,37 +430,20 @@ def candidate_value(t, d, px=None):
 
 
 # ------------------------------------------------------------------ portfolio
-def simulate(rows, spy_by_date, cost_bps, n_names):
-    """rows: list of {date, holdings:{variant: [(t, px)]}} ordered chronologically.
-    Returns per-variant monthly net-return lists + spy list."""
-    variants = list(rows[0]["holdings"].keys())
-    rets = {v: [] for v in variants}
-    spy_r = []
-    prev = None
-    for row in rows:
-        if prev is not None:
-            d0, h0 = prev["date"], prev["holdings"]
-            d1, h1 = row["date"], row["holdings"]
-            spy_r.append(spy_by_date[d1] / spy_by_date[d0] - 1)
-            for v in variants:
-                old = dict(h0[v])
-                new = dict(h1[v])
-                # name return: px at d1, else last price <= d1, else frozen
-                rs = []
-                for t, px0 in old.items():
-                    px1 = new.get(t) or row.get("last_px", {}).get(t)
-                    rs.append((px1 / px0 - 1) if px1 else 0.0)
-                gross = statistics.mean(rs) if rs else 0.0
-                k = len(set(old) & set(new))
-                n = max(len(old), 1)
-                turn = (n - k) / n if prev is not None and rows.index(prev) else 1.0
-                # first rebalance of the sim fully turns over (from cash)
-                if not rets[v]:
-                    turn = 1.0
-                net = gross - 2 * (cost_bps / 1e4) * turn
-                rets[v].append(net)
-        prev = row
-    return rets, spy_r
+def last_close_at(bars, d):
+    """Raw split-unadjusted close (field c) at or before d — the as-traded
+    price.  NEVER multiply by split_factor_after for valuation at d? DO:
+    as-traded = c * split_factor_after(t, d).  Never use field `a` with
+    split factors: `a` is dividend-adjusted (future-dividend deflator,
+    divfac<1 back in time) — a*split double-counts splits AND injects
+    look-ahead dividend deflation into historical prices."""
+    px = None
+    for b in bars:
+        if b["d"] <= d.isoformat():
+            px = b["c"]
+        else:
+            break
+    return px
 
 
 def last_price_at(bars, d):
@@ -576,11 +559,11 @@ def main():
             bars = bars_of(t)
             if not bars or len([b for b in bars if b["d"] <= d.isoformat()]) < 30:
                 continue
-            px_adj = last_price_at(bars, d)
-            if not px_adj or px_adj <= 0:
+            px_raw = last_close_at(bars, d)   # as-traded close (c), not div-adjusted a
+            if not px_raw or px_raw <= 0:
                 continue
             # as-traded basis: undo forward splits effective AFTER d
-            px = px_adj * split_factor_after(t, d)
+            px = px_raw * split_factor_after(t, d)
             eligible.append((t, px))
         cand = []
         for t, px in eligible:
@@ -631,7 +614,8 @@ def main():
             print(f"    note {d}: bucket walk hit the 150 cap ({short})", flush=True)
         last_px = {}
         for t, px in sum(buckets.values(), []):
-            last_px[t] = last_price_at(bars_of(t), d) * split_factor_after(t, d)
+            pc = last_close_at(bars_of(t), d)
+            last_px[t] = pc * split_factor_after(t, d) if pc else None
         rows.append({"date": d.isoformat(),
                      "holdings": buckets,
                      "last_px": last_px,
@@ -661,17 +645,19 @@ def main():
                 old = dict(prev["holdings"][v])
                 new = dict(row["holdings"][v])
                 rs = []
+                d0d = datetime.date.fromisoformat(d0)
                 d1d = datetime.date.fromisoformat(d1)
                 for t, px0 in old.items():
-                    px1 = new.get(t) or row["last_px"].get(t)
-                    if not px1:
-                        # exit fallback: stored adjusted close must get the
-                        # same as-traded basis as every other price term
-                        # (ETR/COO-class bug: exits with pending future
-                        # splits read as crashes without this)
-                        p = last_price_at(bars_of(t), d1d)
-                        px1 = p * split_factor_after(t, d1d) if p else None
-                    rs.append((px1 / px0 - 1) if px1 else 0.0)
+                    # held-name return = TOTAL-RETURN ratio a(d1)/a(d0):
+                    # `a` is dividend+split adjusted, so the ratio needs no
+                    # split factors, and future-dividend deflators cancel
+                    # between the endpoints (no look-ahead).  The old
+                    # as-traded fallback (c*f) double-counted splits AND
+                    # mixed bases against dividend-deflated entries — the
+                    # ETR/COO-class artifact, now impossible by construction.
+                    a0 = last_price_at(bars_of(t), d0d)
+                    a1 = last_price_at(bars_of(t), d1d)
+                    rs.append((a1 / a0 - 1) if (a0 and a1) else 0.0)
                 gross = statistics.mean(rs) if rs else 0.0
                 k = len(set(old) & set(new))
                 n = max(len(old), 1)
