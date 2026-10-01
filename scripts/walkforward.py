@@ -211,6 +211,29 @@ def tech_asof(t, bars, spy_bars, d):
 
 
 # ------------------------------------------------------------------ valuation
+def quality_position(eq, d):
+    """Median-position of the LATEST quarterly EPS among the trailing 3y of
+    that name's own quarterly EPS values.  Returns (qpos, n_hist).
+    qpos is in [0,1]; (0.5, 0) when too little history (nh<6 keeps S4/S5
+    empty for young names).  This is an earnings-trajectory gate, not a
+    growth rate — robust to one-off quarters by construction."""
+    hist = sorted((end, max(vals)) for end, vals in eq.items()
+                  if isinstance(end, str) and len(end) == 10)
+    cur = [v for end, v in hist if end <= d.isoformat()]
+    if not cur:
+        return 0.5, 0
+    cur_v = cur[-1]
+    lo = (d - datetime.timedelta(days=1096)).isoformat()
+    win = [v for end, v in hist if lo <= end <= d.isoformat()]
+    if len(win) < 6:
+        return 0.5, len(win)
+    win_sorted = sorted(win)
+    below = sum(1 for v in win_sorted if v < cur_v)
+    equal = sum(1 for v in win_sorted if v == cur_v)
+    pos = (below + (equal - 1) / 2.0) / (len(win_sorted) - 1) if len(win_sorted) > 1 else 0.5
+    return pos, len(win)
+
+
 def candidate_value(t, d):
     """(pe, eps_ttm, ni_ttm, eps_end) or None — point-in-time, gated."""
     f = facts_of(t)
@@ -276,7 +299,8 @@ def candidate_value(t, d):
                 impl.append(nv / ev)
         if impl and max(impl) / min(impl) > 1.25:
             return None
-    return ni / eps / eps, eps, ni, eps_end      # P/E = px / eps_ttm
+    qpos, nh = quality_position(eq, d)
+    return ni / eps / eps, eps, ni, eps_end, qpos, nh
 
 
 # ------------------------------------------------------------------ portfolio
@@ -380,6 +404,9 @@ def main():
     ap.add_argument("--n", type=int, default=10)
     ap.add_argument("--cost-bps", type=float, default=20.0)
     ap.add_argument("--limit", type=int, default=0, help="smoke: max rebalances")
+    ap.add_argument("--quality", type=float, default=0.0,
+                    help="S4/S5 quality gate: quarterly-EPS-beat median position "
+                         "in [0,1] over trailing 3y (0=off, 0.5=top half)")
     ap.add_argument("--tag", default="")
     args = ap.parse_args()
 
@@ -424,42 +451,59 @@ def main():
             if v:
                 cand.append((t, px, v))
         cand.sort(key=lambda x: x[2][0])
-        # flags/tape only for the head of the ranking (enough to fill N)
-        head = cand[:max(3 * args.n, 30)]
-        h1, h2, h3 = [], [], []
-        for t, px, (pe, eps, ni, eend) in head:
-            fl = flags_asof(t, facts_asof(facts_of(t), d))
-            bad = [x for x in fl if "[INFO" not in x]
-            tech = tech_asof(t, bars_of(t), spy_bars, d)
-            vs200 = (tech or {}).get("vs200") or 0
-            rs63 = (tech or {}).get("rs63_spy")
-            if len(h3) < args.n and not bad:
-                h1.append((t, px))
-                if rs63 is not None and rs63 > 0:
-                    h2.append((t, px))
-            if len(h3) < args.n:
-                h3.append((t, px))
-            if len(h3) >= args.n and len(h1) >= args.n:
+        qu = args.quality
+        buckets = {"S1": [], "S2": [], "S3": []}
+        if qu:
+            buckets["S4"] = []
+            buckets["S5"] = []
+        b1, b2, b3 = buckets["S1"], buckets["S2"], buckets["S3"]
+        b4 = buckets.get("S4")
+        b5 = buckets.get("S5")
+        walked = 0
+        for t, px, v in cand:
+            if walked >= 150:
                 break
-        if len(h1) < args.n:                    # scan deeper if head was thin
-            for t, px, _v in cand[len(head):]:
+            walked += 1
+            _pe, _eps, _ni, _eend, qpos, nh = v
+            need_flags = len(b1) < args.n or (qu and b4 is not None and len(b4) < args.n)
+            bad, rs63 = [], None
+            if need_flags:
                 fl = flags_asof(t, facts_asof(facts_of(t), d))
-                if not [x for x in fl if "[INFO" not in x]:
-                    h1.append((t, px))
-                    if len(h1) >= args.n:
-                        break
+                bad = [x for x in fl if "[INFO" not in x]
+                tech = tech_asof(t, bars_of(t), spy_bars, d)
+                rs63 = (tech or {}).get("rs63_spy")
+            if len(b3) < args.n:
+                b3.append((t, px))
+            if b5 is not None and len(b5) < args.n and nh >= 6 and qpos >= qu:
+                b5.append((t, px))
+            if not bad:
+                if len(b1) < args.n:
+                    b1.append((t, px))
+                    if rs63 is not None and rs63 > 0 and len(b2) < args.n:
+                        b2.append((t, px))
+                if b4 is not None and len(b4) < args.n and nh >= 6 and qpos >= qu:
+                    b4.append((t, px))
+            if (len(b1) >= args.n and len(b3) >= args.n
+                    and (not qu or (len(buckets["S4"]) >= args.n
+                                    and len(buckets["S5"]) >= args.n))):
+                break
+        if walked >= 150:
+            short = (f"S1 {len(b1)}/{args.n}, S3 {len(b3)}/{args.n}"
+                     + (f", S4 {len(buckets['S4'])}/{args.n}"
+                        f", S5 {len(buckets['S5'])}/{args.n}" if qu else ""))
+            print(f"    note {d}: bucket walk hit the 150 cap ({short})", flush=True)
         last_px = {}
-        for t, px in h1 + h2 + h3:
+        for t, px in sum(buckets.values(), []):
             last_px[t] = last_price_at(bars_of(t), d)
         rows.append({"date": d.isoformat(),
-                     "holdings": {"S1": h1, "S2": h2, "S3": h3},
+                     "holdings": buckets,
                      "last_px": last_px,
                      "n_eligible": len(eligible), "n_valued": len(cand)})
         if i % 12 == 0 or i == len(rb):
             print(f"  {i}/{len(rb)} rebalances done (last {d})", flush=True)
 
     # forward simulation: portfolio return per month
-    variants = ["S1", "S2", "S3"]
+    variants = list(rows[0]["holdings"].keys())
     spy_r, rets = [], {v: [] for v in variants}
     labels = []
     prev = None
@@ -503,7 +547,9 @@ def main():
     for v in variants:
         label = {"S1": "S1 clean+uptrend, top-N P/E",
                  "S2": "S2 S1 + RS63>0 (tape confirms)",
-                 "S3": "S3 CONTROL: top-N P/E, no filters"}[v]
+                 "S3": "S3 CONTROL: top-N P/E, no filters",
+                 "S4": "S4 clean+quality, top-N P/E",
+                 "S5": "S5 quality, top-N P/E (no flags)"}[v]
         print(report_block(label, rets[v], spy_r, labels))
     print()
     print("caveats: today's screen rules replayed on history (rules-drift);")
@@ -516,14 +562,12 @@ def main():
     with open(path, "w") as fh:
         fh.write(json.dumps({"params": vars(args), "reb dates": len(rows),
                              "start": rb[0].isoformat(), "end": rb[-1].isoformat()}) + "\n")
-        for row, s1, s2, s3, sr in zip(rows[1:], rets["S1"], rets["S2"],
-                                       rets["S3"], spy_r):
+        for k, row in enumerate(rows[1:]):
             fh.write(json.dumps({"date": row["date"], "n_eligible": row["n_eligible"],
                                  "n_valued": row["n_valued"],
-                                 "S1": [t for t, _ in row["holdings"]["S1"]],
-                                 "S2": [t for t, _ in row["holdings"]["S2"]],
-                                 "S3": [t for t, _ in row["holdings"]["S3"]],
-                                 "ret": {"S1": s1, "S2": s2, "S3": s3, "SPY": sr}}) + "\n")
+                                 **{v: [t for t, _ in row["holdings"][v]] for v in variants},
+                                 "ret": {**{v: rets[v][k] for v in variants},
+                                         "SPY": spy_r[k]}}) + "\n")
     print(f"\nledger -> {path}")
     return 0
 
