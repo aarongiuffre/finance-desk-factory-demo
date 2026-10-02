@@ -194,11 +194,27 @@ def cmd_pull(workers=4):
     ua = ep.get_user_agent()
     tk = tickers()
     cik_map = json.load(open(TICKERS_JSON))
+    # dead-name rows carry ticker=None (CIK only): resolve from the roster
+    dead_cik = {}
+    dead_tick_cik = {}
+    try:
+        for x in json.load(open(os.path.join(ROOT, "universe",
+                                             "nasdaq_dead_roster.json"))):
+            c = str(x["cik"]).lstrip("0")
+            dead_cik[c] = x["ticker"]
+            dead_tick_cik[x["ticker"]] = c
+    except FileNotFoundError:
+        pass
     by_ticker = {}
     with open(QUEUE) as fh:
         for line in fh:
             r = json.loads(line)
-            by_ticker.setdefault(r["ticker"], []).append(r)
+            t = r["ticker"]
+            if t is None:
+                t = dead_cik.get(str(r.get("cik", "")).lstrip("0"),
+                                 "CIK" + str(r.get("cik", "")).lstrip("0"))
+                r["ticker"] = t
+            by_ticker.setdefault(t, []).append(r)
     order = sorted(by_ticker, key=lambda t: -len(by_ticker[t]))
     total = sum(len(v) for v in by_ticker.values())
     print(f"pull: {total} filings across {len(by_ticker)} tickers "
@@ -206,7 +222,8 @@ def cmd_pull(workers=4):
 
     tasks = []
     for t in order:
-        cikn = cik_map[t].lstrip("0")
+        cikn = (cik_map[t] if t in cik_map
+                else dead_tick_cik.get(t, "")).lstrip("0")
         outbase = os.path.join(ROOT, "raw", "edgar", t)
         os.makedirs(outbase, exist_ok=True)
         for r in by_ticker[t]:
