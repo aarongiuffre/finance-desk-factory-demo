@@ -130,11 +130,17 @@ def cmd_enum():
     with open(QUEUE, "w") as out:
         for y, q in QUARTERS:
             url = (f"https://www.sec.gov/Archives/edgar/full-index/"
-                   f"{y}/QTR{q}/master.idx.gz")
+                   f"{y}/QTR{q}/master.idx")   # plain: the .gz variant 403s (bot-wall)
             try:
                 txt = get(url).decode("utf-8", errors="ignore")
             except Exception as e:
                 print(f"  {y}Q{q}: FAILED {e}")
+                continue
+            if "<html" in txt[:400].lower() or "Request Rate Threshold" in txt[:400]:
+                print(f"  {y}Q{q}: BLOCKED (bot-wall payload, {len(txt)} bytes)")
+                continue
+            if "Description:" not in txt[:200]:
+                print(f"  {y}Q{q}: unexpected payload head, skipping")
                 continue
             for line in txt.splitlines():
                 parts = line.split("|")
@@ -203,8 +209,8 @@ def cmd_pull(workers=4):
 
     def work(item):
         r, cikn, outbase = item
-        return ep.pull_one(r["accn"], r["form"], r["filing_date"], "",
-                           cikn, outbase, ua)
+        return ep.pull_one(r["accn"], r["form"], r["filing_date"],
+                           r.get("primary", ""), cikn, outbase, ua)
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
         for i, res in enumerate(ex.map(work, tasks), 1):
@@ -220,11 +226,79 @@ def cmd_pull(workers=4):
     print(f"pull complete: new={done} failed={fail} of {total}", flush=True)
 
 
+def cmd_dead_roster(out="/data/finance/universe/nasdaq_dead_roster.json"):
+    """Dead-name discovery from EDGAR itself (delisted.txt is retired 404):
+    every CIK seen in the 47 master.idx files that company_tickers.json does
+    NOT cover gets submissions.json fetched; EDGAR stores exchanges[] per
+    company — 'Nasdaq' there (plus a ticker present) = a NASDAQ-listed
+    company that no longer exists in the live universe.  Those tickers are
+    appended to the filing queue and emitted as the EODHD dead price roster
+    (raw/price/dead tier -> bars_of/facts_of healing paths)."""
+    tk = set(tickers())
+    cik_map = json.load(open(TICKERS_JSON)) if os.path.exists(TICKERS_JSON) else {}
+    live_ciks = set(cik_map.values())
+    seen = {}          # cik -> last (form, date) seen in master files
+    for y, q in QUARTERS:
+        url = (f"https://www.sec.gov/Archives/edgar/full-index/"
+               f"{y}/QTR{q}/master.idx")
+        try:
+            txt = get(url).decode("utf-8", errors="ignore")
+        except Exception:
+            continue
+        for line in txt.splitlines():
+            parts = line.split("|")
+            if len(parts) != 5 or parts[2] not in FORMS:
+                continue
+            cik, _co, form, date, _a = parts
+            if cik not in live_ciks:
+                seen.setdefault(cik, (form, date))
+    print(f"master.idx CIKs outside the live map: {len(seen)}")
+    dead = []
+    qrows = []
+    for i, (cik, (_f, _d)) in enumerate(sorted(seen.items()), 1):
+        try:
+            sub = json.loads(get(
+                f"https://data.sec.gov/submissions/CIK{cik}.json",
+                timeout=60).decode())
+        except Exception:
+            continue
+        if "Nasdaq" not in (sub.get("exchanges") or []):
+            continue
+        tks = [t.strip().upper() for t in (sub.get("tickers") or []) if t.strip()]
+        if not tks:
+            continue
+        t = tks[0]
+        if t in tk:
+            continue
+        dead.append({"ticker": t, "symbol": f"{t}.US", "dead": True,
+                     "cik": cik, "name": (sub.get("name") or "")[:80],
+                     "exchanges": sub.get("exchanges")})
+        # cache the submission manifest (parse/facts stages read it later)
+        dstd = os.path.join(ROOT, "raw", "edgar", t)
+        os.makedirs(dstd, exist_ok=True)
+        json.dump(sub, open(os.path.join(dstd, "submissions.json"), "w"))
+        recent = sub["filings"]["recent"]
+        for a, form, d, p in zip(recent["accessionNumber"], recent["form"],
+                                 recent["filingDate"], recent["primaryDocument"]):
+            if form in FORMS and "2015-01-01" <= d:
+                qrows.append({"ticker": t, "accn": a, "cik": cik, "form": form,
+                              "filing_date": d, "primary": p})
+        if i % 200 == 0:
+            print(f"  {i}/{len(seen)} probed, {len(dead)} dead found", flush=True)
+    json.dump(dead, open(out, "w"))
+    with open(QUEUE, "a") as fh:
+        for r in qrows:
+            fh.write(json.dumps(r) + "\n")
+    print(f"dead roster -> {out}: {len(dead)} names; +{len(qrows)} filings appended to queue")
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
     if cmd == "pull":
         w = int(sys.argv[sys.argv.index("--workers") + 1]) if "--workers" in sys.argv else 4
         cmd_pull(w)
+    elif cmd == "dead-roster":
+        cmd_dead_roster()
     else:
         {"list": cmd_list, "enum": cmd_enum, "status": cmd_status}[cmd]()
 
