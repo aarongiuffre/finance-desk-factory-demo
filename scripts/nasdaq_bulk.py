@@ -146,8 +146,16 @@ def cmd_enum():
                 parts = line.split("|")
                 if len(parts) != 5:
                     continue
-                cik, company, form, date, accn = parts
-                if form not in FORMS or accn in have:
+                cik, company, form, date, path = parts
+                if form not in FORMS:
+                    continue
+                # field 5 is a FILE PATH (edgar/data/<cik>/<accn>.txt), not a
+                # bare accession — extract the 18-digit accession (minus dots)
+                tail = path.rsplit("/", 1)[-1]
+                if not tail.endswith(".txt") or len(tail) < 22:
+                    continue
+                accn = tail[:-4]  # dotted accession NNDDDDDDDD-DD-DDDDDD
+                if accn in have:
                     continue
                 t = cik2t.get(cik)
                 if not t:
@@ -227,20 +235,26 @@ def cmd_pull(workers=4):
 
 
 def cmd_dead_roster(out="/data/finance/universe/nasdaq_dead_roster.json"):
-    """Dead-name discovery from EDGAR itself (delisted.txt is retired 404):
-    every CIK seen in the 47 master.idx files that company_tickers.json does
-    NOT cover gets submissions.json fetched; EDGAR stores exchanges[] per
-    company — 'Nasdaq' there (plus a ticker present) = a NASDAQ-listed
-    company that no longer exists in the live universe.  Those tickers are
-    appended to the filing queue and emitted as the EODHD dead price roster
-    (raw/price/dead tier -> bars_of/facts_of healing paths)."""
+    """Dead-name discovery, v2.  delisted.txt is retired (404) and
+    data.sec.gov/submissions/ does NOT serve long-dead companies (404
+    NoSuchKey — verified vs AAPL 200: real gap, not throttling).  So:
+      roster  = EODHD exchange-symbol-list US?delisted=1 filtered to
+                NASDAQ + Common Stock (ATVI/SIVB/TWX verified present)
+      CIK     = name-match against master.idx orphan companies (names +
+                last-filing dates already parsed by enum; zero extra SEC
+                requests), window-filtered to last filing >= 2015-01-01
+    Name matching: normalized (suffix/branch stripping); collisions resolved
+    by preferring plain shortest codes (SIVB beats SIVBP; _old dropped).
+    Matched dead names get filings appended to the queue (rows re-parsed
+    from master.idx) and are emitted as the EODHD dead price roster."""
     tk = set(tickers())
     cik_map = json.load(open(TICKERS_JSON)) if os.path.exists(TICKERS_JSON) else {}
     live_ciks = set(cik_map.values())
-    seen = {}          # cik -> last (form, date) seen in master files
+    seen = {}          # cik -> (name, last_date)
+    frows = {}         # cik -> [(cik, co, form, date, path)] for queue append
     for y, q in QUARTERS:
         url = (f"https://www.sec.gov/Archives/edgar/full-index/"
-               f"{y}/QTR{q}/master.idx")
+               f"{y}/QTR{q}/master.idx")   # plain: .gz 403s
         try:
             txt = get(url).decode("utf-8", errors="ignore")
         except Exception:
@@ -249,49 +263,82 @@ def cmd_dead_roster(out="/data/finance/universe/nasdaq_dead_roster.json"):
             parts = line.split("|")
             if len(parts) != 5 or parts[2] not in FORMS:
                 continue
-            cik, _co, form, date, _a = parts
+            cik, co, form, date, path = parts
             if cik not in live_ciks:
-                seen.setdefault(cik, (form, date))
-    print(f"master.idx CIKs outside the live map: {len(seen)}")
-    dead = []
-    qrows = []
-    for i, (cik, (_f, _d)) in enumerate(sorted(seen.items()), 1):
-        try:
-            sub = json.loads(get(
-                f"https://data.sec.gov/submissions/CIK{cik}.json",
-                timeout=60).decode())
-        except Exception:
+                nm, ld = seen.get(cik, ("", ""))
+                seen[cik] = (co, max(ld, date))
+                frows.setdefault(cik, []).append(
+                    (cik, co, form, date, path))
+    print(f"master.idx orphan CIKs: {len(seen)}")
+
+    import urllib.request as _u
+    key = open(os.path.join(ROOT, ".eodhd_key")).read().strip()
+    key = key.split("=", 1)[-1].strip() if "=" in key else key
+    dl = json.loads(_u.urlopen(
+        "https://eodhd.com/api/exchange-symbol-list/US?fmt=json&delisted=1"
+        f"&api_token={key}", timeout=120).read().decode())
+    commons = [x for x in dl
+               if x.get("Exchange") == "NASDAQ" and x.get("Type") == "Common Stock"]
+
+    def norm(s):
+        s = (s or "").upper().strip()
+        for suf in (" INC", " CORP", " CORPORATION", " LTD", " LIMITED",
+                    " PLC", " CO", " COMPANY", " GROUP", " HOLDINGS",
+                    " COMMON STOCK", " COM", " NEW", " THE"):
+            if s.endswith(suf):
+                s = s[:-len(suf)].strip()
+        return (s.replace(",", "").replace(".", "").replace("'", "")
+                 .replace("-", " ").replace("  ", " ")).strip()
+
+    cand = {}
+    for x in commons:
+        nm = norm(x.get("Name"))
+        code = x.get("Code", "")
+        if not nm or not code or code.endswith("_old"):
             continue
-        if "Nasdaq" not in (sub.get("exchanges") or []):
+        cur = cand.get(nm)
+        if cur is None or (len(code) < len(cur) or
+                           (len(code) == len(cur) and code < cur)):
+            cand[nm] = code
+    print(f"EODHD NASDAQ delisted commons (usable names): {len(cand)}")
+
+    dead, qrows, used_tk = [], [], set()
+    for cik, (co, ld) in sorted(seen.items()):
+        if ld < "2015-01-01":
             continue
-        tks = [t.strip().upper() for t in (sub.get("tickers") or []) if t.strip()]
-        if not tks:
+        code = cand.get(norm(co))
+        if not code:
             continue
-        t = tks[0]
-        if t in tk:
+        if code in used_tk:
             continue
-        dead.append({"ticker": t, "symbol": f"{t}.US", "dead": True,
-                     "cik": cik, "name": (sub.get("name") or "")[:80],
-                     "exchanges": sub.get("exchanges")})
-        # cache the submission manifest (parse/facts stages read it later)
-        dstd = os.path.join(ROOT, "raw", "edgar", t)
-        os.makedirs(dstd, exist_ok=True)
-        json.dump(sub, open(os.path.join(dstd, "submissions.json"), "w"))
-        recent = sub["filings"]["recent"]
-        for a, form, d, p in zip(recent["accessionNumber"], recent["form"],
-                                 recent["filingDate"], recent["primaryDocument"]):
-            if form in FORMS and "2015-01-01" <= d:
-                qrows.append({"ticker": t, "accn": a, "cik": cik, "form": form,
-                              "filing_date": d, "primary": p})
-        if i % 200 == 0:
-            print(f"  {i}/{len(seen)} probed, {len(dead)} dead found", flush=True)
+        used_tk.add(code)
+        dead.append({"ticker": code, "symbol": f"{code}.US", "dead": True,
+                     "cik": cik, "name": co[:80], "last_filing": ld})
+        if code not in tk:      # live-name collision: filings only
+            for r in frows.get(cik, []):
+                qrows.append(r)
     json.dump(dead, open(out, "w"))
-    with open(QUEUE, "a") as fh:
-        for r in qrows:
-            fh.write(json.dumps(r) + "\n")
-    print(f"dead roster -> {out}: {len(dead)} names; +{len(qrows)} filings appended to queue")
-
-
+    print(f"dead NASDAQ roster -> {out}: {len(dead)} names; "
+          f"+{len(qrows)} filings appended to queue")
+    have = set()
+    try:
+        with open(QUEUE) as f:
+            for line in f:
+                have.add(json.loads(line)["accn"])
+    except FileNotFoundError:
+        pass
+    with open(QUEUE, "a") as f:
+        for cik, co, form, date, path in qrows:
+            accn = path.rstrip(".txt").split("/")[-1]
+            if accn in have:
+                continue
+            have.add(accn)
+            f.write(json.dumps({"accn": accn, "form": form,
+                                "filing_date": date, "cik": cik,
+                                "ticker": None,
+                                "company": co[:80],
+                                "primary": path}) + "\n")
+    print(f"queue now: {sum(1 for _ in open(QUEUE))} rows")
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
     if cmd == "pull":
