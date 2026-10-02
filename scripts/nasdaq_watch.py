@@ -186,6 +186,10 @@ def cmd_filings():
         note("draining queue (6 workers)")
         cmd_pull(6)
         lines.append("drain: done")
+        note("parsing new folders (resume-safe)")
+        os.system(f"cd {ROOT} && /usr/bin/python3 scripts/edgar_parse.py "
+                  ">> logs/nasdaq-parse-watch.log 2>&1")
+        lines.append("parse: done")
 
     with open(STATUS, "w") as f:
         f.write(f"NASDAQ watch — {_now()}\n" + "\n".join(lines) + "\n")
