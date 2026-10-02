@@ -282,13 +282,18 @@ def cmd_dead_roster(out="/data/finance/universe/nasdaq_dead_roster.json"):
 
     def norm(s):
         s = (s or "").upper().strip()
-        for suf in (" INC", " CORP", " CORPORATION", " LTD", " LIMITED",
-                    " PLC", " CO", " COMPANY", " GROUP", " HOLDINGS",
-                    " COMMON STOCK", " COM", " NEW", " THE"):
-            if s.endswith(suf):
-                s = s[:-len(suf)].strip()
-        return (s.replace(",", "").replace(".", "").replace("'", "")
-                 .replace("-", " ").replace("  ", " ")).strip()
+        s = (s.replace(",", "").replace(".", "").replace("'", "")
+              .replace("-", " ").replace("  ", " ")).strip()
+        changed = True
+        while changed:          # punctuation FIRST, then suffixes (handles
+            changed = False     # "Inc." vs "Inc" spelling asymmetry)
+            for suf in (" INC", " CORP", " CORPORATION", " LTD", " LIMITED",
+                        " PLC", " CO", " COMPANY", " GROUP", " HOLDINGS",
+                        " COMMON STOCK", " COM", " NEW", " THE"):
+                if s.endswith(suf):
+                    s = s[:-len(suf)].strip()
+                    changed = True
+        return s
 
     cand = {}
     for x in commons:
