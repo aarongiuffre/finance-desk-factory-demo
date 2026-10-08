@@ -19,6 +19,7 @@ locks_free() {
   local want=1000
   (( total >= want ))
 }
+[[ -f $ROOT/universe/.backfill_embed_done ]] && { echo "already embedded; exit"; exit 0; }
 while ! locks_free; do sleep 120; done
 if [[ -f $ROOT/universe/.backfill_embed_done ]]; then echo "already embedded; exit"; exit 0; fi
 echo "all crawl locks free at $(date -Is); starting parse sweep + embed"
