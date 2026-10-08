@@ -29,8 +29,7 @@ def main():
     tbl = db.open_table(E.TABLE)
     before = tbl.count_rows()
     tbl.cleanup_old_versions(older_than=__import__("datetime")
-                             .timedelta(days=days) if days > 0 else None,
-                             keep_versions=keep)
+                             .timedelta(days=days) if days > 0 else None)
     after = tbl.count_rows()
     print(f"cleanup done: rows {before:,} -> {after:,} "
           f"(delta {after-before:+,}; must be 0)")
