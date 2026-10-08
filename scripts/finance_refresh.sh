@@ -83,12 +83,14 @@ if [[ $NEED -eq 0 ]]; then
   exit 0
 fi
 
-echo "----- embed (live rebuild; server reopens table per query) -----"
-# NOTE: finance-refresh.service runs as the unprivileged user — it cannot stop the
-# root-owned finance-search.service, and must NOT start stray server copies either
-# (systemd unit owns port 8091; embed rebuilds the table file underneath the running
-# server, which is safe: the server reopens the table on each query).
-"$EMBED" "$ROOT/scripts/edgar_embed.py"
+echo "----- embed: incremental only (2026-10-08 doctrine) -----"
+# The 30-min embed-sweep timer (incremental_embed.py, append-only) is the sole
+# embedder.  The former daily FULL edgar_embed.py rebuild here peaked ~273G RAM
+# and raced (could overwrite) the sweep's appends — retired.  For schema/model
+# changes run a manual full rebuild, then lance_cleanup.
+# Housekeeping: reclaim version pileup from a week of append-only writes.
+"$EMBED" "$ROOT/scripts/lance_cleanup.py" --keep 3 --days 7 \
+  || echo "lance cleanup failed (non-fatal)"
 sleep 2
-curl -sS http://127.0.0.1:8091/health || echo "WARN: search server not answering after embed; check: systemctl status finance-search"
+curl -sS http://127.0.0.1:8091/health || echo "WARN: search server not answering; check: systemctl status finance-search"
 echo "===== done $(date -Is) ====="
