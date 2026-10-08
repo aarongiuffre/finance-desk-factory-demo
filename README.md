@@ -23,7 +23,8 @@ Local-first equity research + PIT backtest stack. Code-only repo: data dirs
   2026-10-08). Reclaim versions with `scripts/lance_cleanup.py` (runs in
   `finance_refresh.sh`; manual: `.venv-embed/bin/python scripts/lance_cleanup.py`).
 - **Search** — `scripts/search_server.py` on 127.0.0.1:8091 (user bus).
-  Reopens the table per query, so append-only writes are visible live.
+  Re-opens the table on every query, so append-only writes from the
+  incremental sweep are visible without restarts.
 - **Facts/screens** — `edgar_facts.py`, `edgar_screen.py` (flags:
   `compute_flags_for`), `confluence.py` ledger, `ta.py`.
 - **Backtests** — `scripts/walkforward.py` (v6, definitive): selection price

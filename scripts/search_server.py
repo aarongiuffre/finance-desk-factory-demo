@@ -67,7 +67,14 @@ import lancedb  # noqa: E402
 from sentence_transformers import SentenceTransformer  # noqa: E402
 
 _db = lancedb.connect(DB)
-_tbl = _db.open_table(TABLE)
+
+def _table():
+    """Re-open the table handle each call: cheap (manifest read) relative to
+    a vector search, and it makes append-only writes from the 30-min
+    incremental sweep visible to the API WITHOUT a server restart."""
+    return _db.open_table(TABLE)
+
+_tbl = _table()
 print(f"[boot] opened {DB}/{TABLE}: {_tbl.count_rows()} rows", flush=True)
 
 _model = SentenceTransformer(
@@ -82,8 +89,9 @@ def search(q, k, ticker=None, form=None):
     qv = _model.encode([q], normalize_embeddings=True, convert_to_numpy=True)[0]
     filtered = bool(ticker or form)
     probe = max(k, min(60, k * 8 if filtered else k))
+    tbl = _table()          # fresh handle: sees the sweep's appends
     qsearch = (
-        _tbl.search(qv.tolist())
+        tbl.search(qv.tolist())
         .select(["text", "ticker", "form", "filing_date", "accession", "source_path"])
         .limit(probe)
     )
@@ -98,7 +106,8 @@ def search(q, k, ticker=None, form=None):
         rows = qsearch.to_arrow().to_pylist()
     except Exception:
         rows = (
-            _tbl.search(qv.tolist())
+            _table()
+            .search(qv.tolist())
             .select(["text", "ticker", "form", "filing_date", "accession", "source_path"])
             .limit(probe)
             .to_arrow()
@@ -139,7 +148,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({
                     "status": "ok",
                     "table": TABLE,
-                    "rows": _tbl.count_rows(),
+                    "rows": _table().count_rows(),
                     "device": DEVICE,
                     "model": MODEL,
                 })

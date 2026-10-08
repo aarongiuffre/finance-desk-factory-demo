@@ -1,0 +1,7 @@
+lancedb==0.39.0
+numpy==2.5.3
+pyarrow==25.0.1
+pylance==13.0.0
+sentence-transformers==6.1.0
+torch==2.11.0+cu128
+transformers==5.17.0

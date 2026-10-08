@@ -77,6 +77,11 @@ elif find "$ROOT/parsed" -name metadata.json -newer "$ROOT/index/lancedb" -print
   NEED=1
 fi
 
+# Housekeeping runs EVERY day, new filings or not (version pileup grows on
+# quiet days too — Grok-audit nit, fixed 2026-10-08).
+"$EMBED" "$ROOT/scripts/lance_cleanup.py" --days 7 \
+  || echo "lance cleanup failed (non-fatal)"
+
 if [[ $NEED -eq 0 ]]; then
   echo "no new parsed filings; skip embed"
   echo "===== done $(date -Is) ====="
@@ -88,9 +93,6 @@ echo "----- embed: incremental only (2026-10-08 doctrine) -----"
 # embedder.  The former daily FULL edgar_embed.py rebuild here peaked ~273G RAM
 # and raced (could overwrite) the sweep's appends — retired.  For schema/model
 # changes run a manual full rebuild, then lance_cleanup.
-# Housekeeping: reclaim version pileup from a week of append-only writes.
-"$EMBED" "$ROOT/scripts/lance_cleanup.py" --keep 3 --days 7 \
-  || echo "lance cleanup failed (non-fatal)"
 sleep 2
 curl -sS http://127.0.0.1:8091/health || echo "WARN: search server not answering; check: systemctl status finance-search"
 echo "===== done $(date -Is) ====="

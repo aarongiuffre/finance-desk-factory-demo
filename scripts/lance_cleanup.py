@@ -4,11 +4,11 @@
 Append-only writes (incremental_embed) accumulate _versions/ manifests and
 deleted-row space. LanceDB keeps every version forever unless
 cleanup_old_versions is called. Run after refresh or on demand; safe while
-the search server runs (server reopens the table per query).
+the search server runs (the server re-opens the table on each query).
 
 Usage (.venv-embed python):
-  scripts/lance_cleanup.py            # keep last 3 versions / 7 days
-  scripts/lance_cleanup.py --keep 1 --days 1
+  scripts/lance_cleanup.py            # drop versions older than 7 days
+  scripts/lance_cleanup.py --days 1
 """
 import sys
 
