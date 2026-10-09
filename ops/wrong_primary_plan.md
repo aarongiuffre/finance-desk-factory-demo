@@ -3,7 +3,7 @@
 **Author:** Hermes (read-only investigation, 2026-10-09). **Decision owner:** Aaron.
 **Headline: the 6,420 wrong-primary filings were already reparsed (2026-09-30)
 and the INDEX is already correct. Strongest evidence (Grok, batch-3 review):
-the last daily FULL rebuild (Oct 8 07:56, logs/refresh-20261008-061020.log
+the last daily FULL rebuild (Oct 8 07:56, logs/refresh-20261008-061020.log[.gz after 14d]
 "stored 10311469 rows", built from parsed/*/document.md) produced exactly
 today's live count_rows — so the index text = parsed/ as of Oct 8, eight days
 after the reparse. Grok also sampled 200 fixlist entries: every

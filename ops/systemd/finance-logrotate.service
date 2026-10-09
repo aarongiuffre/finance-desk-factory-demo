@@ -5,3 +5,5 @@ Description=Finance desk log rotation (logrotate, copytruncate; no sudo)
 Type=oneshot
 WorkingDirectory=/data/finance
 ExecStart=/usr/bin/logrotate -s /data/finance/logs/.logrotate.state /data/finance/ops/logrotate.conf
+# Age-based: gzip one-shot refresh-*.log runs older than 14 days (no reader needs them plain; zcat/zgrep to read)
+ExecStartPost=/usr/bin/find /data/finance/logs -maxdepth 1 -name refresh-*.log -mtime +14 -exec /usr/bin/gzip -9 {} +
