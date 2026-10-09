@@ -40,12 +40,17 @@ Usage:
   python3 scripts/repair_reverse_splits.py backup
   python3 scripts/repair_reverse_splits.py            # dry-run
   python3 scripts/repair_reverse_splits.py --apply
+
+Symbols come from universe/nasdaq_dead_roster.json (price docs carry no
+"symbol" key); a candidate missing from the roster is an ERROR, never a
+guess.
 """
 import datetime
 import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -104,7 +109,29 @@ def sha256_of(path):
     return h.hexdigest()
 
 
+ROSTER_F = os.path.join(ROOT, "universe", "nasdaq_dead_roster.json")
+
+
+def roster_symbols():
+    """ticker -> EODHD symbol from the dead roster (all <T>.US today)."""
+    try:
+        roster = json.load(open(ROSTER_F))
+    except Exception as e:
+        sys.exit(f"REFUSING: cannot read dead roster {ROSTER_F}: {e}")
+    out = {}
+    for r in roster:
+        if isinstance(r, dict) and r.get("ticker"):
+            out[r["ticker"]] = r.get("symbol") or f"{r['ticker']}.US"
+    return out
+
+
+def redact(text):
+    """Strip any api_token=... leak from exception text (belt and braces)."""
+    return re.sub(r"api_token=[^&\s]+", "api_token=[REDACTED]", str(text))
+
+
 def candidates():
+    roster = roster_symbols()
     out = []
     for fn in sorted(os.listdir(DEAD_DIR)):
         if not fn.endswith(".json"):
@@ -114,10 +141,14 @@ def candidates():
             doc = json.load(open(p))
         except Exception:
             continue
-        if isinstance(doc, dict) and doc.get("source") == "eodhd_eod" \
-                and doc.get("splits"):
-            out.append((doc.get("ticker", fn[:-5]), doc.get("symbol",
-                        fn[:-5]), p))
+        if not (isinstance(doc, dict) and doc.get("source") == "eodhd_eod"
+                and doc.get("splits")):
+            continue
+        t = doc.get("ticker", fn[:-5])
+        # Symbol comes ONLY from the roster (price docs have no "symbol"
+        # key; guessing "<TICKER>" instead of "<TICKER>.US" is a bug).
+        sym = roster.get(t)
+        out.append((t, sym, p))          # sym None -> ERROR in the loop
     return out
 
 
@@ -215,6 +246,10 @@ def main():
 
         for i, (t, sym, path) in enumerate(cands, 1):
             try:
+                if sym is None:
+                    raise RuntimeError(
+                        "ticker not in nasdaq_dead_roster.json — symbol "
+                        "unknown, refusing to guess")
                 fresh = fetch_bars(sym, k)
                 time.sleep(PAUSE_S)
                 if not fresh:
@@ -293,7 +328,8 @@ def main():
                           f"{jump_old:.4f}\t{jump_new:.4f}\n")
             except Exception as e:
                 stats["ERROR"] += 1
-                rep.write(f"{t}\tERROR\t0\t0\t0\t0\t\t{type(e).__name__}: {e}\n")
+                rep.write(f"{t}\tERROR\t0\t0\t0\t0\t\t"
+                          f"{redact(type(e).__name__ + ': ' + str(e))}\n")
             if i % 25 == 0:
                 print(f"  {i}/{len(cands)} {stats}", flush=True)
 
