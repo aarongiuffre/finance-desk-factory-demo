@@ -1,0 +1,11 @@
+# Test-suite dependencies.
+# Install target: .venv-embed (Python 3.14 — same interpreter as
+# /usr/bin/python3 that the scripts run on; also carries lancedb for the
+# later index tests). Do NOT upgrade any other package in that venv.
+#
+# pytest must be >= 9.0.3: 8.x trips CVE-2025-71176 / GHSA-6w46-j5rx-g56g
+# (vulnerable tmpdir handling). Install with:
+#   .venv-embed/bin/pip install -r requirements-test.txt
+# or unpack the pure-python wheels directly into .venv-embed's site-packages
+# if the local package-scanner blocks pip (as it did 2026-10-09).
+pytest==9.0.3

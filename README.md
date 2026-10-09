@@ -51,6 +51,7 @@ Local-first equity research + PIT backtest stack. Code-only repo: data dirs
 
 - `docs/OPERATIONS.md` — services, timers, endpoints, data vendors/tiers, data-quality rules, index operations
 - `docs/HISTORY.md` — dated decisions and outcomes (with commit hashes)
+- Tests: `scripts/run_tests.sh` — offline pytest suite in `tests/` (venv `.venv-embed`, deps in `requirements-test.txt`)
 - Task-time doctrine: the **finance-desk skill** (`~/.hermes/skills/productivity/finance-desk/`)
 
 ## Operational rules
