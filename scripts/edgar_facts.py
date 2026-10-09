@@ -39,8 +39,10 @@ MAX_AGE_SEC = 12 * 3600
 ALIASES = {
     "revenue": "RevenueFromContractWithCustomerExcludingAssessedTax",
     "revenue_alt": "Revenues",
-    "revenue_ytd": "RevenueFromContractWithCustomerIncludingAssessedTax",
-    "revenue_qtr": "RevenueFromContractWithCustomerAfterExcludingAssessedTax",
+    # revenue INCLUDING assessed taxes — NOT year-to-date despite the old
+    # "revenue_ytd" key name (95 filers use this tag; renamed key keeps the
+    # startswith("revenue_") merge in edgar_screen.py:80 et al.)
+    "revenue_incl_tax": "RevenueFromContractWithCustomerIncludingAssessedTax",
     "revenue_ifrs": "RevenueFromContractsWithCustomers",
     "revenue_ifrs2": "Revenue",
     "gross_profit": "GrossProfit",
