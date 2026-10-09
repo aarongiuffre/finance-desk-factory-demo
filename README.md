@@ -41,12 +41,11 @@ Local-first equity research + PIT backtest stack. Code-only repo: data dirs
 - User bus: `eda-pull.service` (backlog crawl, Restart=on-failure),
   `finance-embed-sweep` (30 min), `finance-tree-sweep` (2h),
   `nasdaq-watch-filings` (22:00), `nasdaq-watch-price` (18:30),
-  `paper-driver` (15:45 ET), `finance-search` (:8091).
+  `paper-driver` (15:45 ET), `finance-search` (:8091),
+  `finance-universe` (weekly Sun 08:30).
 - System bus: `finance-facts` (4×/day), `finance-refresh` (OnCalendar 06:10
   daily +15m RandomizedDelaySec — note: the unit's Description still says
-  "weekly"; renaming it needs sudo, so the schedule here is the truth),
-  `finance-universe` (USER bus, weekly Sun 08:30 — it is a user unit, not
-  system).
+  "weekly"; renaming it needs sudo, so the schedule here is the truth).
 
 ## Operational rules
 

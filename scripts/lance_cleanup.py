@@ -18,7 +18,6 @@ import edgar_embed as E  # noqa: E402  (E.DB, E.TABLE constants)
 import lancedb  # noqa: E402
 
 def main():
-    keep = 3
     days = 7.0
     args = sys.argv[1:]
     if "--keep" in args:

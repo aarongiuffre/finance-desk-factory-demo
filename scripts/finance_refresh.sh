@@ -3,8 +3,9 @@
 # incremental sweep (finance-embed-sweep.timer, append-only) is the sole
 # embedder (full rebuilds are manual-only, see README). Runs daily 06:10
 # (+15m random) via system timer finance-refresh.timer (whose Description
-# still says "weekly" — cosmetic; renaming needs sudo).
-# CPU for pull/parse. Embed uses .venv-embed on the 5090.
+# still says "weekly" — cosmetic; renaming needs sudo). CPU only: $EMBED runs
+# lance_cleanup.py; embedding itself happens solely in the 30-min sweep
+# (finance-embed-sweep.timer, .venv-embed on the 5090).
 set -euo pipefail
 
 ROOT=/data/finance
