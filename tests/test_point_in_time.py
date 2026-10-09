@@ -141,9 +141,7 @@ BARS = [
 def test_last_close_at_is_as_traded_c_not_deflated_a():
     d0 = dt.date(2021, 1, 4)
     assert wf.last_close_at(BARS, d0) == 100.0          # c, the valuation price
-    assert wf.last_price_at(BARS, d0) == 98.0           # `a` IS deflated here...
-    # ...so the BUG-6 artifact (valuing on `a`) is detectable and forbidden:
-    assert wf.last_close_at(BARS, d0) != wf.last_price_at(BARS, d0)
+    assert wf.last_price_at(BARS, d0) == 98.0           # `a` IS deflated here
 
 
 def test_last_close_at_boundaries():
@@ -151,10 +149,8 @@ def test_last_close_at_boundaries():
     assert wf.last_close_at(BARS, dt.date(2021, 3, 15)) == 100.0
     assert wf.last_close_at(BARS, dt.date(2021, 3, 16)) == 98.0
     assert wf.last_close_at(BARS, dt.date(2020, 1, 1)) is None
-    # Beyond the last bar: still returns `c`, never the div-adjusted `a`.
+    # Beyond the last bar: still returns the last `c`.
     assert wf.last_close_at(BARS, dt.date(2026, 1, 1)) == 110.0
-    assert wf.last_close_at(BARS, dt.date(2026, 1, 1)) != wf.last_price_at(
-        BARS, dt.date(2021, 1, 4))
 
 
 def test_total_return_ratio_is_price_change_plus_dividend():
@@ -163,11 +159,6 @@ def test_total_return_ratio_is_price_change_plus_dividend():
     tr = wf.last_price_at(BARS, d1) / wf.last_price_at(BARS, d0) - 1
     assert tr == pytest.approx((98.0 + 2.0) / 100.0 - 1)
     assert tr == pytest.approx(0.0)
-    # The ETR/COO-class artifact: mixing a(d1) with c(d0) loses the dividend
-    # and would report -2%.  The correct ratio must differ from the mix.
-    mixed = wf.last_price_at(BARS, d1) / wf.last_close_at(BARS, d0) - 1
-    assert mixed == pytest.approx(-0.02)
-    assert mixed != pytest.approx(tr)
     # d0 -> d2: a-ratio equals the real reinvested total return.
     tr2 = wf.last_price_at(BARS, d2) / wf.last_price_at(BARS, d0) - 1
     assert tr2 == pytest.approx(110.0 / 98.0 - 1)

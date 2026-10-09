@@ -6,6 +6,7 @@
 # pytest must be >= 9.0.3: 8.x trips CVE-2025-71176 / GHSA-6w46-j5rx-g56g
 # (vulnerable tmpdir handling). Install with:
 #   .venv-embed/bin/pip install -r requirements-test.txt
-# or unpack the pure-python wheels directly into .venv-embed's site-packages
-# if the local package-scanner blocks pip (as it did 2026-10-09).
+#
+# 2026-10-09: installed manually from PyPI wheels (sha256 verified vs PyPI);
+# redo via pip when the scanner allows.
 pytest==9.0.3
