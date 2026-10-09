@@ -22,7 +22,8 @@ def main():
     days = 7.0
     args = sys.argv[1:]
     if "--keep" in args:
-        keep = int(args[args.index("--keep") + 1])
+        # lancedb 0.39 cleanup_old_versions has no keep_versions; --days only.
+        sys.exit("--keep is not supported on lancedb 0.39; use --days <float>")
     if "--days" in args:
         days = float(args[args.index("--days") + 1])
     db = lancedb.connect(E.DB)

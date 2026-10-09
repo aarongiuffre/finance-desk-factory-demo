@@ -1,5 +1,9 @@
 #!/bin/bash
-# Weekly EDGAR refresh: pull -> parse new only -> re-embed if parsed changed.
+# Daily EDGAR refresh: pull -> parse new only. NO embed here — the 30-min
+# incremental sweep (finance-embed-sweep.timer, append-only) is the sole
+# embedder (full rebuilds are manual-only, see README). Runs daily 06:10
+# (+15m random) via system timer finance-refresh.timer (whose Description
+# still says "weekly" — cosmetic; renaming needs sudo).
 # CPU for pull/parse. Embed uses .venv-embed on the 5090.
 set -euo pipefail
 
