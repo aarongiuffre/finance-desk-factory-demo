@@ -13,7 +13,8 @@ Schema conversion (bug-6 discipline): EODHD close = RAW as-traded;
 desk convention wants c = split-adjusted-only (c x future-splits = raw) and
 a = dividend+split adjusted.  So per name: derive the split calendar inline
 from (raw/adj) jump pairs — same detection split_pull uses — then convert
-c = raw / prod(splits after d).  Calendar saved to raw/splits/<T>.json.
+c = raw / prod(splits after d).  The calendar is stored INSIDE the price
+doc ("splits" key, next to "bars"), NOT in raw/splits/.
 
 Usage:
   python3 nasdaq_price_eod.py pull <roster.json>   # roster: [{ticker, symbol, dead}]
@@ -53,8 +54,9 @@ def derive_split_calendar(bars):
     A forward k:1 split divides the raw price by k on the effective day while
     adjusted_close is continuous => factor k = adj_r / raw_r (validated:
     AAPL 4:1 2020, NVDA 4:1+10:1, CMG 50:1 class).  Reverse splits (raw
-    multiplies) give k < 1 -> store 1/k so the same cumulative convention
-    (c = raw / prod(splits after d)) works for both."""
+    multiplies) give k < 1 -> store k (0.1 for 1:10), matching split_pull's
+    raw/splits convention: c = raw / prod(splits after d) then yields
+    c = raw*k pre-split = continuous with the post-split price."""
     splits = []
     for p, b in zip(bars, bars[1:]):
         raw_r = b["close"] / p["close"] if p["close"] else 1.0
@@ -65,7 +67,7 @@ def derive_split_calendar(bars):
         if 1.8 <= k <= 60:
             splits.append({"date": b["date"], "factor": round(k, 6)})
         elif 0.02 <= k <= 0.55:            # reverse split (e.g. 1:10 => k=0.1)
-            splits.append({"date": b["date"], "factor": round(1 / k, 6)})
+            splits.append({"date": b["date"], "factor": round(k, 6)})
     return splits
 
 
