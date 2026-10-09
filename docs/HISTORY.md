@@ -59,15 +59,28 @@ One-liners with commit hashes; deep dives live where noted.
   primary_from_manifest, search_server (AST-extract, no import),
   lance_cleanup, sec_throttle, paper_bridge paper-host pinning,
   backfill_embed_watch, split detection.
-- 2026-10-09: **Reverse-split bug OPEN** in
-  `nasdaq_price_eod.derive_split_calendar/convert` — stores 1/k but convert
-  divides, so dead-tier `c` (as-traded close) is off k²=100× before a
-  reverse split; ~235 dead tickers affected (disk scan: 322 c-jump events,
-  0 in live tier). Blast radius is ONLY dead-tier `c` feeding
-  ta.load_bars→walkforward.last_close_at (dead-name valuation); total-return
-  ratios use `a` and are unaffected, and **basis_factor is NOT
-  contaminated**: nasdaq_price_eod writes its calendar inside
-  raw/price/dead/<T>.json, raw/splits/ is written only by split_pull.py
-  (correct 1/jump convention). Fix pending Aaron + dead-tier re-derivation.
+- 2026-10-09: **Reverse-split bug RESOLVED** (was OPEN earlier today) in
+  `nasdaq_price_eod.derive_split_calendar/convert` — stored 1/k for reverse
+  splits while convert divides, so dead-tier `c` (as-traded close) was off
+  k²=100× before a reverse split; ~235 dead tickers had c-jump artifacts
+  (0 in live tier). Blast radius was ONLY dead-tier `c` feeding
+  ta.load_bars→walkforward.last_close_at; total-return ratios use `a` and
+  were never affected, and **basis_factor was NOT contaminated**:
+  nasdaq_price_eod writes its calendar inside raw/price/dead/<T>.json,
+  raw/splits/ is written only by split_pull.py (correct 1/jump convention).
   NOTE: the `bac81d5` message wrongly says nasdaq_price_eod writes
   raw/splits — it does not (recorded here rather than amending).
+  RESOLUTION (2026-10-09): fix `15fe45f` (store k, matching split_pull);
+  repair script `de0d3da` + roster-symbol fixup `b054786`. Backup
+  raw/price_backup_20261009/ (249 files + MANIFEST.tsv, sha256-verified,
+  NOT in git). Dry-run classified 233 AFFECTED / 16 UNAFFECTED (0 DRIFT,
+  0 ERROR); --apply rewrote the 233 (byte-identical dates + `a` values,
+  so the vendor data was stable); c/a inconsistency steps across the 249
+  files dropped 563 → 143. 16 UNAFFECTED files stayed byte-identical.
+  23 files retain EODHD adjusted_close glitches (vendor junk, listed in
+  OPERATIONS.md Data quality) — low-trust, exclude from dead-tier
+  valuations unless checked by hand. No downstream regeneration: of the
+  affected tickers only WIN and ODP were ever S&P members (memberships
+  ended 2015-04 / 2010-12, before the walkforward window; neither appears
+  in any walkforward ledger). Samples verified: ABIL 0.034→3.4 pre-split
+  (continuous with 3.65 post), VBIV 0.0001→121.69.

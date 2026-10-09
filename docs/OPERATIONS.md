@@ -65,6 +65,12 @@ use `browse-edgar` or the EODHD delisted list instead.
 - `facts/shares.json`: trust the `.stale` flag; some rows are silent-bad
   (CMG 1.3M, COST 5.3M, ACGL, VICI, EQT, APH, ADBE...) — detector-only use.
   PREFER EPS-basis P/E; a >1.25 q/q implied-share jump = split-mix check.
+- Dead-tier EODHD `adjusted_close` glitches (2026-10-09, post reverse-split
+  repair): 23 files still show c/a steps >1.5× from vendor data junk (e.g.
+  RSLS adj=999999.9999, IMG 43 bogus "splits") — treat as LOW-TRUST and
+  exclude from dead-tier valuations unless checked by hand:
+  ABQQD BIOC BIOL BLUE BYU CFRX COEP CTRV GBSN IMG IVP MDVL NAKD OTT PIXY
+  RGSE ROI RSLS SNDE SONN TBLT VAPE ZSAN.
 - Content-hash chunk_ids do NOT exist: chunk_id = `md5(accession:i)`, so
   reparsed filings never re-embed without an explicit purge+re-embed.
 - Index `accession` column is DASHED; parsed-dir names are
