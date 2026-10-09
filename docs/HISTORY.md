@@ -53,3 +53,21 @@ One-liners with commit hashes; deep dives live where noted.
   `a8e7107`/`bd4a814`).
 - 2026-10-09: Project docs split out of memory (OPERATIONS.md/HISTORY.md) —
   memory trimmed to pointers + env facts.
+- 2026-10-09: **Offline pytest suite added** (`af85259`..`bac81d5`;
+  `scripts/run_tests.sh`; 42 passed + 1 strict xfail, ~6 s wall). Mutation-
+  checked per file on COPIES; covers PIT helpers, alias/tag selection,
+  primary_from_manifest, search_server (AST-extract, no import),
+  lance_cleanup, sec_throttle, paper_bridge paper-host pinning,
+  backfill_embed_watch, split detection.
+- 2026-10-09: **Reverse-split bug OPEN** in
+  `nasdaq_price_eod.derive_split_calendar/convert` — stores 1/k but convert
+  divides, so dead-tier `c` (as-traded close) is off k²=100× before a
+  reverse split; ~235 dead tickers affected (disk scan: 322 c-jump events,
+  0 in live tier). Blast radius is ONLY dead-tier `c` feeding
+  ta.load_bars→walkforward.last_close_at (dead-name valuation); total-return
+  ratios use `a` and are unaffected, and **basis_factor is NOT
+  contaminated**: nasdaq_price_eod writes its calendar inside
+  raw/price/dead/<T>.json, raw/splits/ is written only by split_pull.py
+  (correct 1/jump convention). Fix pending Aaron + dead-tier re-derivation.
+  NOTE: the `bac81d5` message wrongly says nasdaq_price_eod writes
+  raw/splits — it does not (recorded here rather than amending).

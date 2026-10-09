@@ -87,6 +87,29 @@ use `browse-edgar` or the EODHD delisted list instead.
 - Log rotation: `ops/logrotate.conf` via `finance-logrotate.timer`
   (copytruncate; `logs/confluence-history.jsonl` is a LEDGER — never rotate it).
 
+### Tests
+
+- Run: `scripts/run_tests.sh` (offline pytest in `tests/`, venv
+  `.venv-embed`, deps `requirements-test.txt`). 42 passed + 1 strict xfail
+  in ~6 s.
+- Offline-guarded: `tests/conftest.py` blocks any socket connect outside
+  127.0.0.1/::1/localhost and passes AF_UNIX through; tests never touch
+  `data/`, `raw/`, `facts/`, `logs/`, or `/tmp/sec_bucket.state` (tmp_path
+  fixtures + private-name module copies only). `tests/test_search_server.py`
+  ast-extracts the request layer instead of importing the module (importing
+  it pins the GPU, loads torch + the model, opens the live index).
+- pytest 9.0.3 was installed manually from sha-verified PyPI wheels
+  2026-10-09 (8.x trips CVE-2025-71176); redo via pip when the scanner
+  allows.
+- lancedb deprecation: `cleanup_old_versions` is deprecated in favor of
+  `Table.optimize` — a lancedb upgrade will require changing
+  `lance_cleanup.py`; `tests/test_lance_cleanup.py` will catch it.
+- Deliberately NOT covered: the CHTR +10.6% vendor-data observation (not a
+  code invariant); walkforward's main-loop inline return math (only its
+  helper functions are tested); paper_bridge's docstring claim of a
+  live-endpoint refusal (no such code exists — only the hardcoded paper
+  base is pinned; overclaim reported 2026-10-09).
+
 ## Conventions
 
 - Commit messages describe the stack's state (git = code-only; `raw/`,
