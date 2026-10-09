@@ -13,7 +13,9 @@ One-liners with commit hashes; deep dives live where noted.
   cross-surface audit (birth-bug, stale-vintage chimera, split-basis,
   exit-price). (skill: Strategy research era)
 - 2026-09-30: **Wrong-primary debt discovered** — docparse picked exhibits as
-  primary docs (~5,858 filings at discovery, 437 tickers). Fixed root cause
+- 2026-09-30: **Wrong-primary debt discovered** — docparse picked exhibits as
+  primary docs (5,858 filings / 427 tickers at discovery; final fixlist
+  6,420 / 437 tickers). Fixed root cause
   (primary_from_manifest v5) and reparsed 6,420 filings. (skill: Strategy
   research era; full story: `ops/wrong_primary_plan.md`)
 
@@ -31,12 +33,12 @@ One-liners with commit hashes; deep dives live where noted.
   NASDAQ expansion + audit hardening era)
 - 2026-10-07 01:51: Server reboot — durable units self-recovered; the
   transient crawl died → relaunched as reboot-proof `eda-pull.service`
-  (Restart=on-failure). (commit `c124572`)
+  (Restart=on-failure; unit not versioned in git).
 - 2026-10-08: **Grok audit rounds 1–5** — daily full index rebuild retired
   (273G RAM peak, write-race) → append-only sweep is sole embedder
   (`096d7ab`); lance_cleanup reclaims versions (122G→73G) `3a20baf`;
   search re-opens table per query `39b6043`; duplicate system-bus search
-  disabled (10,736 restarts); **finance-crawl retired 2 checkpoint lines
+  disabled (10,956 restarts frozen at disable, 13:33 ET); **finance-crawl retired 2 checkpoint lines
   from a full-overwrite rebuild** `709f596`; backups/ gitignored + watcher
   guard moved `240bfda`; README + requirements + UA 600. (skill: Grok audit
   fixes — the authoritative section)

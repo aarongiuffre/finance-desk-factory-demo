@@ -20,15 +20,15 @@ rules — verified against the live system 2026-10-09.
 | `finance-logrotate.timer` | daily 04:50 | logrotate (copytruncate) per `ops/logrotate.conf` |
 | `finance-universe.timer` | Sun 08:30 | universe refresh + survivorship self-healing |
 | `finance-search.service` | always-on | search API, 127.0.0.1:8091 — **re-opens the table on every query**; appends are visible without restarts |
+| `finance-crawl.service` | — | **RETIRED 2026-10-08** (Sep-2026 S&P fleet supervisor; its `backfill_embed_watch.sh` was 2 checkpoint lines from firing a full index overwrite). Stopped, disabled, and `universe/.backfill_embed_done` stamped so the watcher can never fire. USER unit |
 
 **System bus** (`/etc/systemd/system/`):
 
 | Unit | Schedule | What it does |
 |---|---|---|
 | `finance-refresh.timer` | daily 06:10 (+15m RandomizedDelaySec) | pull → parse → facts → price → screen_log → lance_cleanup. **No embed here** (the sweep is the sole embedder). NOTE: the unit Description still says "weekly" — cosmetic; renaming needs sudo |
-| `finance-facts.timer` | 03:30 / 09:30 / 15:30 / 21:30 | companyfacts refresh, shares, prices, screen_log |
-| `finance-search.service` | — | **DISABLED 2026-10-08** (duplicate of the user-bus server; was crash-looping on the :8091 port, 10,736 restarts). Do not re-enable |
-| `finance-crawl.service` | — | **RETIRED 2026-10-08** (Sep-2026 S&P fleet supervisor; its `backfill_embed_watch.sh` was 2 checkpoint lines from firing a full index overwrite). Stopped, disabled, and `universe/.backfill_embed_done` stamped so the watcher can never fire |
+| `finance-facts.timer` | 03:30 / 09:30 / 15:30 / 21:30 | `facts_refresh.sh`: edgar_facts.py fetch --force, price_pull.py pull, screen_log.py, backtest.py log (no shares step) |
+| `finance-search.service` | — | **DISABLED 2026-10-08** (duplicate of the user-bus server; was crash-looping on the :8091 port — counter frozen at 10,956 when disabled, 13:33 ET). Do not re-enable |
 
 ## Endpoints
 
