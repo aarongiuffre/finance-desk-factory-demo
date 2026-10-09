@@ -47,6 +47,12 @@ Local-first equity research + PIT backtest stack. Code-only repo: data dirs
   daily +15m RandomizedDelaySec — note: the unit's Description still says
   "weekly"; renaming it needs sudo, so the schedule here is the truth).
 
+## Docs
+
+- `docs/OPERATIONS.md` — services, timers, endpoints, data vendors/tiers, data-quality rules, index operations
+- `docs/HISTORY.md` — dated decisions and outcomes (with commit hashes)
+- Task-time doctrine: the **finance-desk skill** (`~/.hermes/skills/productivity/finance-desk/`)
+
 ## Operational rules
 
 - SEC shared rate ceiling 10 req/s (9.5 used) — never parallel-crawl beyond

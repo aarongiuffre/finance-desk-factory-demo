@@ -1,0 +1,99 @@
+# Finance Desk — Operations
+
+Living operational truth for the /data/finance pipeline. Task-time doctrine
+lives in the **finance-desk skill**; dated decisions in `docs/HISTORY.md`.
+This file is the source of truth for schedules, endpoints, vendors, and data
+rules — verified against the live system 2026-10-09.
+
+## Services & timers
+
+**User bus** (`~/.config/systemd/user/`, Linger=yes — survives SSH logout):
+
+| Unit | Schedule | What it does |
+|---|---|---|
+| `eda-pull.service` | continuous (Restart=on-failure) | NASDAQ backlog filing crawl, 6 workers, `.done`-flag resume. Backlog ETA ~Oct 14 2026; afterwards the nasdaq-watch drain keeps it idle |
+| `finance-embed-sweep.timer` | every 30 min (OnUnitActiveSec, boot +5min) | `incremental_embed.py` — append-only embedding of `parsed/` into LanceDB. **The sole embedder** (full rebuilds are manual-only, see Index operations) |
+| `finance-tree-sweep.timer` | every 2h (OnUnitActiveSec, boot +10min) | PageIndex tree generation for new parsed filings |
+| `nasdaq-watch-filings.timer` | daily 22:00 | `nasdaq_watch.py filings`: CIK-map refresh, EODHD roster diff (new listings → 10y Yahoo init; delistings → dead tier), current+prev-quarter master.idx re-scan, queue drain if free, parse |
+| `nasdaq-watch-price.timer` | Mon–Fri 18:30 | incremental Yahoo refresh over the live NASDAQ roster |
+| `paper-driver.timer` | Mon–Fri 15:45 | flag sweep on held names, monthly self-guarded rebalance (first trading day), event tracker, `logs/paper-status.txt` |
+| `finance-logrotate.timer` | daily 04:50 | logrotate (copytruncate) per `ops/logrotate.conf` |
+| `finance-universe.timer` | Sun 08:30 | universe refresh + survivorship self-healing |
+| `finance-search.service` | always-on | search API, 127.0.0.1:8091 — **re-opens the table on every query**; appends are visible without restarts |
+
+**System bus** (`/etc/systemd/system/`):
+
+| Unit | Schedule | What it does |
+|---|---|---|
+| `finance-refresh.timer` | daily 06:10 (+15m RandomizedDelaySec) | pull → parse → facts → price → screen_log → lance_cleanup. **No embed here** (the sweep is the sole embedder). NOTE: the unit Description still says "weekly" — cosmetic; renaming needs sudo |
+| `finance-facts.timer` | 03:30 / 09:30 / 15:30 / 21:30 | companyfacts refresh, shares, prices, screen_log |
+| `finance-search.service` | — | **DISABLED 2026-10-08** (duplicate of the user-bus server; was crash-looping on the :8091 port, 10,736 restarts). Do not re-enable |
+| `finance-crawl.service` | — | **RETIRED 2026-10-08** (Sep-2026 S&P fleet supervisor; its `backfill_embed_watch.sh` was 2 checkpoint lines from firing a full index overwrite). Stopped, disabled, and `universe/.backfill_embed_done` stamped so the watcher can never fire |
+
+## Endpoints
+
+| URL | What | Notes |
+|---|---|---|
+| `127.0.0.1:8091` | search API — `/health`, `/search?q=&ticker=&form=&k=` | bge-small-en-v1.5 on the 5090; table `filings` in `index/lancedb`; re-opens the table per query |
+| `127.0.0.1:8092` | quote API — `/quote?symbols=A,B` (max **12** symbols/request) | Yahoo delayed, 60s cache |
+| `:8022` | LLM (TensorFold glm-5.3-flash) | binds 0.0.0.0 by decision — Tailscale + host-networked containers reach it |
+| `:8188` | ComfyUI | same exposure decision |
+
+## Data vendors & tiers
+
+**EODHD ($19.99/mo)** — key at `.eodhd_key` (path-only, never in git). NOT in
+the daily loop. Roles: **dead-tier (delisted-inclusive) prices**, new-index
+fills, split calendars, independent basis referee. Forbidden on this tier:
+**intraday** and **splits** endpoints (no day-trading bars). Delisted-symbol
+list = `exchange-symbol-list/US?delisted=1`. Convention warning: EODHD raw
+`close` is NOT always pure as-traded (CHTR 2015-16 carries a +10.6%
+distribution adjustment) — **`adjusted_close` == the desk convention**; never
+mix raw-vs-adjusted across a series.
+
+**Yahoo chart v8** — live-tier daily prices (`price_pull.py`, desk schema:
+`c` = split-only close, `a` = dividend+split adjusted). The dead tier
+(`raw/price/dead/`) is EODHD-sourced via `nasdaq_price_eod.py`. Never mix
+tiers on a live name.
+
+**SEC** — shared rate ceiling 10 req/s (use 9.5). `.sec_user_agent` (mode
+600). Bulk enumeration = quarterly `master.idx` (field 5 is a FILE PATH, not
+an accession). `data.sec.gov/submissions/` 404s for long-dead companies —
+use `browse-edgar` or the EODHD delisted list instead.
+
+## Data quality rules
+
+- `facts/shares.json`: trust the `.stale` flag; some rows are silent-bad
+  (CMG 1.3M, COST 5.3M, ACGL, VICI, EQT, APH, ADBE...) — detector-only use.
+  PREFER EPS-basis P/E; a >1.25 q/q implied-share jump = split-mix check.
+- Content-hash chunk_ids do NOT exist: chunk_id = `md5(accession:i)`, so
+  reparsed filings never re-embed without an explicit purge+re-embed.
+- Index `accession` column is DASHED; parsed-dir names are
+  `date_ACCN` — convert before WHERE clauses.
+- Never quote a facts value without checking its `end` date (SEC-side lag per
+  filer; XOM identity drift 2026 — see skill).
+
+## Index operations
+
+- **The 30-min append-only sweep is the sole embedder.** Full rebuilds
+  (`edgar_embed.py`) are MANUAL-ONLY (schema/model changes): run rebuild →
+  `lance_cleanup.py` → restart finance-search (wholesale overwrite only).
+- `lance_cleanup.py` reclaims `_versions` pileup; runs DAILY in
+  finance_refresh.sh **before** the new-filings gate (quiet days compact
+  too). Row-count guard must show delta 0.
+- Targeted text fixes: delete rows `WHERE accession IN (...)` (dashed), then
+  run the sweep — chunk_ids are deterministic so re-adds are clean. **Pause
+  lance_cleanup during such ops**: its daily `--days 7` bounds version-based
+  rollback.
+- Log rotation: `ops/logrotate.conf` via `finance-logrotate.timer`
+  (copytruncate; `logs/confluence-history.jsonl` is a LEDGER — never rotate it).
+
+## Conventions
+
+- Commit messages describe the stack's state (git = code-only; `raw/`,
+  `parsed/`, `index/`, `facts/`, `logs/`, keys gitignored).
+- Paper trading is structurally Alpaca-PAPER-only (`paper_bridge.py` refuses
+  live endpoints).
+- Backups: `git bundle` to `backups/` (gitignored — same-disk copy, not a
+  real backup); an off-machine remote is still owed.
+- Screen/facts questions: see the **finance-desk skill** (screen layer, TTM
+  chains, confluence, walkforward v6 doctrine).
