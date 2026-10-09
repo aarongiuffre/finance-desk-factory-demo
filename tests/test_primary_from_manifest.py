@@ -16,6 +16,8 @@ _SUBM_CACHE are repointed per test — live data/ is never touched.
 
 import json
 
+import pytest
+
 import edgar_parse as ep
 
 
@@ -72,18 +74,22 @@ def test_heuristic_picks_real_10q(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------- case 2
-def test_submissions_json_beats_heuristic(tmp_path, monkeypatch):
+@pytest.mark.parametrize("layout", ["filings.recent", "flat"])
+def test_submissions_json_beats_heuristic(tmp_path, monkeypatch, layout):
     monkeypatch.setattr(ep, "RAW", str(tmp_path))
     ep._SUBM_CACHE.clear()
-    _submissions(tmp_path, "SUB", [(_accn_dash(91), "10-K",
-                                    "sub-primary-10k.htm")])
+    if layout == "filings.recent":
+        _submissions(tmp_path, "SUB", [(_accn_dash(91), "10-K",
+                                        "sub-primary-10k.htm")])
+    else:
+        # submissions.json without the filings.recent wrapper — the flat
+        # array layout the EDGAR bulk API also ships.
+        (tmp_path / "SUB").mkdir(parents=True)
+        (tmp_path / "SUB" / "submissions.json").write_text(json.dumps({
+            "accessionNumber": [_accn_dash(91)], "form": ["10-K"],
+            "primaryDocument": ["sub-primary-10k.htm"]}))
     d = _mk_filing(tmp_path, "SUB", "10-K", "2017-06-01-" + _accn(91),
                    ["heuristic-wrong.htm"])
-    # submissions layout variant: flat arrays (no filings.recent wrapper)
-    flat = tmp_path / "SUB" / "submissions.json"
-    flat.write_text(json.dumps({
-        "accessionNumber": [_accn_dash(91)], "form": ["10-K"],
-        "primaryDocument": ["sub-primary-10k.htm"]}))
     assert ep.primary_from_manifest(str(d)) == ("sub-primary-10k.htm", "10-K")
 
 
