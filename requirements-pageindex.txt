@@ -1,0 +1,15 @@
+# requirements-pageindex.txt — frozen direct deps for the PageIndex tooling
+# (.venv-pageindex; scripts/fast_index.py, batch_index.py,
+# pageindex-mirror/query_tree.py, pageindex-mirror/md_adapter.py).
+#
+# SCOPE: top-level imports only, verified by grepping those four files' import
+# statements — the desk's PageIndex path uses stdlib + openai ONLY
+# (query_tree.py: `from openai import OpenAI` against the local
+# OPENAI_BASE_URL; everything else is stdlib). The upstream
+# pageindex-mirror/requirements.txt (litellm, mcp, openai-agents, PyPDF2,
+# pypdfium2, ...) covers the full upstream project, which we do not run.
+# Transitive pins live in the venv itself; `pip freeze` there if ever needed.
+#
+# Installed via: .venv-pageindex/bin/pip install -r requirements-pageindex.txt
+
+openai==2.54.0
