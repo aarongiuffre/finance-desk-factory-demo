@@ -2,9 +2,12 @@
 
 **Author:** Hermes (read-only investigation, 2026-10-09). **Decision owner:** Aaron.
 **Headline: the 6,420 wrong-primary filings were already reparsed (2026-09-30)
-and the INDEX is already correct. The "5.9k still wrong" and "RE-EMBED
-pending" notes are stale bookkeeping, not live defects. Verification evidence
-below; no writes were performed.**
+and the INDEX is already correct. Strongest evidence (Grok, batch-3 review):
+the last daily FULL rebuild (Oct 8 07:56, logs/refresh-20261008-061020.log
+"stored 10311469 rows", built from parsed/*/document.md) produced exactly
+today's live count_rows — so the index text = parsed/ as of Oct 8, eight days
+after the reparse. Grok also sampled 200 fixlist entries: every
+metadata.json names the fixlist's new primary. No writes were performed.**
 
 ## 1. What "wrong-primary" means
 
@@ -46,17 +49,17 @@ v5 primary selection and rewrites `parsed/<T>/<FORM>/<ACC>/`).
 | Index chunk text vs today's `document.md` | fixlist sample matches at the same rate as a random control group (60% vs 55% mean body-match; the residual is markdown-reflow noise, present equally in both groups — see §3b) |
 | Accession format gotcha | index `accession` column is DASHED (`0001090872-15-000051`); fixlist uses parsed-dir form (`2015-12-21_...`) |
 
-**§3b — why I ran a control group:** my first text-match detector reported
-fixlist filings "mismatched" vs `document.md` — but a random control group of
-NON-fixlist filings mismatched at the same rate (0/17 match with naive
-80-char substring; 55–60% with body-only matching). The chunk-header banner
-plus markdown reflow defeats naive substring matching for ALL old parse
-versions. So the text test can't distinguish old-index-wrong from
-old-index-right; the conclusive evidence is structural: the reparse log shows
-all 6,420 processed, and the 30-min append-only sweep + content-hash chunk_ids
-mean any reparsed-but-unembedded filing would still be sitting as a GAP — and
-the 2026-09-30 full rebuild (9.95M rows) already included the 6,420 reparsed
-filings. Nothing wrong-primary remains to re-embed.
+**§3b — the text-match sample was INCONCLUSIVE and should not be relied on:**
+my first naive detector (80-char substring of chunk text in document.md)
+failed on ALL filings — fixlist and control alike (0/17 match with naive
+80-char substring; 55–60% mean with body-only matching) — because
+chunk-header banners and markdown reflow defeat exact substring matching
+across parse generations. Text matching cannot distinguish old-index-wrong
+from old-index-right. The conclusive evidence: (a) the reparse log shows all
+6,420 processed; (b) the Oct 8 07:56 full rebuild (10,311,469 rows = today's
+live count) was built from parsed/ AFTER the reparse, so index text = correct
+parsed text; (c) Grok's 200-entry metadata sample confirms every reparsed
+filing names the new primary.
 
 ## 4. Impact — what does this break today?
 
@@ -95,7 +98,11 @@ The right shape for correcting text in the index without a full rebuild:
    seconds; re-embed at ~64 chunks/batch on the 5090 ≈ 15–30 min GPU, RAM
    flat (streamed). **Rollback:** LanceDB keeps versions — note the version
    number before the delete; `restore` that version and the pre-delete state
-   returns verbatim.
+   returns verbatim. **BUT the restore window is limited: lance_cleanup runs
+   DAILY with --days 7 (finance_refresh.sh), so versions older than 7 days
+   are gone. During any delete/re-embed operation, PAUSE lance_cleanup
+   (skip the call in finance_refresh.sh) until you are satisfied with the
+   result — do not rely on restore after more than a week.**
 
 ## 6. Recommendation
 

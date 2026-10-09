@@ -1,0 +1,7 @@
+[Unit]
+Description=Finance desk log rotation (logrotate, copytruncate; no sudo)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/data/finance
+ExecStart=/usr/bin/logrotate -s /data/finance/logs/.logrotate.state /data/finance/ops/logrotate.conf
