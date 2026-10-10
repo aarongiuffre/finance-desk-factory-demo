@@ -278,6 +278,18 @@ def cmd_setup(args):
     log("setup complete")
 
 
+def doc_names(items, primary):
+    """Doc names to fetch from a filing index: the primary document (even if
+    the extension is odd) plus every .htm/.html/.txt.  SHARED with
+    nasdaq_bulk's progress counting (crawl_eta) so the two cannot drift."""
+    names = []
+    for it in items:
+        n = it["name"]
+        if n == primary or n.lower().endswith((".htm", ".html", ".txt")):
+            names.append(n)
+    return names
+
+
 def pull_one(acc, form, date, primary, cikn, outbase, ua):
     """Fetch a single accession into outbase/<form>/<date>-<accn>/ (idempotent:
     .done flag skips).  Documents are written atomically (.part + replace);
@@ -312,11 +324,7 @@ def pull_one(acc, form, date, primary, cikn, outbase, ua):
                           "attempts": 1}])
         return 'failed'
 
-    names = []
-    for it in idx.get("directory", {}).get("item", []):
-        n = it["name"]
-        if n == primary or n.lower().endswith((".htm", ".html", ".txt")):
-            names.append(n)
+    names = doc_names(idx.get("directory", {}).get("item", []), primary)
 
     ok = True
     errors = []
