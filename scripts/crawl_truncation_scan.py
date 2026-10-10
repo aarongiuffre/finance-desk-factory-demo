@@ -111,16 +111,21 @@ def classify(path, name=None):
     if ext in (".htm", ".html"):
         stripped = text.rstrip()
         low = stripped.lower()
-        # </html> visible in the tail + clean trailers, OR the doc ends
-        # with a complete comment (inline-XBRL xdx audit blocks run >8KB
-        # and push </html> out of the tail; base64 cannot contain '>', so
-        # a trailing '-->' proves the last comment completed cleanly)
-        if HTM_TAIL_RE.search(text) or low.endswith("-->"):
+        # Accepted endings: </html> + clean trailers; a trailing '-->'
+        # (complete inline-XBRL comment); or the SGML closers </TEXT>
+        # </DOCUMENT> — many SEC exhibit files end with SGML wrappers and
+        # NO </html> at all, by construction
+        if (HTM_TAIL_RE.search(text) or low.endswith("-->")
+                or low.endswith("</document>")):
             return None, ext
         return "htm-no-clean-end", ext
     elif ext == ".txt":
-        if not TXT_TAIL_RE.search(text):
-            return "txt-no-sec-document-end", ext
+        low = text.rstrip().lower()
+        # full submissions end </SEC-DOCUMENT>; SGML-era single-document
+        # .txt files (2015-era exhibits) end </TEXT></DOCUMENT>
+        if TXT_TAIL_RE.search(text) or low.endswith("</document>"):
+            return None, ext
+        return "txt-no-sec-document-end", ext
     elif ext == ".json":
         try:
             json.loads(data)
@@ -237,11 +242,12 @@ def run(out_path, limit_tickers=None, state=None, tsv=None, st_path=None):
     return n_files, n_suspects, ext_counts, time.time() - t0
 
 
-def calibrate(n_files, margin_s=600, max_filings=4000):
+def calibrate(n_files, margin_s=600, max_filings=None):
     """Reservoir-sample n_files doc files from .done filings whose mtimes
     sit outside every window (margin_s) — the false-positive census.
-    Tickers are shuffled first, so the sample is spread over the alphabet;
-    stops after max_filings clean filings to bound the walk."""
+    Reservoir over the WHOLE walk (no early stop) so the sample spans all
+    tickers/eras — an early-stopped walk under-samples rare doc shapes
+    (that mistake hid the </TEXT></DOCUMENT> exhibit endings)."""
     rng = random.Random(20261010)
     tickers = [t for t in os.listdir(RAW)
                if os.path.isdir(os.path.join(RAW, t))
@@ -253,7 +259,7 @@ def calibrate(n_files, margin_s=600, max_filings=4000):
     fails = {}
     n_filings = 0
     for t in tickers:
-        if n_filings >= max_filings:
+        if max_filings and n_filings >= max_filings:
             break
         td = os.path.join(RAW, t)
         for form in sorted(os.listdir(td)):
@@ -284,7 +290,7 @@ def calibrate(n_files, margin_s=600, max_filings=4000):
                         j = rng.randrange(n_seen)
                         if j < n_files:
                             sample[j] = p
-                if n_filings >= max_filings:
+                if max_filings and n_filings >= max_filings:
                     break
     cens = Counter()
     fails = {}

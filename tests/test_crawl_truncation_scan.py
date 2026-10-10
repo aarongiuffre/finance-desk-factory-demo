@@ -158,6 +158,21 @@ def test_in_window_logic():
         cts.WINDOW_ENDS = orig
 
 
+def test_htm_sgml_exhibit_ending_ok(tmp_path):
+    # many SEC exhibits end </TEXT></DOCUMENT> with NO </html> at all
+    c = "<html><body>x</body>\n</TEXT>\n</DOCUMENT>\n"
+    assert cts.classify(w(tmp_path, "ex.htm", c))[0] is None
+    # same for .txt single-document files (SGML era)
+    t = "press release text\n</TEXT>\n</DOCUMENT>\n"
+    assert cts.classify(w(tmp_path, "ex.txt", t))[0] is None
+
+
+def test_txt_cut_before_closers_still_flagged(tmp_path):
+    t = "press release text</TEXT"      # killed mid-closer
+    assert cts.classify(w(tmp_path, "ex.txt", t))[0] == \
+        "txt-no-sec-document-end"
+
+
 def test_resume_skips_completed_tickers_only(tmp_path, monkeypatch):
     """A ticker enters the checkpoint only when FULLY scanned (the first
     implementation appended per filing dir - a kill mid-ticker would
