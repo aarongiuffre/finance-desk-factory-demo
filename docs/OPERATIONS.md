@@ -126,6 +126,19 @@ use `browse-edgar` or the EODHD delisted list instead.
   3. re-run the pull — it retries everything without `.done`;
   4. audit again; repeat until the FAILED count is stable;
   5. report residual failures with reasons (e.g. permanent 404s).
+- **Truncation audit** (one-off 2026-10-10, old-code files): the tail-based
+  `crawl_truncation_scan.py` scanned 8,095,992 pre-atomic-code files
+  (426 s; coverage = the 1,907 ticker dirs that contain filings — the rest
+  of raw/edgar's ticker dirs are empty scaffolding). Final-rule FP rate
+  0.012% (.htm), 0.000% others. Spot-verified suspects:
+  **4 confirmed truncated filings** (WYNN/10-Q, PM/10-Q, LEN/10-K —
+  zero-byte files; CPRX/10-K R20.htm missing 13 KB) and structural FPs
+  (SGML closers, PGP footers, BJRI odd-ending). The confirmed list is in
+  flags is the same repair step as above — run
+  `crawl_repair_done_missing.py logs/truncation_repull_20261010_045042.tsv`
+  (dry-run) then `--apply` once eda-pull is stopped, before the end-of-crawl
+  re-pull. `crawl_truncation_verify.py <suspects.tsv>` re-checks any suspect
+  against a fresh temp-dir download.
 - **`enum` is now safe**: `existing_accessions()` dedups only on `.done`
   dirs, so a re-enum re-queues failed/partial filings instead of silently
   dropping them (pre-2026-10-10 behavior). `crawl_audit.py` resolves paths
