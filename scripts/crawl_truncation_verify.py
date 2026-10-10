@@ -47,8 +47,9 @@ def load_suspects(tsvs, limit=10):
 
 def fetch_url_for(path):
     """Reconstruct the EDGAR Archives URL from the on-disk path
-    raw/edgar/<ticker>/<form>/<date>-<accn>/<file> using the CIK from the
-    queue resolution (nasdaq_bulk.resolve_queue)."""
+    raw/edgar/<ticker>/<form>/<date-accn>/<file>.  CIK comes from the queue
+    row when the accn is queued; otherwise from the ticker->CIK map
+    (pre-2015 S&P-era filings are not in the NASDAQ queue)."""
     import nasdaq_bulk as nb
     parts = path.split("/")
     # .../raw/edgar/<ticker>/<form>/<date-accn>/<file>
@@ -58,6 +59,16 @@ def fetch_url_for(path):
         if row["accn"].replace("-", "") == accn18:
             return (f"https://www.sec.gov/Archives/edgar/data/"
                     f"{cikn}/{accn18}/{fname}"), accn18
+    # queue miss: ticker->CIK map (company_tickers.json subset)
+    try:
+        cik_map = json.load(open(os.path.join(nb.ROOT, "universe",
+                                              "nasdaq_cik_map.json")))
+        cikn = str(cik_map.get(ticker, "")).lstrip("0")
+        if cikn:
+            return (f"https://www.sec.gov/Archives/edgar/data/"
+                    f"{cikn}/{accn18}/{fname}"), accn18
+    except (OSError, ValueError):
+        pass
     return None, accn18
 
 
