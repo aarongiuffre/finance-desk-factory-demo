@@ -158,6 +158,40 @@ def test_in_window_logic():
         cts.WINDOW_ENDS = orig
 
 
+def test_resume_skips_completed_tickers_only(tmp_path, monkeypatch):
+    """A ticker enters the checkpoint only when FULLY scanned (the first
+    implementation appended per filing dir - a kill mid-ticker would
+    silently skip its remainder on resume)."""
+    raw = tmp_path / "raw"
+    for t, accn in (("AAA", "000000000026000001"),
+                    ("AAA", "000000000026000002"),
+                    ("BBB", "000000000026000003")):
+        d = raw / t / "8-K" / f"2026-03-28-{accn}"
+        d.mkdir(parents=True)
+        (d / "a.htm").write_text("<html><body>x</body></html>")
+        (d / "bad.htm").write_text("<html><body>cut")
+    # fixtures must look old-code: mtime before the 2026-10-10 cutoff
+    old = cts.CUTOFF_EPOCH - 3600
+    for p in raw.rglob("*"):
+        if p.is_file():
+            os.utime(p, (old, old))
+    monkeypatch.setattr(cts, "RAW", str(raw))
+    stp = str(tmp_path / "state.json")
+    tsv1 = str(tmp_path / "out1.tsv")
+    with open(tsv1, "w") as fh:
+        cts.run(tsv1, limit_tickers=1, tsv=fh, st_path=stp)
+    body1 = open(tsv1).read()
+    # only AAA scanned: 2 suspect rows (one per filing), BBB untouched
+    assert sum(1 for l in body1.splitlines() if "\tAAA\t" in l) == 2
+    assert "\tBBB\t" not in body1
+    # resume: BBB now scanned, no AAA duplicates
+    tsv2 = str(tmp_path / "out2.tsv")
+    with open(tsv2, "w") as fh:
+        cts.run(tsv2, tsv=fh, st_path=stp)
+    body2 = open(tsv2).read()
+    assert "\tBBB\t" in body2 and "\tAAA\t" not in body2
+
+
 def test_row_format(tmp_path):
     mtime = time.mktime(time.strptime("2026-10-07 01:48:00",
                                       "%Y-%m-%d %H:%M:%S"))

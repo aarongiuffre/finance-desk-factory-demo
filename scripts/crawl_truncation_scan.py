@@ -173,15 +173,41 @@ def row_of(t, form, acc, path, reason, ext, mtime, size):
 
 
 def run(out_path, limit_tickers=None, state=None, tsv=None, st_path=None):
-    """Full scan; appends to the TSV, checkpoints per ticker."""
-    st = state or load_state()
+    """Full scan; appends to the TSV, checkpoints per ticker.  A ticker is
+    marked done ONLY after every one of its filing dirs was visited —
+    iter_filing_dirs yields contiguous per-ticker blocks, so a ticker change
+    is the commit point (a kill mid-ticker resumes that whole ticker)."""
+    st = state or load_state(st_path)
     done = set(st["done_tickers"])
     t0 = time.time()
     n_files = n_suspects = 0
     ext_counts = Counter()
+    cur_ticker = None
+    cur_scanned = False
+    n_new_tickers = 0
+
+    def commit_ticker(ticker):
+        nonlocal n_new_tickers, cur_scanned
+        st["done_tickers"].append(ticker)
+        n_new_tickers += 1
+        cur_scanned = False
+        if n_new_tickers % 25 == 0:
+            save_state(st, st_path)
+
     for t, form, acc, ad in iter_filing_dirs():
+        if cur_ticker is not None and t != cur_ticker:
+            if cur_scanned:
+                commit_ticker(cur_ticker)
         if t in done:
+            cur_ticker = t
+            cur_scanned = False
             continue
+        if t != cur_ticker:
+            # new ticker: honor limit BEFORE scanning any of its filings
+            if limit_tickers and n_new_tickers >= limit_tickers:
+                break
+            cur_ticker = t
+            cur_scanned = True
         rows = []
         for f in os.listdir(ad):
             if f.startswith("."):
@@ -193,20 +219,20 @@ def run(out_path, limit_tickers=None, state=None, tsv=None, st_path=None):
             if mtime >= CUTOFF_EPOCH:
                 continue                      # new atomic-code writes
             n_files += 1
-            reason, ext = classify(p)
+            reason, ext = classify(p, f)
             ext_counts[ext or "(unchecked)"] += 1
             if reason:
                 n_suspects += 1
                 size = os.path.getsize(p)
-                rows.append(row_of(t, form, acc, p, reason, ext, mtime, size))
+                rows.append(row_of(t, form, acc, p, reason, ext, mtime,
+                                   size))
         if rows:
             tsv.write("".join(rows))
             tsv.flush()
-        st["done_tickers"].append(t)
-        if len(st["done_tickers"]) % 25 == 0:
-            save_state(st, st_path)
-        if limit_tickers and len(st["done_tickers"]) - len(done) >= limit_tickers:
+        if limit_tickers and n_new_tickers >= limit_tickers:
             break
+    if cur_ticker is not None and cur_scanned:
+        commit_ticker(cur_ticker)
     save_state(st, st_path)
     return n_files, n_suspects, ext_counts, time.time() - t0
 
