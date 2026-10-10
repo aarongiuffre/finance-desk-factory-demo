@@ -52,7 +52,7 @@ def fetch_url_for(path):
     import nasdaq_bulk as nb
     parts = path.split("/")
     # .../raw/edgar/<ticker>/<form>/<date-accn>/<file>
-    ticker, accn_dir, fname = parts[-4], parts[-3], parts[-1]
+    ticker, accn_dir, fname = parts[-4], parts[-2], parts[-1]
     accn18 = accn_dir.rsplit("-", 1)[-1]
     for row, _t, cikn, _ob in nb.resolve_queue():
         if row["accn"].replace("-", "") == accn18:
