@@ -33,7 +33,7 @@ import urllib.request
 ROOT = "/data/finance"
 UROOT = os.path.join(ROOT, "universe")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from edgar_pull import get_user_agent  # noqa: E402
+from edgar_pull import get_user_agent, fetch as _sec_fetch  # noqa: E402
 
 UA_HTML = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
            "Accept": "text/html"}
@@ -148,7 +148,8 @@ FRAME_TAGS = ("RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues")
 def sec_frame(tag, period):
     url = f"https://data.sec.gov/api/xbrl/frames/us-gaap/{tag}/USD/{period}.json"
     try:
-        return json.loads(_get(url, {"User-Agent": sec_ua(), "Accept": "application/json"})).get("data", [])
+        # bucket pacing + retry policy (was bare _get: no token, no retries)
+        return json.loads(_sec_fetch(url, sec_ua())).get("data", [])
     except Exception:  # noqa: BLE001
         return []
 
