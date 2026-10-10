@@ -413,7 +413,7 @@ def cmd_fetch(args):
     cikn = cik.lstrip("0")
     outbase = os.path.join(BASE, args.ticker)
     accn = args.accession.replace("-", "")
-    acc = f"{accn[:10]}-{accn[10:12]}-{accn[14:]}"
+    acc = f"{accn[:10]}-{accn[10:12]}-{accn[12:]}"
     idx = json.loads(fetch(
         f"https://www.sec.gov/Archives/edgar/data/{cikn}/{accn}/index.json", ua).decode())
     # find form/date via submissions when present, else fall back to index items
