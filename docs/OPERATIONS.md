@@ -93,11 +93,41 @@ use `browse-edgar` or the EODHD delisted list instead.
 - Log rotation: `ops/logrotate.conf` via `finance-logrotate.timer`
   (copytruncate; `logs/confluence-history.jsonl` is a LEDGER — never rotate it).
 
+### NASDAQ crawl runbook (eda-pull)
+
+- **Progress line** (every 500 real results, and at least every 10 min):
+  `real` counts done+failed results this pass; `skipped` are `.done` resume
+  hits (never feed the rate); `failed_pending` = filings that failed THIS
+  pass and still need the end-of-crawl re-pull. Rates come from two sliding
+  windows: **60m drives the ETA** (requests-based: remaining filings ×
+  (avg docs per form + 1 index request) ÷ req/s), the **10m req/s exposes
+  retry storms**. `ETA warming up` shows until 10 min of data exist.
+- **Retry policy** (edgar_pull.fetch): a bucket token before EVERY attempt
+  (retries included). Retryable: 429/503/rate-wall-403 + network errors
+  (8 attempts), other 5xx (3). Full-jitter backoff base 2 cap 300 s;
+  Retry-After honored (cap 900 s); rate-wall floor 600 s. 404/400/other
+  4xx fail fast. Docs are written atomically (.part + os.replace), so a
+  kill mid-write can never leave a trusted truncated file.
+- **Failure records**: a failed filing gets a durable `<dir>/.failed` JSON
+  (accn/form/ts/error+attempt counts) plus a line in
+  `logs/sec_pull_failures.jsonl`; `.failed` is cleared on later success.
+- **End-of-crawl steps** (same command throughout — resume skips `.done`):
+  1. `python3 scripts/crawl_audit.py` (read-only; `--sample N` for a quick
+     partial run) — classifies every queue entry COMPLETE / DONE_MISSING /
+     FAILED / PARTIAL / NOT_STARTED into `logs/crawl_audit_<ts>.tsv`;
+  2. re-run the pull — it retries everything without `.done`;
+  3. audit again; repeat until the FAILED count is stable;
+  4. report residual failures with reasons (e.g. permanent 404s).
+- **`enum` is now safe**: `existing_accessions()` dedups only on `.done`
+  dirs, so a re-enum re-queues failed/partial filings instead of silently
+  dropping them (pre-2026-10-10 behavior). `crawl_audit.py` resolves paths
+  through the same helper as `cmd_pull` (`nasdaq_bulk.resolve_queue` /
+  `filing_dir`), so the audit cannot drift from the puller.
+
 ### Tests
 
 - Run: `scripts/run_tests.sh` (offline pytest in `tests/`, venv
-  `.venv-embed`, deps `requirements-test.txt`). 42 passed + 1 strict xfail
-  in ~6 s.
+  `.venv-embed`, deps `requirements-test.txt`). 87 passed in ~6 s.
 - Offline-guarded: `tests/conftest.py` blocks any socket connect outside
   127.0.0.1/::1/localhost and passes AF_UNIX through; tests never touch
   `data/`, `raw/`, `facts/`, `logs/`, or `/tmp/sec_bucket.state` (tmp_path
