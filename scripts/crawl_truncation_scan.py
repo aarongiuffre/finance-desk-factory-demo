@@ -121,9 +121,11 @@ def classify(path, name=None):
         return "htm-no-clean-end", ext
     elif ext == ".txt":
         low = text.rstrip().lower()
-        # full submissions end </SEC-DOCUMENT>; SGML-era single-document
-        # .txt files (2015-era exhibits) end </TEXT></DOCUMENT>
-        if TXT_TAIL_RE.search(text) or low.endswith("</document>"):
+        # full submissions end </SEC-DOCUMENT> [then optional injected
+        # script and/or the PGP footer of old EDGAR submissions]; SGML-era
+        # single-document .txt files end </TEXT></DOCUMENT>
+        if (TXT_TAIL_RE.search(text) or low.endswith("</document>")
+                or low.endswith("-----end privacy-enhanced message-----")):
             return None, ext
         return "txt-no-sec-document-end", ext
     elif ext == ".json":

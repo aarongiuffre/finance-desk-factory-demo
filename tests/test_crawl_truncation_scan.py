@@ -158,6 +158,12 @@ def test_in_window_logic():
         cts.WINDOW_ENDS = orig
 
 
+def test_txt_pgp_footer_ok(tmp_path):
+    # old EDGAR full submissions carry a PGP footer AFTER </SEC-DOCUMENT>
+    t = "</SEC-DOCUMENT>\n-----END PRIVACY-ENHANCED MESSAGE-----\n"
+    assert cts.classify(w(tmp_path, "s.txt", t))[0] is None
+
+
 def test_htm_sgml_exhibit_ending_ok(tmp_path):
     # many SEC exhibits end </TEXT></DOCUMENT> with NO </html> at all
     c = "<html><body>x</body>\n</TEXT>\n</DOCUMENT>\n"
