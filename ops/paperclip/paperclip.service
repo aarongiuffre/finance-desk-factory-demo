@@ -1,0 +1,20 @@
+[Unit]
+Description=Paperclip - AI agent orchestration (trial, instance "default")
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/slowglow/paperclip
+Environment=HOME=/home/slowglow
+Environment=PATH=/home/slowglow/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PAPERCLIP_HOME=/home/slowglow/paperclip
+Environment=PAPERCLIP_INSTANCE_ID=default
+# Pinned to the version already in the npx cache; --prefer-offline avoids
+# any network resolution at boot. Instance config + data: /home/slowglow/paperclip
+ExecStart=/usr/bin/npx -y --prefer-offline paperclipai@2026.1005.0 run --instance default
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,42 @@
+{
+  "$meta": {
+    "version": 1,
+    "source": "onboard (redacted template of the live instance config)"
+  },
+  "database": {
+    "mode": "embedded-postgres",
+    "embeddedPostgresDataDir": "/home/slowglow/paperclip/instances/default/db",
+    "embeddedPostgresPort": 54329,
+    "backup": {
+      "enabled": true,
+      "intervalMinutes": 60,
+      "retentionDays": 30,
+      "dir": "/home/slowglow/paperclip/instances/default/data/backups"
+    }
+  },
+  "logging": {
+    "mode": "file",
+    "logDir": "/home/slowglow/paperclip/instances/default/logs"
+  },
+  "server": {
+    "deploymentMode": "local_trusted",
+    "exposure": "private",
+    "bind": "loopback",
+    "host": "127.0.0.1",
+    "port": 3100,
+    "allowedHostnames": [],
+    "serveUi": true
+  },
+  "telemetry": { "enabled": true },
+  "updates": { "checkEnabled": true },
+  "auth": { "baseUrlMode": "auto", "disableSignUp": false },
+  "storage": {
+    "provider": "local_disk",
+    "localDisk": { "baseDir": "/home/slowglow/paperclip/instances/default/data/storage" }
+  },
+  "secrets": {
+    "provider": "local_encrypted",
+    "strictMode": false,
+    "localEncrypted": { "keyFilePath": "/home/slowglow/paperclip/instances/default/secrets/master.key" }
+  }
+}
