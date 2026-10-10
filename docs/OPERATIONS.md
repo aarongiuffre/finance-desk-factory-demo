@@ -115,9 +115,17 @@ use `browse-edgar` or the EODHD delisted list instead.
   1. `python3 scripts/crawl_audit.py` (read-only; `--sample N` for a quick
      partial run) — classifies every queue entry COMPLETE / DONE_MISSING /
      FAILED / PARTIAL / NOT_STARTED into `logs/crawl_audit_<ts>.tsv`;
-  2. re-run the pull — it retries everything without `.done`;
-  3. audit again; repeat until the FAILED count is stable;
-  4. report residual failures with reasons (e.g. permanent 404s).
+  2. `python3 scripts/crawl_repair_done_missing.py <audit.tsv>` (dry-run
+     default; `--apply` to act) — clears stale `.done` flags on DONE_MISSING
+     rows ONLY: re-verifies each row with the live classifier, renames
+     `.done` -> `.done.cleared-<ts>` (audit trail, never deleted), logs to
+     `logs/crawl_repair.jsonl`, refuses paths outside raw/edgar, and
+     REFUSES --apply while eda-pull/nasdaq_bulk is running. Without this
+     step a plain re-pull can never repair DONE_MISSING (pull_one skips
+     on `.done`);
+  3. re-run the pull — it retries everything without `.done`;
+  4. audit again; repeat until the FAILED count is stable;
+  5. report residual failures with reasons (e.g. permanent 404s).
 - **`enum` is now safe**: `existing_accessions()` dedups only on `.done`
   dirs, so a re-enum re-queues failed/partial filings instead of silently
   dropping them (pre-2026-10-10 behavior). `crawl_audit.py` resolves paths
