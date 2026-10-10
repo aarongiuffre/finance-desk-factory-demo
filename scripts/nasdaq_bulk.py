@@ -175,6 +175,50 @@ def cmd_enum():
     print(f"queue -> {QUEUE}  ({n_q} filings to fetch)")
 
 
+def load_dead_roster():
+    """Dead-name ticker resolution maps (cik->ticker, ticker->cik) from the
+    roster; empty maps when the roster is absent (tmp/test trees)."""
+    dead_cik, dead_tick_cik = {}, {}
+    try:
+        for x in json.load(open(os.path.join(ROOT, "universe",
+                                             "nasdaq_dead_roster.json"))):
+            c = str(x["cik"]).lstrip("0")
+            dead_cik[c] = x["ticker"]
+            dead_tick_cik[x["ticker"]] = c
+    except FileNotFoundError:
+        pass
+    return dead_cik, dead_tick_cik
+
+
+def filing_dir(outbase, form, filing_date, accn):
+    """THE one dir-name rule: <outbase>/<form>/<date>-<18-digit accn>.
+    Shared by cmd_pull (stat pass, doc recount) and crawl_audit so the
+    path logic cannot drift from pull_one's layout."""
+    return os.path.join(outbase, form,
+                        f"{filing_date}-{accn.replace('-', '')}")
+
+
+def resolve_queue(queue_path=None):
+    """Queue rows resolved to (row, ticker, cikn, outbase) — the single
+    source of the ticker/CIK/path logic (cmd_pull + crawl_audit)."""
+    dead_cik, dead_tick_cik = load_dead_roster()
+    cik_map = json.load(open(os.path.join(ROOT, "universe",
+                                          "nasdaq_cik_map.json")))
+    out = []
+    with open(queue_path or QUEUE) as fh:
+        for line in fh:
+            r = json.loads(line)
+            t = r["ticker"]
+            if t is None:
+                t = dead_cik.get(str(r.get("cik", "")).lstrip("0"),
+                                 "CIK" + str(r.get("cik", "")).lstrip("0"))
+                r["ticker"] = t
+            cikn = str(cik_map.get(t) or dead_tick_cik.get(t, "")).lstrip("0")
+            outbase = os.path.join(ROOT, "raw", "edgar", t)
+            out.append((r, t, cikn, outbase))
+    return out
+
+
 def cmd_status():
     from collections import Counter
     n, forms = 0, Counter()
@@ -206,29 +250,11 @@ def cmd_pull(workers=4):
     import crawl_eta
 
     ua = ep.get_user_agent()
-    tk = tickers()
-    cik_map = json.load(open(TICKERS_JSON))
-    # dead-name rows carry ticker=None (CIK only): resolve from the roster
-    dead_cik = {}
-    dead_tick_cik = {}
-    try:
-        for x in json.load(open(os.path.join(ROOT, "universe",
-                                             "nasdaq_dead_roster.json"))):
-            c = str(x["cik"]).lstrip("0")
-            dead_cik[c] = x["ticker"]
-            dead_tick_cik[x["ticker"]] = c
-    except FileNotFoundError:
-        pass
+    # ticker/CIK/path resolution via the SHARED helper (crawl_audit uses the
+    # same), grouped largest-ticker-first
     by_ticker = {}
-    with open(QUEUE) as fh:
-        for line in fh:
-            r = json.loads(line)
-            t = r["ticker"]
-            if t is None:
-                t = dead_cik.get(str(r.get("cik", "")).lstrip("0"),
-                                 "CIK" + str(r.get("cik", "")).lstrip("0"))
-                r["ticker"] = t
-            by_ticker.setdefault(t, []).append(r)
+    for r, t, cikn, outbase in resolve_queue():
+        by_ticker.setdefault(t, []).append((r, cikn, outbase))
     order = sorted(by_ticker, key=lambda t: -len(by_ticker[t]))
     total = sum(len(v) for v in by_ticker.values())
     print(f"pull: {total} filings across {len(by_ticker)} tickers "
@@ -236,20 +262,16 @@ def cmd_pull(workers=4):
 
     tasks = []
     for t in order:
-        cikn = (cik_map[t] if t in cik_map
-                else dead_tick_cik.get(t, "")).lstrip("0")
-        outbase = os.path.join(ROOT, "raw", "edgar", t)
-        os.makedirs(outbase, exist_ok=True)
-        for r in by_ticker[t]:
-            tasks.append((r, cikn, outbase))
+        entries = by_ticker[t]
+        os.makedirs(entries[0][2], exist_ok=True)   # outbase of first entry
+        tasks.extend(entries)
 
     # ---- stat pass: REMAINING tasks per form (no .done in the dir)
     remaining = Counter()
     for r, cikn, outbase in tasks:
-        accn = r["accn"].replace("-", "")
-        dirpath = os.path.join(outbase, r["form"],
-                               f"{r['filing_date']}-{accn}")
-        if not os.path.isfile(os.path.join(dirpath, ".done")):
+        if not os.path.isfile(os.path.join(
+                filing_dir(outbase, r["form"], r["filing_date"], r["accn"]),
+                ".done")):
             remaining[r["form"]] += 1
     total_remaining = sum(remaining.values())
     print(f"remaining (no .done): {total_remaining} filings "
@@ -286,8 +308,11 @@ def cmd_pull(workers=4):
         else:
             eta = crawl_eta.eta_seconds(rem_req, req_rate)
             eta_s = crawl_eta.fmt_eta(eta)
+        # failed_pending: filings that failed THIS pass — not done, they need
+        # the end-of-crawl re-pull; remaining reflects this pass either way
         print(f"[{ts}] real={real_results} (new={done} fail={fail}) "
-              f"skipped={skipped} | 60m: {fr} f/s {req_rate or 0:.2f} req/s "
+              f"skipped={skipped} failed_pending={fail} | "
+              f"60m: {fr} f/s {req_rate or 0:.2f} req/s "
               f"10m: {req_rate_10m or 0:.2f} req/s | remaining {rem:,} "
               f"filings ≈ {rem_req/1e6:.2f}M req | {eta_s}",
               flush=True)
@@ -305,6 +330,9 @@ def cmd_pull(workers=4):
             req_now = ep.requests_made()
             d_req = req_now - last_req
             last_req = req_now
+            # THE ONLY place the windows are fed.  Real results count one
+            # filing; skips count zero.  (2026-10-10 bug: a manual .add here
+            # double-counted every real result -> 2x rates, ETA halved.)
             real = crawl_eta.feed_result([eta_rate, storm_rate], res, d_req)
             if not real:
                 skipped += 1        # resume noise: requests counted, filings not
@@ -317,9 +345,7 @@ def cmd_pull(workers=4):
                 done += 1
                 # docs per filing: re-read the stored index with the SAME
                 # filter pull_one uses (shared edgar_pull.doc_names)
-                accn = r["accn"].replace("-", "")
-                fdir = os.path.join(outbase, form,
-                                    f"{r['filing_date']}-{accn}")
+                fdir = filing_dir(outbase, form, r["filing_date"], r["accn"])
                 try:
                     idx = json.load(open(os.path.join(fdir,
                                                       "filing-index.json")))
@@ -331,12 +357,10 @@ def cmd_pull(workers=4):
                     pass
             else:
                 fail += 1
-            eta_rate.add(1, d_req)
-            storm_rate.add(1, d_req)
             print_progress()
     print_progress(force=True)
-    print(f"pull complete: new={done} failed={fail} skipped={skipped} of {total}",
-          flush=True)
+    print(f"pull complete: new={done} failed={fail} skipped={skipped} "
+          f"failed_pending={fail} of {total}", flush=True)
 
 
 def cmd_dead_roster(out="/data/finance/universe/nasdaq_dead_roster.json"):
