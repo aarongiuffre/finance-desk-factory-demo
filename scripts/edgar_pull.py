@@ -8,23 +8,86 @@ Usage:
 
 Rules enforced:
   * Real SEC User-Agent (name + email) via SEC_USER_AGENT env or /data/finance/.sec_user_agent
-  * Pacing <= 5 req/s (default 0.25s between requests => 4 req/s)
+  * Pacing via the shared sec_throttle bucket (9.5 req/s); a token is taken
+    before EVERY request attempt (retries included).
   * Stdlib only (urllib) -- CPU only, no GPU, no embeddings, no vector DB.
-  * Resume-safe: skips filings already marked .done
+  * Resume-safe: skips filings already marked .done; documents are written
+    atomically (<target>.part + os.replace) so a kill mid-write can never
+    leave a truncated file that a later run would trust.
+  * Failed filings leave a durable .failed record (JSON in the filing dir
+    plus one line in logs/sec_pull_failures.jsonl); .done clears .failed.
+
+Retry policy (fetch):
+  * Retryable: 429, 503, other 5xx (3 attempts), network errors (DNS
+    gaierror, timeouts, ConnectionReset, RemoteDisconnected,
+    IncompleteRead), and 403 whose body contains SEC's "Request Rate
+    Threshold" wall (min backoff 600 s).
+  * Non-retryable: 404, 400 and any other 4xx (fail fast).
+  * Backoff: full jitter, uniform(0, min(300, 2*2**(attempt-1))), raised to
+    Retry-After (seconds or HTTP-date) and capped at 900 s.
+
+NOTE on size verification (2026-10-09): EDGAR archive index.json lists a
+"size" per item, but www.sec.gov/Archives responses carry ~106-123 bytes of
+extra content (an injected anti-bot <script> tag; older files also an SGML
+<TEXT> wrapper), so stored sizes NEVER match the listed size.  Size-based
+verification is therefore deliberately NOT implemented — completeness is
+guaranteed by atomic writes instead.
 """
 
 import argparse
 import datetime
+import email.utils
+import gzip
+import http.client
+import io
 import json
 import os
+import random
+import socket
 import sys
+import threading
 import time
+import urllib.error
 import urllib.request
 
 BASE = "/data/finance/raw/edgar"
 CACHE = os.path.join(BASE, ".cache")
-RATE_DELAY = 0.25  # 4 req/s <= 5 req/s SEC limit
+RATE_DELAY = 0.25  # legacy pacing knob (superseded by the sec_throttle bucket)
 UA_FILE = "/data/finance/.sec_user_agent"
+FAIL_LOG = "/data/finance/logs/sec_pull_failures.jsonl"
+
+# --- injectables (tests monkeypatch these; production uses the defaults) ---
+URLOPEN = urllib.request.urlopen
+SLEEP = time.sleep
+RANDOM = random.uniform
+
+
+def _default_wait_token():
+    try:
+        from sec_throttle import wait_token
+        wait_token()
+    except Exception:  # noqa: BLE001 - throttle is best-effort
+        pass
+
+
+WAIT_TOKEN = _default_wait_token
+
+# Thread-safe counter of request ATTEMPTS made by this process (retries
+# included).  Used by progress/ETA logic; read via requests_made().
+_REQ_LOCK = threading.Lock()
+_REQUESTS = 0
+
+BASE_BACKOFF = 2.0        # delay = uniform(0, min(CAP, BASE * 2**(n-1)))
+CAP_BACKOFF = 300.0
+CAP_RETRY_AFTER = 900.0
+RATE_WALL_MIN = 600.0     # SEC rate-wall 403: long minimum backoff
+DEFAULT_RETRIES = 8       # 429 / 503 / rate-wall / network errors
+SOFT_5XX_ATTEMPTS = 3     # other 5xx fail sooner
+
+
+def requests_made():
+    with _REQ_LOCK:
+        return _REQUESTS
 
 
 def log(msg):
@@ -44,40 +107,155 @@ def get_user_agent():
     return ua
 
 
-def fetch(url, ua, retries=3):
+def _retry_after_seconds(hdrs):
+    """Retry-After header -> seconds (int, HTTP-date, or None)."""
+    if hdrs is None:
+        return None
+    raw = hdrs.get("Retry-After")
+    if not raw:
+        return None
+    raw = raw.strip()
     try:
-        from sec_throttle import wait_token
-        wait_token()
-    except Exception:  # noqa: BLE001
+        return max(0.0, float(raw))
+    except ValueError:
         pass
-    last = None
-    for attempt in range(1, retries + 1):
-        req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept-Encoding": "gzip, deflate"})
+    try:
+        dt = email.utils.parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        return None
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    delta = (dt - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+    return max(0.0, delta)
+
+
+def _err_desc(e):
+    code = getattr(e, "code", None)
+    if code:
+        return f"HTTP {code}"
+    reason = getattr(e, "reason", None) or e
+    errno = getattr(reason, "errno", None) or getattr(e, "errno", None)
+    return f"{'errno %s ' % errno if errno else ''}{type(e).__name__}: {reason}"
+
+
+def fetch(url, ua, retries=DEFAULT_RETRIES):
+    """GET url with UA, bucket pacing before every attempt, and the retry
+    policy from the module docstring.  Raises RuntimeError with .attempts
+    and .history on final failure."""
+    global _REQUESTS
+    history = []
+    attempt = 0
+    while True:
+        attempt += 1
+        WAIT_TOKEN()
+        with _REQ_LOCK:
+            _REQUESTS += 1
+        req = urllib.request.Request(
+            url, headers={"User-Agent": ua, "Accept-Encoding": "gzip, deflate"})
         try:
-            import gzip, io
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with URLOPEN(req, timeout=60) as r:
                 data = r.read()
                 if r.headers.get("Content-Encoding") == "gzip":
                     data = gzip.GzipFile(fileobj=io.BytesIO(data)).read()
             return data  # pacing owned by sec_throttle bucket (shared, 9.5/s)
-        except Exception as e:  # noqa: BLE001
-            last = e
-            code = getattr(e, "code", None)
-            if code == 429 or (code and code >= 500):
-                wait = 2 * attempt
-                log(f"  retry {attempt} after {code} ({url}); sleeping {wait}s")
-                time.sleep(wait)
+        except urllib.error.HTTPError as e:
+            code = e.code
+            try:
+                body_head = e.read(8192).decode("utf-8", "replace")
+            except Exception:  # noqa: BLE001
+                body_head = ""
+            ra = _retry_after_seconds(e.headers)
+            if code == 429:
+                kind, n_max = "429", retries
+            elif code == 503:
+                kind, n_max = "503", retries
+            elif code == 403 and "Request Rate Threshold" in body_head:
+                kind, n_max = "rate-wall", retries
+            elif 500 <= code < 600:
+                kind, n_max = "5xx", min(retries, SOFT_5XX_ATTEMPTS)
             else:
-                break
-    raise RuntimeError(f"fetch failed: {url}: {last}")
+                # 404, 400, plain 403, any other 4xx: fail fast
+                raise RuntimeError(
+                    f"fetch failed (non-retryable HTTP {code}): {url}") from e
+            desc = f"HTTP {code}"
+        except (urllib.error.URLError, TimeoutError, ConnectionError,
+                http.client.HTTPException, OSError) as e:
+            kind, n_max, ra = "net", retries, None
+            code = getattr(e, "code", None)
+            desc = _err_desc(e)
+
+        history.append({"attempt": attempt, "kind": kind, "error": desc})
+        if attempt >= n_max:
+            err = RuntimeError(
+                f"fetch failed after {attempt} attempts: {url}: {desc}")
+            err.attempts = attempt
+            err.history = history
+            raise err
+        delay = RANDOM(0.0, min(CAP_BACKOFF, BASE_BACKOFF * 2 ** (attempt - 1)))
+        if kind == "rate-wall":
+            delay = max(delay, RATE_WALL_MIN)
+        if ra:
+            delay = max(delay, ra)
+        delay = min(delay, CAP_RETRY_AFTER)
+        log(f"retry {desc} attempt {attempt}/{n_max} ({kind}) {url}; "
+            f"sleeping {delay:.1f}s")
+        SLEEP(delay)
+
+
+def _write_atomic(path, data):
+    part = path + ".part"
+    with open(part, "wb") as f:
+        f.write(data)
+    os.replace(part, path)
+
+
+def _cleanup_parts(dirpath):
+    try:
+        names = os.listdir(dirpath)
+    except OSError:
+        return
+    for n in names:
+        if n.endswith(".part"):
+            try:
+                os.remove(os.path.join(dirpath, n))
+            except OSError:
+                pass
+
+
+def _record_failure(dirpath, accn, form, errors):
+    """Durable failure record: .failed in the filing dir + one jsonl line."""
+    rec = {"accn": accn, "form": form,
+           "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+           "errors": errors}
+    try:
+        with open(os.path.join(dirpath, ".failed"), "w") as f:
+            json.dump(rec, f)
+    except OSError:
+        pass
+    try:
+        os.makedirs(os.path.dirname(FAIL_LOG), exist_ok=True)
+        with open(FAIL_LOG, "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
+
+
+def _clear_failure(dirpath):
+    p = os.path.join(dirpath, ".failed")
+    if os.path.isfile(p):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
 
 
 def get_ticker_file(ua):
     os.makedirs(CACHE, exist_ok=True)
     path = os.path.join(CACHE, "company_tickers.json")
     if not os.path.isfile(path) or os.path.getsize(path) == 0:
-        with open(path, "wb") as f:
-            f.write(fetch("https://www.sec.gov/files/company_tickers.json", ua))
+        _write_atomic(path, fetch("https://www.sec.gov/files/company_tickers.json", ua))
     return path
 
 
@@ -96,29 +274,43 @@ def cmd_setup(args):
     os.makedirs(BASE, exist_ok=True)
     log(f"User-Agent OK: {ua}")
     fetch("https://www.sec.gov/files/company_tickers.json", ua)
-    log(f"company_tickers.json cached under {CACHE}")
+    log("company_tickers.json cached under " + CACHE)
     log("setup complete")
 
 
 def pull_one(acc, form, date, primary, cikn, outbase, ua):
     """Fetch a single accession into outbase/<form>/<date>-<accn>/ (idempotent:
-    .done flag skips). Returns 'done' | 'skipped' | 'failed'. Shared by
-    cmd_pull's batch loop and cmd_fetch (accession-level gap queue)."""
+    .done flag skips).  Documents are written atomically (.part + replace);
+    failures leave a .failed record.  Returns 'done' | 'skipped' | 'failed'.
+    Shared by cmd_pull's batch loop and cmd_fetch (accession-level gap
+    queue)."""
     accn = acc.replace("-", "")
+    acc_dashed = f"{accn[:10]}-{accn[10:12]}-{accn[12:]}"
     dirpath = os.path.join(outbase, form, f"{date}-{accn}")
     os.makedirs(dirpath, exist_ok=True)
     doneflag = os.path.join(dirpath, ".done")
     if os.path.isfile(doneflag):
         return 'skipped'
+    _cleanup_parts(dirpath)
 
+    idx_url = f"https://www.sec.gov/Archives/edgar/data/{cikn}/{accn}/index.json"
     try:
-        idx_bytes = fetch(f"https://www.sec.gov/Archives/edgar/data/{cikn}/{accn}/index.json", ua)
+        idx_bytes = fetch(idx_url, ua)
     except RuntimeError as e:
         log(f"INDEX FAIL {accn}: {e}")
+        _record_failure(dirpath, acc_dashed, form,
+                        [{"url": idx_url, "error": str(e),
+                          "attempts": getattr(e, "attempts", 0)}])
         return 'failed'
-    with open(os.path.join(dirpath, "filing-index.json"), "wb") as f:
-        f.write(idx_bytes)
-    idx = json.loads(idx_bytes.decode())
+    _write_atomic(os.path.join(dirpath, "filing-index.json"), idx_bytes)
+    try:
+        idx = json.loads(idx_bytes.decode())
+    except Exception as e:  # noqa: BLE001 - corrupt index body
+        log(f"INDEX PARSE FAIL {accn}: {e}")
+        _record_failure(dirpath, acc_dashed, form,
+                        [{"url": idx_url, "error": f"index parse: {e}",
+                          "attempts": 1}])
+        return 'failed'
 
     names = []
     for it in idx.get("directory", {}).get("item", []):
@@ -127,21 +319,30 @@ def pull_one(acc, form, date, primary, cikn, outbase, ua):
             names.append(n)
 
     ok = True
+    errors = []
     for name in names:
         target = os.path.join(dirpath, name)
+        doc_url = f"https://www.sec.gov/Archives/edgar/data/{cikn}/{accn}/{name}"
+        # NOTE: no size verification — EDGAR's listed "size" is the pristine
+        # archive size but the served body carries the anti-bot injection
+        # (+~110 bytes); a size mismatch is expected for every stored file.
+        # Atomic writes guarantee any existing target is complete.
         if os.path.isfile(target) and os.path.getsize(target) > 0:
             continue
         try:
-            blob = fetch(f"https://www.sec.gov/Archives/edgar/data/{cikn}/{accn}/{name}", ua)
-            with open(target, "wb") as f:
-                f.write(blob)
+            blob = fetch(doc_url, ua)
+            _write_atomic(target, blob)
         except RuntimeError as e:
             log(f"FILE FAIL {accn}/{name}: {e}")
+            errors.append({"url": doc_url, "error": str(e),
+                           "attempts": getattr(e, "attempts", 0)})
             ok = False
     if ok:
+        _clear_failure(dirpath)
         open(doneflag, "w").close()
         log(f"ok {accn} {form} ({len(names)} docs)")
         return "done"
+    _record_failure(dirpath, acc_dashed, form, errors)
     return "failed"
 
 
@@ -212,7 +413,7 @@ def cmd_fetch(args):
     cikn = cik.lstrip("0")
     outbase = os.path.join(BASE, args.ticker)
     accn = args.accession.replace("-", "")
-    acc = f"{accn[:10]}-{accn[10:14]}-{accn[14:]}"
+    acc = f"{accn[:10]}-{accn[10:12]}-{accn[14:]}"
     idx = json.loads(fetch(
         f"https://www.sec.gov/Archives/edgar/data/{cikn}/{accn}/index.json", ua).decode())
     # find form/date via submissions when present, else fall back to index items
