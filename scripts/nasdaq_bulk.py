@@ -40,14 +40,12 @@ def ua():
 
 
 def get(url, timeout=300):
-    wait_token()
-    req = urllib.request.Request(
-        url, headers={"User-Agent": ua(), "Accept-Encoding": "gzip"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = r.read()
-        if r.headers.get("Content-Encoding") == "gzip":
-            data = gzip.GzipFile(fileobj=io.BytesIO(data)).read()
-    return data
+    """Route through edgar_pull.fetch: one bucket token before every attempt
+    (retries included) + the shared retry policy (429/503/rate-wall/network
+    errors backoff, 4xx fail fast).  cmd_enum's bot-wall payload checks stay
+    here — fetch retries transport failures, payload inspection is enum's."""
+    import edgar_pull
+    return edgar_pull.fetch(url, ua())
 
 
 def cmd_list():
@@ -82,25 +80,34 @@ def tickers():
 
 
 def existing_accessions():
-    """Set of accessions already on disk, dashed form (raw/edgar walk)."""
+    """Set of accessions already FULLY pulled, dashed form (raw/edgar walk).
+    A filing counts only when its dir contains .done — dirs without it are
+    failed/partial and MUST re-queue (pre-2026-10-10 any dir counted, so a
+    re-enum silently dropped every failed filing from the queue)."""
     import glob
     have = set()
     for tdir in glob.glob(os.path.join(ROOT, "raw", "edgar", "*")):
         if not os.path.isdir(tdir) or os.path.basename(tdir).startswith((".", "_")):
             continue
         for dd in glob.glob(os.path.join(tdir, "*", "*")):
+            if not os.path.isdir(dd):
+                continue
             base = os.path.basename(dd)
             parts = base.rsplit("-", 1)
             if len(parts) == 2 and parts[1].isdigit() and len(parts[1]) == 18:
+                if not os.path.isfile(os.path.join(dd, ".done")):
+                    continue
                 a = parts[1]
-                have.add(f"{a[:10]}-{a[10:16]}-{a[16:]}")
+                have.add(f"{a[:10]}-{a[10:12]}-{a[12:]}")
             elif os.path.isdir(dd):
                 for sub in glob.glob(os.path.join(dd, "*")):
+                    if not os.path.isdir(sub) or not os.path.isfile(os.path.join(sub, ".done")):
+                        continue
                     b2 = os.path.basename(sub)
                     p2 = b2.rsplit("-", 1)
                     if len(p2) == 2 and p2[1].isdigit() and len(p2[1]) == 18:
                         a = p2[1]
-                        have.add(f"{a[:10]}-{a[10:16]}-{a[16:]}")
+                        have.add(f"{a[:10]}-{a[10:12]}-{a[12:]}")
     return have
 
 
@@ -186,10 +193,17 @@ def cmd_pull(workers=4):
     idempotent .done flags, correct <form>/<date>-<accn> layout, exhibits
     included).  Threads only hide per-filing latency; the cross-process
     token bucket keeps the aggregate SEC rate legal automatically.
-    Resume = re-run `enum` (rebuilds the queue minus anything on disk)."""
-    import time
+    Resume = re-run `enum` (rebuilds the queue minus .done dirs — a dir
+    without .done is failed/partial and re-queues).
+
+    Progress: real results (done OR failed) feed the rate — "skipped" never
+    does.  Requests = delta of edgar_pull.requests_made() (retries included).
+    ETA uses a 60-minute window; a 10-minute window spots retry storms."""
+    import time as _time
+    from collections import Counter
     from concurrent.futures import ThreadPoolExecutor
     import edgar_pull as ep
+    import crawl_eta
 
     ua = ep.get_user_agent()
     tk = tickers()
@@ -229,26 +243,100 @@ def cmd_pull(workers=4):
         for r in by_ticker[t]:
             tasks.append((r, cikn, outbase))
 
-    done = fail = 0
-    t0 = time.time()
+    # ---- stat pass: REMAINING tasks per form (no .done in the dir)
+    remaining = Counter()
+    for r, cikn, outbase in tasks:
+        accn = r["accn"].replace("-", "")
+        dirpath = os.path.join(outbase, r["form"],
+                               f"{r['filing_date']}-{accn}")
+        if not os.path.isfile(os.path.join(dirpath, ".done")):
+            remaining[r["form"]] += 1
+    total_remaining = sum(remaining.values())
+    print(f"remaining (no .done): {total_remaining} filings "
+          f"({dict(remaining.most_common())})", flush=True)
+
+    eta_rate = crawl_eta.RateWindow(crawl_eta.ETA_WINDOW_S)
+    storm_rate = crawl_eta.RateWindow(crawl_eta.STORM_WINDOW_S)
+    docstats = crawl_eta.DocStats()
+    done = fail = skipped = real_results = 0
+    last_req = ep.requests_made()
+    last_print_t = _time.monotonic()
+    last_printed_real = -1
+
+    def print_progress(force=False):
+        """Rate line every PROGRESS_EVERY real results and at least every
+        PROGRESS_MIN_S.  Never feeds the windows itself (the loop does)."""
+        nonlocal last_print_t, last_printed_real
+        now = _time.monotonic()
+        if not force and not (
+                (real_results > 0
+                 and real_results % crawl_eta.PROGRESS_EVERY == 0)
+                or now - last_print_t >= crawl_eta.PROGRESS_MIN_S):
+            return
+        if real_results == last_printed_real:
+            return
+        f_rate, req_rate = eta_rate.rates()
+        _f10, req_rate_10m = storm_rate.rates()
+        rem = sum(remaining.values())
+        rem_req = crawl_eta.remaining_requests(remaining, docstats)
+        ts = _time.strftime("%H:%M:%S")
+        fr = f"{f_rate:.2f}" if f_rate is not None else "0.00"
+        if eta_rate.warming_up():
+            eta_s = "ETA warming up"
+        else:
+            eta = crawl_eta.eta_seconds(rem_req, req_rate)
+            eta_s = crawl_eta.fmt_eta(eta)
+        print(f"[{ts}] real={real_results} (new={done} fail={fail}) "
+              f"skipped={skipped} | 60m: {fr} f/s {req_rate or 0:.2f} req/s "
+              f"10m: {req_rate_10m or 0:.2f} req/s | remaining {rem:,} "
+              f"filings ≈ {rem_req/1e6:.2f}M req | {eta_s}",
+              flush=True)
+        last_print_t = now
+        last_printed_real = real_results
 
     def work(item):
         r, cikn, outbase = item
-        return ep.pull_one(r["accn"], r["form"], r["filing_date"],
-                           r.get("primary", ""), cikn, outbase, ua)
+        res = ep.pull_one(r["accn"], r["form"], r["filing_date"],
+                          r.get("primary", ""), cikn, outbase, ua)
+        return res, r, outbase
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        for i, res in enumerate(ex.map(work, tasks), 1):
+        for res, r, outbase in ex.map(work, tasks):
+            req_now = ep.requests_made()
+            d_req = req_now - last_req
+            last_req = req_now
+            real = crawl_eta.feed_result([eta_rate, storm_rate], res, d_req)
+            if not real:
+                skipped += 1        # resume noise: requests counted, filings not
+                continue
+            real_results += 1
+            form = r["form"]
+            if remaining[form] > 0:
+                remaining[form] -= 1
             if res == "done":
                 done += 1
-            elif res == "failed":
+                # docs per filing: re-read the stored index with the SAME
+                # filter pull_one uses (shared edgar_pull.doc_names)
+                accn = r["accn"].replace("-", "")
+                fdir = os.path.join(outbase, form,
+                                    f"{r['filing_date']}-{accn}")
+                try:
+                    idx = json.load(open(os.path.join(fdir,
+                                                      "filing-index.json")))
+                    docs = len(ep.doc_names(
+                        idx.get("directory", {}).get("item", []),
+                        r.get("primary", "")))
+                    docstats.add(form, docs)
+                except Exception:  # noqa: BLE001 - stats only, never fatal
+                    pass
+            else:
                 fail += 1
-            if i % 500 == 0:
-                rate = i / (time.time() - t0)
-                eta_h = (total - i) / rate / 3600
-                print(f"  {i}/{total}  new={done} fail={fail}  "
-                      f"{rate:.1f} filings/s  ETA {eta_h:.1f}h", flush=True)
-    print(f"pull complete: new={done} failed={fail} of {total}", flush=True)
+            eta_rate.add(1, d_req)
+            storm_rate.add(1, d_req)
+            print_progress()
+    print_progress(force=True)
+    print(f"pull complete: new={done} failed={fail} skipped={skipped} of {total}",
+          flush=True)
 
 
 def cmd_dead_roster(out="/data/finance/universe/nasdaq_dead_roster.json"):
