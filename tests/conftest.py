@@ -57,3 +57,12 @@ def _deny_ex(self, address):
 def offline_guard(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", _deny)
     monkeypatch.setattr(socket.socket, "connect_ex", _deny_ex)
+
+
+@pytest.fixture(autouse=True)
+def _reset_sec_cooldown():
+    """edgar_pull's process-wide 429 cooldown must not leak between tests."""
+    yield
+    ep = sys.modules.get("edgar_pull")
+    if ep is not None and hasattr(ep, "_COOLDOWN_UNTIL"):
+        ep._COOLDOWN_UNTIL = 0.0

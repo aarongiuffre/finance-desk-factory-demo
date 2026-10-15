@@ -214,6 +214,16 @@ def resolve_queue(queue_path=None):
                                  "CIK" + str(r.get("cik", "")).lstrip("0"))
                 r["ticker"] = t
             cikn = str(cik_map.get(t) or dead_tick_cik.get(t, "")).lstrip("0")
+            if not cikn:
+                # Synthetic "CIK<n>" tickers (unmapped filers) have no
+                # cik_map/dead-roster entry -> empty CIK built
+                # edgar/data//<accn>/ URLs (SEC 429/404).  The queue row's
+                # own cik is the filer CIK from the EDGAR index - use it.
+                # (Never derive from the accession prefix: that is the
+                # filing agent, e.g. 0001628280 = Workiva.)
+                cikn = str(r.get("cik", "") or "").lstrip("0")
+            if not cikn and t.startswith("CIK") and t[3:].isdigit():
+                cikn = t[3:].lstrip("0")
             outbase = os.path.join(ROOT, "raw", "edgar", t)
             out.append((r, t, cikn, outbase))
     return out

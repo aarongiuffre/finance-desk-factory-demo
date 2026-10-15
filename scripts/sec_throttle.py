@@ -10,7 +10,7 @@ import time
 
 STATE = "/tmp/sec_bucket.state"
 import os as _os
-RATE = float(_os.environ.get("SEC_RATE", "9.5"))  # tokens/sec; SEC rule is max 10/s sustained
+RATE = float(_os.environ.get("SEC_RATE", "6.5"))  # was 9.5: crawl + side scripts tripped 429s; keep margin under 10/s  # tokens/sec; SEC rule is max 10/s sustained
 
 
 def wait_token():

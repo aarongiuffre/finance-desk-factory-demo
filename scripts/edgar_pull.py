@@ -83,6 +83,23 @@ CAP_RETRY_AFTER = 900.0
 RATE_WALL_MIN = 600.0     # SEC rate-wall 403: long minimum backoff
 DEFAULT_RETRIES = 8       # 429 / 503 / rate-wall / network errors
 SOFT_5XX_ATTEMPTS = 3     # other 5xx fail sooner
+MIN_429_BACKOFF = 10.0    # 429: never retry sooner than this
+_COOLDOWN_LOCK = threading.Lock()
+_COOLDOWN_UNTIL = 0.0     # process-wide pause after a 429 (all threads)
+
+
+def _cooldown_wait():
+    with _COOLDOWN_LOCK:
+        until = _COOLDOWN_UNTIL
+    rem = until - time.time()
+    if rem > 0:
+        SLEEP(rem)
+
+
+def _set_cooldown(seconds):
+    global _COOLDOWN_UNTIL
+    with _COOLDOWN_LOCK:
+        _COOLDOWN_UNTIL = max(_COOLDOWN_UNTIL, time.time() + seconds)
 
 
 def requests_made():
@@ -149,6 +166,8 @@ def fetch(url, ua, retries=DEFAULT_RETRIES):
     attempt = 0
     while True:
         attempt += 1
+        if attempt == 1:     # retries already slept their own backoff
+            _cooldown_wait()
         WAIT_TOKEN()
         with _REQ_LOCK:
             _REQUESTS += 1
@@ -196,9 +215,15 @@ def fetch(url, ua, retries=DEFAULT_RETRIES):
         delay = RANDOM(0.0, min(CAP_BACKOFF, BASE_BACKOFF * 2 ** (attempt - 1)))
         if kind == "rate-wall":
             delay = max(delay, RATE_WALL_MIN)
+        if kind == "429":
+            delay = max(delay, MIN_429_BACKOFF)
         if ra:
             delay = max(delay, ra)
         delay = min(delay, CAP_RETRY_AFTER)
+        if kind in ("429", "rate-wall"):
+            # pause every worker thread, not just this one (honors
+            # Retry-After process-wide)
+            _set_cooldown(min(delay, ra) if ra else MIN_429_BACKOFF)
         log(f"retry {desc} attempt {attempt}/{n_max} ({kind}) {url}; "
             f"sleeping {delay:.1f}s")
         SLEEP(delay)
