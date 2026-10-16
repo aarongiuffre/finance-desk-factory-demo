@@ -154,7 +154,16 @@ use `browse-edgar` or the EODHD delisted list instead.
   Both filings' substantive document sets are complete (all .htm/.txt +
   primaries present non-empty); the two unservable files are logged in
   `crawl_repair.jsonl` and excluded from future audits as upstream gaps,
-  not crawl defects.
+  not crawl defects. A follow-up full audit (2026-10-16) then exposed 152
+  older "no filing-index.json" dirs (WTW/WMT/WBD/ZBRA pulls that marked
+  `.done` without storing the index) plus one AIMC zero-byte primary; all
+  153 were cleared via `crawl_repair_done_missing.py --apply` and re-pulled
+  (every one `done`). FINAL STATE 2026-10-16 18:40 ET:
+  **COMPLETE 480,513 / FAILED 0 / PARTIAL 0 / NOT_STARTED 0 /
+  DONE_MISSING 1** — the single residual is CPRX `R20.htm`, a permanent
+  upstream 404 (file listed in EDGAR's index.json but never served).
+  The NASDAQ crawl is complete. 4 duplicate queue rows are a harmless
+  enum artifact (same accn, same dir).
 - **`enum` is now safe**: `existing_accessions()` dedups only on `.done`
   dirs, so a re-enum re-queues failed/partial filings instead of silently
   dropping them (pre-2026-10-10 behavior). `crawl_audit.py` resolves paths
