@@ -139,6 +139,22 @@ use `browse-edgar` or the EODHD delisted list instead.
   (dry-run) then `--apply` once eda-pull is stopped, before the end-of-crawl
   re-pull. `crawl_truncation_verify.py <suspects.tsv>` re-checks any suspect
   against a fresh temp-dir download.
+- **Truncation repair EXECUTED (2026-10-16)**: eda-pull completed Oct 15
+  13:46 ET with 0 failures (480,322 filings, 597 GB). The 4 confirmed
+  filings were then repaired: the queue had been re-enum'd (completed accns
+  dropped), so the repair tool could not resolve them and the clear was
+  done by hand with the same audit trail (`.done` -> `.done.cleared-
+  20261016_183156`, `logs/crawl_repair.jsonl`). Outcomes: WYNN
+  `wynn-20220930.htm` and PM `pm-063016x10qxdoc.htm` reconstructed
+  (2,485,060 / 2,883,456 bytes, `</html>`-verified) from the LOCAL full
+  submission `.txt` — SEC now serves 0 bytes/503 for both primaries, but
+  the pristine content is complete inside the accession's full text.
+  CPRX `R20.htm` and LEN `0001628280-23-001606.txt` are PERMANENT RESIDUALS:
+  listed in EDGAR's own index.json but 404 at the file URL (re-probed).
+  Both filings' substantive document sets are complete (all .htm/.txt +
+  primaries present non-empty); the two unservable files are logged in
+  `crawl_repair.jsonl` and excluded from future audits as upstream gaps,
+  not crawl defects.
 - **`enum` is now safe**: `existing_accessions()` dedups only on `.done`
   dirs, so a re-enum re-queues failed/partial filings instead of silently
   dropping them (pre-2026-10-10 behavior). `crawl_audit.py` resolves paths
