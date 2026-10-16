@@ -19,6 +19,8 @@ rules — verified against the live system 2026-10-09.
 | `paper-driver.timer` | Mon–Fri 15:45 | flag sweep on held names, monthly self-guarded rebalance (first trading day), event tracker, `logs/paper-status.txt` |
 | `finance-logrotate.timer` | daily 04:50 | logrotate (copytruncate) per `ops/logrotate.conf` |
 | `finance-universe.timer` | Sun 08:30 | universe refresh + survivorship self-healing |
+| `nasdaq-scan.timer` | Sun 09:45 | `nasdaq_scan.py` scan+fundamentals+report: TA screen over all ~3,978 live-tier NASDAQ commons + SEC-frames rev-YoY join + ranked report -> `logs/nasdaq-scan-cron.log`, `logs/nasdaq_scan_latest.tsv` |
+| `nasdaq-facts.timer` | monthly 1st 07:00 | `nasdaq_scan.py facts` (resumable bulk reduced companyfacts -> `facts/nasdaq/`, ~45 min first run) + `flags` (edgar_screen anomaly flags -> `logs/nasdaq_flags_latest.tsv`) |
 | `finance-search.service` | always-on | search API, 127.0.0.1:8091 — **re-opens the table on every query**; appends are visible without restarts |
 | `finance-crawl.service` | — | **RETIRED 2026-10-08** (Sep-2026 S&P fleet supervisor; its `backfill_embed_watch.sh` was 2 checkpoint lines from firing a full index overwrite). Stopped, disabled, and `universe/.backfill_embed_done` stamped so the watcher can never fire. USER unit |
 
@@ -191,6 +193,24 @@ use `browse-edgar` or the EODHD delisted list instead.
   helper functions are tested); paper_bridge's docstring claim of a
   live-endpoint refusal (no such code exists — only the hardcoded paper
   base is pinned; overclaim reported 2026-10-09).
+
+## NASDAQ-wide scan (`scripts/nasdaq_scan.py`)
+
+The S&P-side `universe.py` scan covers 500 members; this is the NASDAQ
+counterpart over the whole live tier (~3,978 priced commons of 3,992).
+Subcommands: `scan` (ta.py indicator set verbatim -> ranked TSV), 
+`fundamentals` (SEC frames rev-YoY, CY Q2-over-Q2 pairs, two tag fallbacks),
+`facts` (resumable bulk REDUCED companyfacts -> `facts/nasdaq/<T>.json`),
+`flags` (edgar_screen `compute_flags_for` verbatim over those facts),
+`report` (surge / quiet / base-break / uptrend-not-extended / flags join).
+Manual: `python3 scripts/nasdaq_scan.py report`. Outputs:
+`logs/nasdaq_scan_latest.tsv`, `universe/nasdaq_fundamentals.json`,
+`facts/nasdaq/`, `logs/nasdaq_flags_latest.tsv`. First full run 2026-10-16:
+3,054 rows scanned (438 stale, 486 errors — mostly sub-$10 microcaps with
+short history), 3,336 tickers with rev-YoY. Caveats: frames pairs are
+calendar-quarter (June-fiscal filers map imperfectly); biotech "surges"
+are launch base-effects (excluded by the close>=10 + judgment rule); no
+earnings-quality layer below $10. Facts dir is gitignored (like facts/).
 
 ## Conventions
 

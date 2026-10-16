@@ -1,0 +1,7 @@
+[Unit]
+Description=NASDAQ-wide weekly scan (TA screen + frames fundamentals + report)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/data/finance
+ExecStart=/bin/sh -c 'python3 scripts/nasdaq_scan.py scan && python3 scripts/nasdaq_scan.py fundamentals && python3 scripts/nasdaq_scan.py report >> logs/nasdaq-scan-cron.log 2>&1'

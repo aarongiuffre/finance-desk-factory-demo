@@ -1,0 +1,8 @@
+[Unit]
+Description=NASDAQ bulk companyfacts (reduced tag set) + anomaly flags
+
+[Service]
+Type=oneshot
+WorkingDirectory=/data/finance
+ExecStart=/bin/sh -c 'nice -n 19 python3 scripts/nasdaq_scan.py facts && python3 scripts/nasdaq_scan.py flags >> logs/nasdaq-facts-cron.log 2>&1'
+Nice=19
