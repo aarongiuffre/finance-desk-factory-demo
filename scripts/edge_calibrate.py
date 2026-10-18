@@ -12,6 +12,11 @@
             |t| > 2 in <= 20% of draws, and NO draw passes the pass bar.
   placebo-ledger : diagnostic - random dates on the 499 ledger tickers (the
             H4 event universe).  Measures the survivor bias of that universe.
+  h4pit   : the PRE-REGISTERED one-shot re-run (ops/prereg/H4_inventory_calibration_pit.yaml):
+            FSDS inventory events for point-in-time S&P members (incl. exits),
+            criterion vs the per-date EW PIT universe.  Refuses unless the
+            prereg is committed and unchanged at HEAD, the event file matches
+            its sha256, and it has not run before.
   h4diag  : diagnostic decomposition of the H4 result (event-day close vs
             next-open entry; same-ticker unconditional control).
 
@@ -164,13 +169,95 @@ def cmd_h4diag():
     return 0
 
 
+PIT_PREREG = "H4_inventory_calibration_pit"
+PIT_EVENTS = os.path.join(ROOT, "logs", "edge", "h4pit_events.json")
+
+
+def within_name(ev, store, cal, lo, hi, hold=63):
+    """POST-HOC diagnostic (report only): next-open 63d return minus the same
+    ticker's median 63d return on its non-event days (+-65d excluded)."""
+    evd = {}
+    for e in ev:
+        evd.setdefault(e["ticker"], set()).add(e["ts"][:10])
+    xs, months, cache = [], [], {}
+    for e in ev:
+        s = store.get(e["ticker"])
+        if s is None or s.low_trust:
+            continue
+        i1 = H.entry_index(s, cal, e["ts"])
+        if i1 is None or i1 + hold >= len(s.d) or s.o[i1 + hold] is None:
+            continue
+        t = e["ticker"]
+        if t not in cache:
+            bad = set()
+            for d in evd[t]:
+                k = s.idx_on_or_before(d)
+                bad.update(range(k - 65, k + 66))
+            cs = [s.a[k + hold] / s.a[k] - 1 for k in range(len(s.d) - hold)
+                  if k not in bad and lo <= s.d[k] <= hi]
+            cache[t] = statistics.median(cs) if len(cs) >= 20 else None
+        if cache[t] is None:
+            continue
+        xs.append(s.o[i1 + hold] / s.o[i1] - 1 - cache[t])
+        months.append(e["ts"][:7])
+    if not xs:
+        return {"n": 0}
+    by = {}
+    for x, m in zip(xs, months):
+        by.setdefault(m[:4], []).append(x)
+    return {"label": "POST-HOC within-name comparison (not the criterion)", "n": len(xs),
+            "mean": statistics.fmean(xs), "median": statistics.median(xs),
+            "t_month_clustered": H.month_clustered_t(xs, months)[0],
+            "by_year": {y: {"n": len(v), "mean": statistics.fmean(v)} for y, v in sorted(by.items())}}
+
+
+def cmd_h4pit():
+    import hashlib
+    ok, why, psha, head = fold_gate.prereg_status(PIT_PREREG)
+    if not ok:
+        print("REFUSED:", why)
+        return 2
+    txt = open(os.path.join(ROOT, fold_gate.prereg_path(PIT_PREREG))).read()
+    want = [ln.split(":", 1)[1].strip() for ln in txt.splitlines() if ln.strip().startswith("events_sha256:")][0]
+    blob = open(PIT_EVENTS, "rb").read()
+    if hashlib.sha256(blob).hexdigest() != want:
+        print("REFUSED: event file sha256 does not match the prereg")
+        return 2
+    cur = json.load(open(SUMMARY)) if os.path.exists(SUMMARY) else {}
+    if "h4pit" in cur:
+        print("REFUSED: the pre-registered H4 PIT calibration already ran:", cur["h4pit"].get("run_dir"))
+        return 2
+    ev = json.loads(blob)["events"]
+    w = fold_gate.request("H4_inventory_calibration", "dev", purpose="phase-1 PRE-REGISTERED H4 PIT re-run",
+                          kind="calibration", lo=CAL_LO, hi=CAL_HI)
+    store = H.PriceStore(w.hi)
+    rep, d, trades = H.run("h4pit", "calibration", ev, w, hold=63, direction=-1, store=store,
+                           params={"prereg": fold_gate.prereg_path(PIT_PREREG), "prereg_sha": psha,
+                                   "prereg_head": head, "events_sha256": want})
+    b = brief(rep)
+    g = rep["abn_ew_gross"]
+    b["criterion"] = "mean gross abn vs per-date EW PIT universe < 0 AND month-clustered t <= -2.0"
+    b["calibration_pass"] = g["mean"] < 0 and g["t_month_clustered"] <= -2.0
+    b["prereg_sha256"], b["prereg_head"], b["run_dir"] = psha, head, d
+    cal = [x for x in H.calendar(store) if x <= w.hi]
+    b["within_name_post_hoc"] = within_name(ev, store, cal, w.lo, w.hi)
+    _save("h4pit", b)
+    print(json.dumps({k: b[k] for k in ("n_trades", "dropped", "abn_ew_gross", "abn_ew_net", "alpha_ann",
+                                        "alpha_t_nw", "calibration_pass", "within_name_post_hoc", "run_dir")},
+                     indent=1, default=float))
+    print("pass_bar (direction -1):", json.dumps(rep["pass_bar"]))
+    return 0 if b["calibration_pass"] else 1
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["h4", "placebo", "placebo-ledger", "h4diag"])
+    ap.add_argument("cmd", choices=["h4", "placebo", "placebo-ledger", "h4diag", "h4pit"])
     ap.add_argument("--draws", type=int, default=20)
     a = ap.parse_args()
     if a.cmd == "h4":
         sys.exit(cmd_h4())
+    if a.cmd == "h4pit":
+        sys.exit(cmd_h4pit())
     if a.cmd == "placebo":
         sys.exit(cmd_placebo(a.draws, "pit"))
     if a.cmd == "placebo-ledger":

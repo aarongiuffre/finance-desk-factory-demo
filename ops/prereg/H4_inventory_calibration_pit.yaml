@@ -1,0 +1,43 @@
+# PRE-REGISTRATION - harness calibration (NOT a hypothesis test; dev fold only)
+# Written and committed BEFORE any return on these events was computed.
+# Requested by Aaron 2026-10-18 09:09 ET after the first calibration (ledger, today's
+# 499 names) failed the criterion vs the PIT EW universe and the within-name check
+# was added post hoc.  This is the ONE re-run; it is executed once and recorded as is.
+hypothesis: H4_inventory_calibration_pit
+kind: calibration
+fold: dev
+window: {lo: "2015-01-01", hi: "2019-12-31"}
+universe:
+  membership: universe/sp500_ticker_start_end.csv   # point-in-time S&P 500, incl. later exits
+  membership_sha256: b2f4fe2f2e4dce8eaf0eb4fbd3946a32a20c1ddfe69687dfca3b6b59a0b71f9f
+  rule: ticker must be an S&P member on the filing date
+  prices: raw/price, raw/price/dead, raw/price/sp_exits (survivorship fill, 270/276 exits)
+events:
+  builder: scripts/fsds_inventory.py (cikmap -> extract 2014q1..2019q4 -> events)
+  source: SEC DERA Financial Statement Data Sets (all filers; not the survivor facts/ cache)
+  flag_rule: backtest._flags_visible_at INVENTORY branch (InventoryNet YoY > 25%;
+             flag if revenue YoY > 0 and spread >= 0, or revenue YoY unavailable)
+  event: a filing that introduces a new latest inventory period end AND flags
+  file: logs/edge/h4pit_events.json
+  events_sha256: 4085b5def98117039b14a91bb89b7c2cd6e3eb7b257c1a183fc1deea53187bb4
+  n_events: 524          # 155 tickers; 159 events on 53 non-ledger (exited/renamed) names
+  cik_map_sha256: 9f357bf53b76a0ac3c6600ec6d85d5b1902bd6fe4ab6491babe7203d3eb0087b
+  unmapped_members: [AABA, BRK.B, CCEP, CMCSK, DISCK, FRC, NLOK, NLSN, UAA, VIAC, WYND, XL]
+execution:
+  harness: scripts/edge_harness.py run()
+  entry: open of the first trading day strictly after the EDGAR acceptance date (ET)
+  hold_trading_days: 63
+  direction: -1          # expected negative
+  costs: default CostModel (15 bps fee + half-spread 5/15/40 + 10 bps slippage per side)
+  delisting: last close, then -30% for performance delists; robustness -100% and 2x cost
+benchmark: per-date equal-weight PIT S&P universe, open->open over the identical dates,
+           dead names included under the same delisting rule (harness Benchmarks.ew)
+primary_criterion:
+  statistic: mean GROSS 63-day abnormal return vs the per-date EW PIT universe
+  pass_if: mean < 0 AND month-clustered t <= -2.0
+  interpretation_pass: harness reproduces the negative inventory-build effect survivorship-free
+  interpretation_fail: the INV-build effect is NOT reproduced vs the PIT universe on 2015-2019;
+                       no re-specification in phase 1
+report_only (not part of the criterion): net abnormal, FF5+UMD alpha with Newey-West t,
+  edge pass bar, within-name comparison (labelled post hoc), by-year means
+one_shot: scripts/edge_calibrate.py h4pit refuses a second run
