@@ -16,7 +16,6 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _edge_synth as S  # noqa: E402
 import chainlog  # noqa: E402
 import edge_harness as H  # noqa: E402
@@ -30,7 +29,8 @@ SLICE = "raw/price/h1_universe"
 # infrastructure that legitimately names the live EODHD folder (download, manifest, encryption)
 H1_FOLDER_ALLOW = {"scripts/fold_data.py", "scripts/eodhd_final_pull.py", "ops/checks/check_edge_downloads.py",
                    "ops/offbox/encrypt_full_period.sh", "tests/test_dev_scope.py",
-                   "tests/test_survivorship_identity.py"}
+                   "tests/test_survivorship_identity.py", "scripts/h1_guard.py",
+                   "tests/test_h1_dev_round3.py"}
 
 
 @pytest.fixture
@@ -60,7 +60,16 @@ def _setup(env):
     info = S.build(env.root, n=8)
     _full_period_h1(env.root)
     m = FD.build_slice("dev", SLICE, apply=True, src_root=env.root)
+    _commit_pin(env)
     return info, m
+
+
+def _commit_pin(env):
+    """The slice sha pinned at HEAD of the (test) code checkout, as in production."""
+    _, sha = FD.slice_manifest(FD.copy_root("dev"), SLICE)
+    os.makedirs(os.path.join(env.root, "ops", "data"), exist_ok=True)
+    open(os.path.join(env.root, "ops", "data", "h1_dev_slice.sha256"), "w").write(sha + "\n")
+    env.commit("pin", "ops/data/h1_dev_slice.sha256")
 
 
 def _w():
@@ -111,11 +120,9 @@ def test_no_h1_code_names_the_live_folder():
             if "h1_universe" in p.read_text(errors="ignore"):
                 hits.append(rel)
     assert hits == [], f"files naming h1_universe outside the allowlist: {hits}"
-    # H1 code (by name) may not reach any live path or the live opt-in either
-    for p in list((REPO / "scripts").glob("h1_*.py")) + list((REPO / "scripts").glob("insider_*.py")):
-        t = p.read_text()
-        for bad in ("raw/price", "h1_universe", "use_live(", "REAL_ROOT", "finpaths.root()", "/data/finance"):
-            assert bad not in t, f"{p.name} contains {bad!r}"
+    # H1 code (by name): AST rules (h1_guard.scan_source), not substrings (Verifier H1-dev 3)
+    import h1_guard
+    assert h1_guard.scan(str(REPO)) == []
 
 
 # ------------------------------------------------------------------ 2. fail-closed reader
@@ -137,6 +144,9 @@ def test_pricestore_raises_on_full_period_frame_in_dev_scope(env):
     import hashlib
     m["files"]["ZZ1.json"] = hashlib.sha256(open(os.path.join(d, "ZZ1.json"), "rb").read()).hexdigest()
     json.dump(m, open(mp, "w"))
+    with pytest.raises(FD.FoldDataError, match="!= pin"):              # round 3: pin checked at load
+        H.PriceStore(_w(), dirs=H.H1_DIRS)
+    _commit_pin(env)                                                   # attacker who can also commit the pin
     with pytest.raises(FD.FoldDataError, match="max date 2026-09-30 > dev cutoff 2019-12-31"):
         H.PriceStore(_w(), dirs=H.H1_DIRS).get("ZZ1")
     # same for a plain tier: a full-period file dropped into the dev copy's raw/price
@@ -149,7 +159,7 @@ def test_pricestore_refuses_symlink_escape(env):
     _setup(env)
     p = os.path.join(env.root, "folds", "dev", "raw", "price", "ZZ9.json")
     os.symlink(os.path.join(env.root, SLICE, "ZZ1.json"), p)
-    with pytest.raises(FD.FoldDataError, match="outside the window root"):
+    with pytest.raises(FD.FoldDataError, match="outside the (window|data) root"):
         H.PriceStore(_w()).get("ZZ9")
 
 
@@ -180,9 +190,8 @@ def test_argv0_spoof_does_not_select_live(env, monkeypatch):
     assert FD.reader_cutoff() == "2019-12-31" and not FD.is_operational()
 
 
-def test_use_live_refuses_research_callers(monkeypatch):
-    monkeypatch.setattr(FD, "_LIVE", None)
-    for f in ("h1_build.py", "edge_calibrate.py", "/x/quotes_fake.py"):
+def test_use_live_refuses_research_callers():
+    for f in ("h1_build.py", "edge_calibrate.py", "/x/quotes_fake.py", "quotes.py", "paper_driver.py"):
         with pytest.raises(FD.FoldDataError):
             FD.use_live(f)
 

@@ -10,9 +10,10 @@ Usage (.venv-embed python):
   scripts/lance_cleanup.py            # drop versions older than 7 days
   scripts/lance_cleanup.py --days 1
 """
+import os
 import sys
 
-sys.path.insert(0, "/data/finance/scripts")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import edgar_embed as E  # noqa: E402  (E.DB, E.TABLE constants)
 
 import lancedb  # noqa: E402

@@ -20,7 +20,7 @@ import time
 ROOT = "/data/finance"
 RAW = os.path.join(ROOT, "raw", "edgar")
 OUT = os.path.join(ROOT, "parsed")
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import lancedb  # noqa: E402
 from edgar_embed import DB, TABLE  # noqa: E402

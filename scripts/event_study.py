@@ -49,7 +49,7 @@ import statistics
 import random
 import sys
 
-sys.path.insert(0, "/data/finance/scripts")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from walkforward import bars_of, split_factor_after   # noqa: E402
 
 def _ledger():

@@ -25,7 +25,7 @@ import time
 from collections import Counter
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import nasdaq_bulk as nb  # noqa: E402
 import edgar_pull as ep  # noqa: E402
 

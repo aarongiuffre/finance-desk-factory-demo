@@ -24,7 +24,7 @@ import os
 import sys
 
 ROOT = "/data/finance"          # operational check; no env override
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "scripts"))
 import paper_calib_trades as P  # noqa: E402
 
 bad = []

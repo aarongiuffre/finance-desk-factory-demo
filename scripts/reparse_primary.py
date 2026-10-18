@@ -1,6 +1,6 @@
 
 import sys, os, json, time
-sys.path.insert(0, '/data/finance/scripts')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import edgar_docparse as dp
 
 fix = json.load(open('/data/finance/logs/primary_fixlist.json'))

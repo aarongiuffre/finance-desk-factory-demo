@@ -11,7 +11,7 @@ import os
 import sys
 import tempfile
 
-sys.path.insert(0, "/data/finance/scripts")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import edgar_pull as ep
 
 SCRIPT_RE_END = None  # stripping: cut at the injected <script src=...> tail

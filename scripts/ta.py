@@ -66,10 +66,13 @@ def _translate_eodhd(d):
 
 
 def load_bars(t):
-    pdir = os.path.join(_data_root(), "raw", "price")
-    for p in (os.path.join(pdir, f"{t}.json"),
-              os.path.join(pdir, "dead", f"{t}.json")):
-        if not os.path.isfile(p):
+    """Ticker validation + realpath containment in the reader root (fold_data.price_file,
+    the same guard PriceStore uses), then the fail-closed date assert."""
+    import fold_data
+    root = _data_root()
+    for tier in ("raw/price", "raw/price/dead"):
+        p = fold_data.price_file(root, tier, t)     # raises on '../', absolute, symlink-out
+        if p is None:
             continue
         try:
             d = json.load(open(p))

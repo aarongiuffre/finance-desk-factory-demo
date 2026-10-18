@@ -287,7 +287,8 @@ def test_every_run_is_a_trial_and_variants_cannot_be_reset(env, monkeypatch):
     window(h="SYN")                                                          # a grant that is never used
     rep, d, _ = H.run("syndsr", "synthetic", ev, w, pr, robustness=False)
     var = chainlog.read_strict(finpaths.variants_log())
-    assert [v["event"] for v in var] == ["start", "start", "done"]
+    assert [v["event"] for v in var if v["event"] != "end"] == ["start", "start", "done"]
+    assert [v["status"] for v in var if v["event"] == "end"] == ["ok", "ok"]   # crash-safe end records
     assert all(v["token"] == w.token for v in var)
     assert rep["dsr"]["N"] == 3 and rep["dsr"]["runs"] == 2 and rep["dsr"]["orphan_grants"] == 1
     assert "alpha" in rep["dsr"]["basis"]

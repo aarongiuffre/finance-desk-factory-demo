@@ -21,7 +21,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sec_throttle import wait_token  # noqa: E402
 import edgar_pull  # noqa: E402  (reuse fetch + user agent)
 from watchlist_lib import read_watchlist  # noqa: E402

@@ -241,8 +241,11 @@ class PriceStore:
       * in dev/validation scope any loaded frame whose max bar date is past the
         copy cutoff RAISES (it is not silently trimmed: such a frame means a wrong
         root or a bad copy)
-      * a registered slice dir (fold_data.SLICES) must carry its manifest and every
-        file must match its sha there"""
+      * a registered slice dir (fold_data.SLICES) must carry its manifest, the manifest
+        sha must equal the pin committed at HEAD (ops/data/h1_dev_slice.sha256),
+        re-checked at every load (cached by the manifest's stat), and every file must
+        match its sha there
+      * tickers validated and files located via fold_data.price_file (shared with ta)"""
 
     def __init__(self, window, dirs=PRICE_DIRS):
         self.root = fold_data.research_root(window)
@@ -256,13 +259,7 @@ class PriceStore:
         self._slices = {}
         for d in self.dirs:
             if d in fold_data.SLICES:
-                m, sha = fold_data.slice_manifest(self.root, d)
-                if m is None:
-                    raise fold_data.FoldDataError(f"slice {d} has no manifest under {self.root} "
-                                                  f"(python3 scripts/fold_data.py build-slice --fold dev --apply)")
-                if self.scope_cutoff and m.get("cutoff") != self.scope_cutoff:
-                    raise fold_data.FoldDataError(f"slice {d} cutoff {m.get('cutoff')} != scope {self.scope_cutoff}")
-                self._slices[d] = (m["files"], sha)
+                self._slices[d] = fold_data.checked_slice(self.root, window.fold, d)
         self._c = {}
         self.low_trust = set()
 
@@ -275,8 +272,8 @@ class PriceStore:
 
     def path_of(self, t):
         for d in self.dirs:
-            p = os.path.join(self.root, d, f"{t}.json")
-            if os.path.isfile(p):
+            p = fold_data.price_file(self.root, d, t)
+            if p:
                 return p
         return None
 
@@ -290,10 +287,13 @@ class PriceStore:
         if not p:
             return None
         rp = os.path.realpath(p)
-        if not rp.startswith(os.path.realpath(self.root) + os.sep):
+        rroot = os.path.realpath(self.root)
+        if not rp.startswith(rroot + os.sep):
             raise fold_data.FoldDataError(f"{p} resolves to {rp}, outside the window root {self.root}")
-        blob = open(p, "rb").read()
-        tier = os.path.relpath(os.path.dirname(p), self.root)
+        tier = os.path.relpath(os.path.dirname(rp), rroot)
+        if tier in self._slices:                  # pin re-checked at load (cheap: stat-keyed cache)
+            self._slices[tier] = fold_data.checked_slice(self.root, self.window.fold, tier)
+        blob = open(rp, "rb").read()
         if tier in self._slices:
             files, _ = self._slices[tier]
             if files.get(os.path.basename(p)) != hashlib.sha256(blob).hexdigest():
@@ -564,12 +564,48 @@ def run_events(events, window, spec, universe_fn=None, store=None, dl=None, cost
     Called outside run(), the call is logged as a 'diagnostic' trial (it counts)."""
     require_window(window)
     events = list(events)
+    root, store, universe_fn = _inputs(window, universe_fn, store)
     if _run_id is None:
         _run_id = f"{datetime.datetime.now().strftime('%Y%m%dT%H%M%S%f')}-diag"
         log_variant({"event": "start", "run_id": _run_id, "name": "run_events", "kind": "diagnostic",
                      "token": window.token, "fold": window.fold, "hypothesis": window.hypothesis,
-                     "spec_sha256": spec_sha(spec), "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds")})
-    root, store, universe_fn = _inputs(window, universe_fn, store)
+                     "spec_sha256": spec_sha(spec), **_data_fields(store),
+                     "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds")})
+        with _end_record(_run_id, "run_events", window, store):
+            return _run_events_body(events, window, spec, universe_fn, store, dl, cost, root)
+    return _run_events_body(events, window, spec, universe_fn, store, dl, cost, root)
+
+
+def _data_fields(store, loaded=False):
+    out = {"data_root_real": os.path.realpath(store.root), "price_dirs": list(store.dirs),
+           "slice_sha256": store.slice_shas()}
+    if loaded:
+        lo, hi, n = store.loaded_range()
+        out.update(loaded_min_date=lo, loaded_max_date=hi, loaded_series=n)
+    return out
+
+
+class _end_record:
+    """try/finally 'end' record: written whether the run finishes or crashes, with the
+    loaded min/max dates, root realpath and slice sha (Verifier H1-dev condition 4)."""
+
+    def __init__(self, run_id, name, window, store):
+        self.run_id, self.name, self.window, self.store = run_id, name, window, store
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, et, ev, tb):
+        log_variant({"event": "end", "run_id": self.run_id, "name": self.name, "token": self.window.token,
+                     "fold": self.window.fold, "hypothesis": self.window.hypothesis,
+                     "status": "ok" if et is None else "crash",
+                     "error": None if et is None else f"{et.__name__}: {str(ev)[:300]}",
+                     **_data_fields(self.store, loaded=True),
+                     "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds")})
+        return False
+
+
+def _run_events_body(events, window, spec, universe_fn, store, dl, cost, root):
     hold, direction = spec["hold"], spec["direction"]
     cost = cost or CostModel.from_dict(spec["cost"])
     dl = dl or spec["dl"]
@@ -949,6 +985,13 @@ def run(name, kind, events, window, prereg, robustness=True, universe_fn=None, v
                  "data_root_real": data_root_real, "price_dirs": list(store.dirs),
                  "slice_sha256": store.slice_shas(),
                  "ts": now.astimezone().isoformat(timespec="seconds")})
+    with _end_record(run_id, name, window, store):
+        return _run_body(name, kind, events, window, prereg, robustness, universe_fn, variant, params,
+                         min_events, store, root, doc, spec, pinfo, run_id, data_root_real)
+
+
+def _run_body(name, kind, events, window, prereg, robustness, universe_fn, variant, params,
+              min_events, store, root, doc, spec, pinfo, run_id, data_root_real):
     ff = load_ff(os.path.join(root, "raw", "ff"))
     trades, info, store, cal = run_events(events, window, spec, universe_fn, store, _run_id=run_id)
     rep = evaluate(trades, info, store, cal, window, universe_fn, ff)

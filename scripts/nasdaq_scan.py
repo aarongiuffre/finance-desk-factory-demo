@@ -23,7 +23,7 @@ import time
 import urllib.error
 import urllib.request
 
-sys.path.insert(0, "/data/finance/scripts")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 ROOT = "/data/finance"
 COMMON_CSV = os.path.join(ROOT, "universe", "nasdaq_common.csv")

@@ -60,7 +60,7 @@ import statistics
 import sys
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import edgar_screen as es        # noqa: E402
 import ta as ta_mod              # noqa: E402

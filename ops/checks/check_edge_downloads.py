@@ -91,7 +91,6 @@ def h1_dev_slice(bad):
     cutoff, every file matches the slice manifest, and the manifest sha equals the pin
     committed at HEAD (ops/data/h1_dev_slice.sha256)."""
     import subprocess
-    sys.path.insert(0, os.path.join(ROOT, "scripts"))
     import fold_data
     rel = "raw/price/h1_universe"
     probs, sha = fold_data.verify_slice("dev", rel)
@@ -107,7 +106,6 @@ TOKEN_RE = re.compile(rb"api_token=(?!REDACTED)[A-Za-z0-9.]{8,}")
 
 
 def eodhd(bad, fast=False):
-    sys.path.insert(0, os.path.join(ROOT, "scripts"))
     import eodhd_final_pull as E
     mp = os.path.join(ROOT, "raw", "price", "EODHD_MANIFEST.json")
     if not os.path.exists(mp):

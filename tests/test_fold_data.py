@@ -108,8 +108,8 @@ def test_reader_root_routing(tmp_path, monkeypatch):
         monkeypatch.setattr(sys, "argv", [f"/data/finance/scripts/{op}"])
         assert FD.reader_root() == dev and not FD.is_operational()
     # live only through the explicit opt-in the live-desk mains make
-    monkeypatch.setattr(FD, "_LIVE", None)
-    FD.use_live("/data/finance/scripts/paper_driver.py")
+    _as_live_main(monkeypatch, root, "paper_driver.py")
+    FD.use_live(str(root / "scripts" / "paper_driver.py"))
     assert FD.reader_root() == os.path.realpath(str(root)) and FD.reader_cutoff() == "9999-12-31"
     assert not (set(RESEARCH) & FD.OPERATIONAL)
 
@@ -134,11 +134,17 @@ def test_walkforward_and_ta_read_the_dev_copy(tmp_path, monkeypatch):
     assert [r["filed"] for r in wf.facts_of("ZZZ")["units"]["USD"]["Rev"]] == ["2019-02-01"]
     monkeypatch.setattr(sys, "argv", ["paper_driver.py"])              # argv0 alone: still the dev copy
     assert [b["d"] for b in ta.load_bars("ZZZ")] == ["2019-12-31"]
-    monkeypatch.setattr(FD, "_LIVE", None)
-    FD.use_live("paper_driver.py")                                       # explicit live-desk opt-in
+    _as_live_main(monkeypatch, root, "paper_driver.py")                  # the real live-desk main
     wf._FACTS.clear()
     assert [b["d"] for b in ta.load_bars("ZZZ")][-1] == "2025-01-02"
     wf._FACTS.clear()
+
+
+def _as_live_main(monkeypatch, root, name):
+    """Simulate running <root>/scripts/<name> as the exec'd main program (test seam)."""
+    p = str(root / "scripts" / name)
+    monkeypatch.setattr(FD, "_main_file", lambda: p)
+    monkeypatch.setattr(FD, "_cmdline_script", lambda: p)
 
 
 @pytest.mark.parametrize("name", RESEARCH)

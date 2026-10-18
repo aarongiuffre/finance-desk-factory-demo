@@ -22,7 +22,7 @@ import time
 
 ROOT = "/data/finance"
 LOCK = "/tmp/incremental_embed.lock"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 BATCH = 64
 YIELD_S = 2.0  # sleep between filings so vLLM gets the GPU back

@@ -24,7 +24,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from watchlist_lib import read_watchlist  # noqa: E402
 
 FORMS = ("10-K", "10-K/A", "10-Q", "10-Q/A")

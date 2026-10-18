@@ -23,7 +23,7 @@ import sys
 import urllib.request
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from nasdaq_bulk import (QUEUE, TICKERS_JSON, get, tickers, cmd_pull)  # noqa: E402
 
 ROSTER = os.path.join(ROOT, "universe", "nasdaq_price_roster.json")

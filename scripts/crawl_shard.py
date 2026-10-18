@@ -19,7 +19,7 @@ import subprocess
 import sys
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from watchlist_lib import read_watchlist  # noqa: E402
 
 

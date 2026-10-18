@@ -22,7 +22,7 @@ import sys
 import urllib.request
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sec_throttle import wait_token  # noqa: E402
 
 UNI = os.path.join(ROOT, "universe", "nasdaq_common.csv")

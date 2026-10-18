@@ -40,7 +40,7 @@ import urllib.parse
 import urllib.request
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 TIER = os.path.join(ROOT, "raw", "price", "h1_universe")
 META = os.path.join(TIER, "_meta")
 REQLOG = os.path.join(META, "requests.log")

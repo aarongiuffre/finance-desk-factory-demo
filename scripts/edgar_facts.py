@@ -29,7 +29,7 @@ import os
 import sys
 import time
 
-sys.path.insert(0, "/data/finance")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from edgar_pull import fetch, get_user_agent, resolve_cik, log  # noqa: E402
 
 FACTS_DIR = "/data/finance/facts"

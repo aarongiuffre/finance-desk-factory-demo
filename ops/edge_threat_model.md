@@ -26,6 +26,16 @@ Protection against **accidental peeking** and **detection of honest mistakes**:
   is best effort (F11). Code that calls `position()` directly is not counted. The per-grant
   floor and the gated-run rule still apply.
 
+## H1 dev-scope guards (round 3)
+- H1 runs only through `scripts/h1_run.py`. It installs `h1_guard` (an audit hook)
+  before any other import: no open, listdir, scandir or glob outside folds/dev, the
+  checkout's code dirs, the Python install and the H1 logs; no subprocess other than git.
+  H1 source must pass `h1_guard.scan` (AST rules). PriceStore and ta share one path
+  guard, and the slice sha must equal the HEAD pin at every load.
+- Live data goes only to a real live-desk main, from realpath plus /proc/self/cmdline,
+  with no flag. Same-uid code can still rewrite its own argv or import ctypes before
+  the hook. These are accident guards; the boundary is a separate uid.
+
 Not guaranteed today, against a deliberate same-user adversary: editing gate code
 in-process (F7), overwriting the pin (F6b, needs root), resetting logs before the first
 witness (F3, F12), and deleting witness tags (until the ruleset exists).

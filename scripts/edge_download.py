@@ -31,7 +31,7 @@ import urllib.request
 import zipfile
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sec_throttle import throttle_sec_url  # noqa: E402
 
 LAST_Q = (2026, 3)

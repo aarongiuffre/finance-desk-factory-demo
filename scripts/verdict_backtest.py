@@ -20,7 +20,7 @@ import os
 import sys
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ta as ta_mod  # noqa: E402
 
 RECON_CUTOVER = "2023-01-01"

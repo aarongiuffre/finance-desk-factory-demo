@@ -7,16 +7,60 @@ Rules for this suite (enforced here):
 - Never touch live data dirs: tests use inline fixtures and tmp_path only.
 """
 
+import os
 import socket
 import sys
 from pathlib import Path
 
 import pytest
 
-# Make scripts/ importable (walkforward, edgar_screen, ...).
-SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
+# Hermetic imports (Verifier H1-dev blocker 1): the suite tests THIS checkout, never
+# /data/finance.  The clone's scripts/ and ops/checks/ are pinned at the front of
+# sys.path, and after every test _first_party_origin() fails if any first-party module
+# (a name that exists in this checkout's scripts/ or ops/checks/, or any module file
+# under the live tree /data/finance outside the venv) was imported from elsewhere.
+REPO = Path(__file__).resolve().parent.parent
+SCRIPTS = REPO / "scripts"
+CHECKS = REPO / "ops" / "checks"
+TESTS = REPO / "tests"
+for _d in (TESTS, CHECKS, SCRIPTS):           # SCRIPTS ends up at sys.path[0]
+    while str(_d) in sys.path:
+        sys.path.remove(str(_d))
+    sys.path.insert(0, str(_d))
+FIRST_PARTY = {f.stem for d in (SCRIPTS, CHECKS) for f in d.glob("*.py")}
+LIVE_TREE = "/data/finance"
+_ENV_DIRS = tuple({os.path.realpath(x) for x in (sys.prefix, sys.base_prefix, sys.exec_prefix)})
+
+
+def _bad_origins():
+    import os as _os
+    bad = []
+    repo = str(REPO) + _os.sep
+    for name, m in list(sys.modules.items()):
+        f = getattr(m, "__file__", None)
+        if not f:
+            continue
+        rf = _os.path.realpath(f)
+        if rf.startswith(repo) or rf.startswith(_ENV_DIRS):
+            continue
+        if name.split(".")[0] in FIRST_PARTY or (rf + _os.sep).startswith(LIVE_TREE + _os.sep):
+            bad.append(f"{name} -> {rf}")
+    return bad
+
+
+@pytest.fixture(autouse=True)
+def _first_party_origin():
+    yield
+    bad = _bad_origins()
+    if bad:
+        pytest.fail(f"non-hermetic import (first-party module not from {REPO}): {bad[:5]}", pytrace=False)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    bad = _bad_origins()
+    if bad:
+        print(f"\nNON-HERMETIC IMPORTS: {bad}", file=sys.stderr)
+        session.exitstatus = 1
 
 _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 

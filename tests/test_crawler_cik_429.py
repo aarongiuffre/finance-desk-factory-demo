@@ -1,5 +1,4 @@
 import json, os, sys, time
-sys.path.insert(0, "/data/finance/scripts")
 import nasdaq_bulk as nb
 import edgar_pull as ep
 

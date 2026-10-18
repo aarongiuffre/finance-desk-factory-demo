@@ -40,7 +40,7 @@ import urllib.parse
 import urllib.request
 
 ROOT = "/data/finance"
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from nasdaq_price_eod import convert, derive_split_calendar  # noqa: E402
 
 TIER = os.path.join(ROOT, "raw", "price", "sp_exits")

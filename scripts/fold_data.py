@@ -14,12 +14,15 @@ Resolution (research_root / reader_root):
   * fold_gate Window, fold dev             -> folds/dev
   * fold_gate Window, fold validation      -> folds/validation (window verified on the chain)
   * fold_gate Window, fold holdout         -> live root (window verified: Aaron-signed, first read)
-  * live desk: ONLY after an explicit fold_data.use_live(__file__) in the
-    script's __main__ block (2026-10-18 round 2, Verifier O1: the old
-    argv0-name allowlist let any process pick the live root by renaming itself).
-    use_live() refuses callers whose file is not in OPERATIONAL - an accident
-    guard, not security (any same-uid code can call it); tests/test_fold_data.py
-    fails if research or H1 code calls it.
+  * live desk: decided on EVERY call from the real main script, never from a flag
+    or a caller-supplied name (Verifier H1-dev 3a/3b): the realpath of
+    sys.modules['__main__'].__file__ must equal the script the interpreter was
+    exec'd with (/proc/self/cmdline) AND be in LIVE_MAINS, the realpaths of the
+    live-desk scripts in /data/finance/scripts.  A renamed copy, a worktree copy, an
+    H1 file named like a live script, `python -c`, or setting module attributes
+    gives the dev copy.  fold_data.use_live(__file__) in the live mains is only an
+    early assertion.  Same-uid code can still rewrite its own argv memory - in-process
+    this is an accident guard; the real boundary is a separate uid for the live desk.
   * every returned root is a REALPATH and must resolve inside the root it was
     reached through (a folds/<fold> symlink to elsewhere is refused, O3).
 Slices (condition 1 of Verifier's dev-only pass): SLICES are separate dev-period
@@ -72,8 +75,8 @@ OPERATIONAL = frozenset({
     "paper_driver.py", "paper_bridge.py", "paper_feedback.py", "paper_event_tracker.py",
     "paper_calib_trades.py", "confluence.py", "screen_log.py", "nasdaq_scan.py", "nasdaq_watch.py",
     "finance_health.py", "edgar_screen.py", "watchlist_lib.py", "verdict_replay.py",
-    "quotes.py", "search_server.py",
-})
+    "search_server.py",
+})                                         # quotes.py removed: phantom entry (no such script)
 
 
 class FoldDataError(RuntimeError):
@@ -84,22 +87,89 @@ def copy_root(fold):
     return finpaths.p("folds", fold)
 
 
-_LIVE = None
+def live_mains():
+    """Realpaths of the live-desk main scripts.  Production: /data/finance/scripts/<name>
+    (never a worktree or clone).  Tests: <test root>/scripts/<name>."""
+    base = finpaths.code_root() if finpaths.is_test() else finpaths.REAL_ROOT
+    return frozenset(os.path.realpath(os.path.join(base, "scripts", n)) for n in OPERATIONAL)
 
 
-def use_live(caller_file):
-    """Live desk opt-in.  Call from the __main__ block of an OPERATIONAL script only."""
-    global _LIVE
-    name = os.path.basename(str(caller_file))
-    if name not in OPERATIONAL:
-        raise FoldDataError(f"use_live() from {name}: only live-desk scripts (fold_data.OPERATIONAL) may read live data")
-    if _PROCESS_WINDOW is not None:
-        raise FoldDataError("use_live() after a fold window was bound")
-    _LIVE = name
+def _main_file():
+    m = sys.modules.get("__main__")
+    return getattr(m, "__file__", None)
+
+
+def _cmdline_script():
+    """The script path the interpreter was exec'd with (/proc/self/cmdline), or None
+    for `python -c` / `python -m` / an interactive interpreter."""
+    try:
+        args = open("/proc/self/cmdline", "rb").read().split(b"\0")
+    except OSError:
+        return None
+    args = [a.decode(errors="replace") for a in args if a]
+    i = 1
+    while i < len(args):
+        a = args[i]
+        if a in ("-c", "-m") or a.startswith(("-c", "-m")) and len(a) > 2 and not a.startswith("--"):
+            return None
+        if a in ("-W", "-X", "--check-hash-based-pycs"):
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        return a
+    return None
 
 
 def is_operational():
-    return _LIVE is not None
+    """True only for a real live-desk main (see module doc).  Computed on every call."""
+    mf, cs = _main_file(), _cmdline_script()
+    if not mf or not cs:
+        return False
+    rm, rc = os.path.realpath(mf), os.path.realpath(cs)
+    return rm == rc and rm in live_mains()
+
+
+def use_live(caller_file):
+    """Early assertion in a live-desk __main__ block; holds NO state."""
+    if not is_operational() or os.path.realpath(str(caller_file)) != os.path.realpath(_main_file() or ""):
+        raise FoldDataError(f"use_live() from {caller_file}: only the live-desk main scripts in "
+                            f"/data/finance/scripts (fold_data.OPERATIONAL), run as the main program, read live data")
+    if _PROCESS_WINDOW is not None:
+        raise FoldDataError("use_live() after a fold window was bound")
+
+
+# ------------------------------------------------------------------ shared file guard
+import re as _re  # noqa: E402
+TICKER_RE = _re.compile(r"^[A-Z0-9][A-Za-z0-9._-]{0,24}$")
+
+
+def safe_ticker(t):
+    if not isinstance(t, str) or not TICKER_RE.match(t) or ".." in t:
+        raise FoldDataError(f"ticker {t!r} refused (must match {TICKER_RE.pattern}, no '..')")
+    return t
+
+
+def safe_tier(tier):
+    if os.path.isabs(tier) or ".." in tier.replace("\\", "/").split("/"):
+        raise FoldDataError(f"price dir {tier!r} must be a relative tier inside the data root")
+    return tier
+
+
+def price_file(root, tier, t):
+    """Realpath of <root>/<tier>/<t>.json if it is a file, else None.  Shared by
+    edge_harness.PriceStore and ta.load_bars: ticker + tier validation and realpath
+    containment in the realpath of root (no traversal, no absolute path, no symlink out)."""
+    safe_ticker(t)
+    safe_tier(tier)
+    p = os.path.join(root, tier, f"{t}.json")
+    if not os.path.isfile(p):
+        return None
+    rp, rr = os.path.realpath(p), os.path.realpath(root)
+    if not rp.startswith(rr + os.sep):
+        raise FoldDataError(f"{p} resolves to {rp}, outside the data root {rr}")
+    return rp
 
 
 def _contained(path, base):
@@ -147,7 +217,7 @@ _PROCESS_WINDOW = None
 def use_window(window):
     """Bind the process-wide reader root (ta / walkforward) to a verified window."""
     global _PROCESS_WINDOW
-    if _LIVE is not None:
+    if is_operational():
         raise FoldDataError("use_window() in a live-desk process")
     research_root(window)
     _PROCESS_WINDOW = window
@@ -492,6 +562,59 @@ def build_slice(fold, rel, apply=False, src_root=None):
             shutil.rmtree(dst)
         os.replace(stage, dst)
     return man
+
+
+SLICE_PINS = {("dev", "raw/price/h1_universe"): "ops/data/h1_dev_slice.sha256"}
+_SLICE_CACHE = {}         # (manifest realpath, ino, size, mtime_ns) -> (files, sha)
+_PIN_CACHE = {}           # (code root, HEAD sha, pin path) -> pinned sha
+
+
+def slice_pin(fold, rel):
+    """The sha pinned for a slice in the CODE checkout's HEAD commit (git show HEAD:<pin>);
+    working-tree edits of the pin do not count.  FoldDataError when absent (fail closed)."""
+    import subprocess
+    pin = SLICE_PINS.get((fold, rel))
+    if pin is None:
+        raise FoldDataError(f"no committed pin for slice {fold}:{rel} - refusing")
+    root = finpaths.code_root()
+    h = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"], capture_output=True, text=True)
+    if h.returncode != 0:
+        raise FoldDataError(f"slice pin: {root} is not a git checkout - refusing")
+    key = (root, h.stdout.strip(), pin)
+    if key not in _PIN_CACHE:
+        r = subprocess.run(["git", "-C", root, "show", f"HEAD:{pin}"], capture_output=True, text=True)
+        v = r.stdout.split()[:1] if r.returncode == 0 else []
+        if not v:
+            raise FoldDataError(f"slice pin {pin} not committed at HEAD of {root} - refusing")
+        _PIN_CACHE[key] = v[0]
+    return _PIN_CACHE[key]
+
+
+def checked_slice(root, fold, rel):
+    """(files map, manifest sha) for a slice, only if the manifest sha equals the HEAD pin.
+    Cheap on repeat calls: re-hashed only when the manifest file's stat changes, so a
+    manifest swapped mid-run is caught at the next load."""
+    mp = os.path.join(root, rel, SLICE_MANIFEST)
+    try:
+        st = os.stat(mp)
+    except OSError:
+        raise FoldDataError(f"slice {rel} has no manifest under {root} "
+                            f"(python3 scripts/fold_data.py build-slice --fold {fold} --apply)") from None
+    key = (os.path.realpath(mp), st.st_ino, st.st_size, st.st_mtime_ns)
+    hit = _SLICE_CACHE.get(key)
+    if hit is None:
+        m, sha = slice_manifest(root, rel)
+        if m is None:
+            raise FoldDataError(f"slice {rel} has no manifest under {root}")
+        if m.get("cutoff") != CUTOFF.get(fold):
+            raise FoldDataError(f"slice {rel} cutoff {m.get('cutoff')} != {fold} cutoff {CUTOFF.get(fold)}")
+        hit = (m["files"], sha)
+        _SLICE_CACHE.clear()
+        _SLICE_CACHE[key] = hit
+    pin = slice_pin(fold, rel)
+    if hit[1] != pin:
+        raise FoldDataError(f"slice {rel} manifest sha {hit[1][:16]} != pin {pin[:16]} at HEAD - refusing")
+    return hit
 
 
 def slice_manifest(root, rel):

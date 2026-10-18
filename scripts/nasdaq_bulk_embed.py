@@ -32,7 +32,7 @@ import time
 ROOT = "/data/finance"
 LOCK = "/tmp/incremental_embed.lock"
 LOG = os.path.join(ROOT, "logs", "nasdaq-bulk-embed.log")
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 ROWS_PER_ADD = 8192      # rows buffered before encode+append
 ENCODE_BATCH = 512       # sentence-transformer batch

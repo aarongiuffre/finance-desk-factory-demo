@@ -27,7 +27,7 @@ import os
 import statistics
 import sys
 
-sys.path.insert(0, "/data/finance/scripts")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 ROOT = "/data/finance"
 LEDGER = os.path.join(ROOT, "logs", "paper-event-ledger.jsonl")

@@ -30,7 +30,7 @@ import sys
 import time
 import urllib.request
 
-sys.path.insert(0, "/data/finance/scripts")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from walkforward import (load_membership, member_at, candidate_value,  # noqa: E402
                          last_price_at, bars_of, split_factor_after,
                          facts_of, facts_asof, ttm_via_engine)
