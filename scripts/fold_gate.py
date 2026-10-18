@@ -101,6 +101,10 @@ Verifier v7 (2026-10-18):
       / verify reject any gated window (so no earlier grant can be read either), whatever
       the signature.  Dev keeps the committed-fingerprint rule.  leave_root_equivalent_groups.sh
       is a hard prerequisite for any gated read (or evaluate off-box, see the threat model).
+Verifier v8: the group check is a TRIPWIRE, not a lock (a root-equivalent user can hide
+      its membership: docker --user with its own /etc/group, a renamed group).  It fails
+      closed: a pwd KeyError or a group-database error counts as root-equivalent, and the
+      reason is logged in the refusal.  No gated grant made before step 5 is valid.
 
 CLI:
   python3 scripts/fold_gate.py status
@@ -208,10 +212,14 @@ def detect_root_equivalent_groups():
             pass
     try:
         user = pwd.getpwuid(os.geteuid()).pw_name
-    except KeyError:
-        user = None
-    for g in grp.getgrall():
-        if user and user in g.gr_mem:
+    except KeyError:                       # v8: fail closed - membership cannot be checked
+        return ("unverifiable (no passwd entry for uid %d)" % os.geteuid(),)
+    try:
+        allg = grp.getgrall()
+    except Exception as e:                 # v8: fail closed on any group-database error  # noqa: BLE001
+        return (f"unverifiable (group database error: {type(e).__name__}: {e})",)
+    for g in allg:
+        if user in g.gr_mem:
             names.add(g.gr_name)
     return tuple(sorted(n for n in names if n in ROOT_EQUIV_GROUPS))
 

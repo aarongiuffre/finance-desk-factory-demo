@@ -3,7 +3,7 @@
 Agents on this box run without sudo. Anything that needs root is staged here as a
 script that does a dry run by default and changes nothing until it gets `--apply`.
 
-**No validation or holdout read is possible on this server until `leave_root_equivalent_groups.sh --apply` has run** (fold_gate refuses them while slowglow is in docker or wheel).
+**No validation or holdout read is possible on this server until `leave_root_equivalent_groups.sh --apply` has run** (fold_gate refuses them while slowglow is in docker or wheel). That refusal is only a tripwire, not a lock: a root-equivalent user can hide its membership (docker --user with its own /etc/group, a renamed group). **Any validation or holdout grant made before step 5 is invalid and must be thrown out**, with its results. The real lock is encryption with Aaron's key plus the off-box witness. Backlog (M3'' marker): step 5 `--apply` writes a root-owned marker with the gate-log head seq; gated grants then require a seq above it.
 
 | Script | What it does | Run |
 |---|---|---|

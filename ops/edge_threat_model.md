@@ -153,6 +153,16 @@ sign the dev go, the validation run go and the holdout approval. So while
   read either;
 - dev stays on the committed-fingerprint rule (it reads dev data only).
 
+**The docker/wheel refusal is a TRIPWIRE, not a lock (Verifier v8 M3'').** A
+root-equivalent user can hide its membership (docker --user with its own /etc/group, or
+renaming the group), and until step 5 even a root-owned marker could be forged. The real
+lock is encryption with Aaron's key plus the off-box witness. **No validation or holdout
+grant made before `leave_root_equivalent_groups.sh` (step 5) has run is valid: throw every
+such grant and its results out.** The check fails closed: a missing passwd entry or a
+group-database error counts as root-equivalent and is logged in the refusal.
+Backlog M3'' marker: step 5 `--apply` writes a root-owned marker holding the gate-log head
+seq, and gated grants require a seq above it.
+
 **`leave_root_equivalent_groups.sh --apply` (step 5) is a hard prerequisite for any
 validation or holdout read on this server.** Without it the only route to a gated
 result is the off-box evaluation below.

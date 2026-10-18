@@ -539,6 +539,32 @@ def test_M3prime_docker_only_or_wheel_only_refuses_validation_and_holdout(env, m
     assert LEAVE not in str(e.value)
 
 
+def test_M3pp_group_database_error_fails_closed_and_is_logged(env, mocked_groups, monkeypatch):
+    import grp
+    mocked_groups([])
+
+    def boom():
+        raise OSError("nss unavailable")
+    monkeypatch.setattr(grp, "getgrall", boom)
+    with pytest.raises(G.GateRefused, match="unverifiable \\(group database error: OSError"):
+        G.request("H9", "validation")
+    last = chainlog.read_strict(finpaths.gate_log())[-1]
+    assert last["granted"] is False and "group database error" in last["reason"] and LEAVE in last["reason"]
+
+
+def test_M3pp_missing_passwd_entry_fails_closed_and_is_logged(env, mocked_groups, monkeypatch):
+    import pwd
+    mocked_groups([])
+
+    def nouser(uid):
+        raise KeyError(uid)
+    monkeypatch.setattr(pwd, "getpwuid", nouser)
+    with pytest.raises(G.GateRefused, match="unverifiable \\(no passwd entry"):
+        G.request("H9", "holdout")
+    last = chainlog.read_strict(finpaths.gate_log())[-1]
+    assert last["granted"] is False and "no passwd entry" in last["reason"]
+
+
 def test_M3prime_not_root_equivalent_falls_through_to_the_normal_rules(env, mocked_groups):
     mocked_groups([])
     assert G.root_equivalent_groups() == ()
