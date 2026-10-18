@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily finance desk health check (07:40 ET, after the 06:10 refresh)
+
+[Timer]
+OnCalendar=*-*-* 07:40:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

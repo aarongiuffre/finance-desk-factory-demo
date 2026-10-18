@@ -1,0 +1,10 @@
+[Unit]
+Description=Finance desk health check triggered by failure of %i
+# No OnFailure= here (or on finance-health.service): a failing checker must not loop.
+
+[Service]
+Type=oneshot
+WorkingDirectory=/data/finance
+ExecStart=/usr/bin/python3 /data/finance/scripts/finance_health.py run --trigger onfailure:%i
+Nice=10
+TimeoutStartSec=10min

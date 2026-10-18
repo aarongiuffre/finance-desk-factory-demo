@@ -1,0 +1,10 @@
+[Unit]
+Description=Finance desk health checks -> local alert outbox (/data/finance/alerts/outbox.jsonl; nothing leaves the machine)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/data/finance
+ExecStart=/usr/bin/python3 /data/finance/scripts/finance_health.py run --trigger timer
+Nice=10
+TimeoutStartSec=10min
