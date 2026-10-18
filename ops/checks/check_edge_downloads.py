@@ -15,6 +15,11 @@ re-hash; frozen tiers (sp_exits, h1_universe) may not gain or lose files; the de
 tier may only GROW (daily delistings via nasdaq-watch-filings -> WARN, not FAIL);
 request logs must equal the manifest counts (sp_exits <= 300); no file or request
 log may contain an api_token value.
+
+Research split (Verifier v5 C-E2): a 2020+ DERA zip may sit under raw/research_zips/<dir>/
+instead of raw/<dir>/; once encrypt_full_period.sh has removed the plaintext, a file (zip or
+EODHD) listed with the same sha256 in the newest offbox/full_period_*.manifest counts as
+archived, not missing (scripts/research_split.py).
 """
 import hashlib
 import json
@@ -25,6 +30,7 @@ import zipfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "scripts"))
 import finpaths  # noqa: E402
 import re  # noqa: E402
+import research_split as RS  # noqa: E402
 ROOT = finpaths.root()          # fixed /data/finance; no env override (tests swap the whole root under pytest)
 SRC = {"dera_insider": (83, "https://www.sec.gov/"), "dera_fsds": (71, "https://www.sec.gov/"),
        "ff": (2, "https://mba.tuck.dartmouth.edu/")}
@@ -35,22 +41,33 @@ def main():
     fast = "--fast" in sys.argv
     bad = []
     tot_b = 0
+    arch = RS.archived(ROOT)
     for d, (want, host) in SRC.items():
         base = os.path.join(ROOT, "raw", d)
         m = json.load(open(os.path.join(base, "MANIFEST.json")))
         files = m["files"]
         if len(files) != want or m.get("present_files") != want:
             bad.append(f"{d}: manifest lists {len(files)}/{m.get('present_files')} files, want {want}")
-        on_disk = sorted(x for x in os.listdir(base) if x.endswith(".zip"))
-        if on_disk != sorted(f["name"] for f in files):
-            bad.append(f"{d}: zips on disk differ from manifest")
+        moved = os.path.join(ROOT, RS.RESEARCH_ZIPS, d)
+        on_disk = [x for x in os.listdir(base) if x.endswith(".zip")]
+        on_disk += [x for x in (os.listdir(moved) if os.path.isdir(moved) else []) if x.endswith(".zip")]
+        gone = {f["name"] for f in files if f["name"] not in on_disk and RS.archived_zip(arch, d, f["name"], f["sha256"])}
+        if sorted(on_disk) != sorted(f["name"] for f in files if f["name"] not in gone):
+            bad.append(f"{d}: zips on disk differ from manifest (or are listed twice)")
         if [x for x in os.listdir(base) if x.endswith(".part")]:
             bad.append(f"{d}: .part leftovers")
         rows = 0
         for f in files:
-            p = os.path.join(base, f["name"])
             if not f["url"].startswith(host):
                 bad.append(f"{d}/{f['name']}: unexpected host {f['url']}")
+            if f["name"] in gone:                    # encrypted off-box with this sha; plaintext removed
+                rows += sum(v.get("rows") or 0 for v in f["members"].values())
+                tot_b += f["bytes"]
+                continue
+            p = RS.zip_path(ROOT, d, f["name"])
+            if p is None:
+                bad.append(f"{d}/{f['name']}: missing")
+                continue
             h = hashlib.sha256()
             with open(p, "rb") as fh:
                 for blk in iter(lambda: fh.read(1 << 22), b""):
@@ -73,7 +90,8 @@ def main():
                 bad.append(f"{d}/{f['name']}: zero data rows")
             rows += r
             tot_b += f["bytes"]
-        print(f"{d}: {len(files)}/{want} files, {sum(f['bytes'] for f in files)/1e9:.2f} GB, {rows:,} data rows")
+        print(f"{d}: {len(files)}/{want} files, {sum(f['bytes'] for f in files)/1e9:.2f} GB, {rows:,} data rows"
+              + (f" ({len(gone)} archived off-box)" if gone else ""))
     print(f"total {tot_b/1e9:.2f} GB")
     eodhd(bad, fast)
     h1_dev_slice(bad)
@@ -127,7 +145,9 @@ def eodhd(bad, fast=False):
         bad.append(f"EODHD: manifest n_files {m.get('n_files')} != {len(files)} entries")
     on_disk = set(E.eodhd_files(ROOT))
     listed = set(files)
-    gone = sorted(listed - on_disk)
+    arch = RS.archived(ROOT)
+    archived = {r for r in listed - on_disk if arch.get(r) == files[r]["sha256"]}
+    gone = sorted(listed - on_disk - archived)
     new = sorted(on_disk - listed)
     if gone:
         bad.append(f"EODHD: {len(gone)} manifest files missing, e.g. {gone[:3]}")
@@ -159,6 +179,8 @@ def eodhd(bad, fast=False):
             n = raw.count(b"\n")
             if TOKEN_RE.search(raw):
                 tok += 1
+        elif os.path.relpath(lp, ROOT) in arch:      # archived with its tier (research split)
+            n = m["requests"].get(k)
         counts[k] = n
         if m["requests"].get(k) != n:
             bad.append(f"EODHD: {k} log has {n} lines, manifest records {m['requests'].get(k)}")
@@ -169,7 +191,8 @@ def eodhd(bad, fast=False):
     units = m["requests"].get("h1_universe_api_units")
     print(f"EODHD: {len(files)} files, {nb / 1e9:.2f} GB {'(size only, --fast)' if fast else 're-hashed'}; "
           f"requests sp_exits {counts['sp_exits_requests']} + final pull {counts['h1_universe_requests']} "
-          f"({units} API units); dead-tier files added since manifest: {len(new_dead)}")
+          f"({units} API units); dead-tier files added since manifest: {len(new_dead)}"
+          + (f"; {len(archived)} archived off-box" if archived else ""))
     if new_dead:
         print(f"WARN EODHD dead tier grew by {len(new_dead)} since the manifest (daily delistings), e.g. {new_dead[:3]}")
 

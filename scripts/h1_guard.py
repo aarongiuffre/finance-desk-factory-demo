@@ -61,11 +61,12 @@ def install(data_root=None, dev_root=None, repo_root=None, state_dir=None):
     if data_root is None:
         import finpaths
         data_root = finpaths.root()
-        state_dir = state_dir or finpaths.state_dir()
-        logs, runs = os.path.dirname(finpaths.gate_log()), finpaths.runs_dir()
         sb = finpaths.sandbox_run()
-        if sb:
+        if sb:                                    # no chain anchors inside the sandbox (v5): no state dir
             extra_read.add(os.path.join(sb, "in"))
+        else:
+            state_dir = state_dir or finpaths.state_dir()
+        logs, runs = os.path.dirname(finpaths.gate_log()), finpaths.runs_dir()
     else:
         logs = os.path.join(os.path.realpath(data_root), "logs")
         runs = os.path.join(logs, "edge")
@@ -130,6 +131,8 @@ def install(data_root=None, dev_root=None, repo_root=None, state_dir=None):
                 if isinstance(a, (str, bytes)) and not ok_path(fsdecode(a), True):
                     refuse(f"{event}({a!r})")
         elif event == "ctypes.dlopen":
+            if args and args[0] is None:
+                return                     # dlopen(NULL): the already-loaded program itself, loads nothing (Verifier v5)
             lib = args[0] if args else None
             lib = fsdecode(lib) if isinstance(lib, (str, bytes)) else None
             if not (lib and os.path.isabs(lib) and _under(realpath(lib), py_dirs)):

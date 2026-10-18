@@ -128,7 +128,52 @@ def test_installer_pins_the_helper_sha_and_dry_run_needs_no_root():
     sha = subprocess.run(["sha256sum", str(SRC)], capture_output=True, text=True).stdout.split()[0]
     assert f"HELPER_SHA={sha}" in sh
     assert "visudo -cf \"$T/sudoers\" >/dev/null || die" in sh
-    assert sh.index('MIG migrate') < sh.index('verify-chain (gate-user mode) failed - marker removed')
+    assert sh.index('MIG migrate') < sh.index('verify-chain (gate-user mode) failed - marker and sudoers rule removed')
+    assert 'rm -f "$M" "$SUD"; die "verify-chain' in sh                    # v5: the sudoers rule goes too
+
+
+def test_installer_pins_chainlog_and_finpaths():                          # Verifier v5 C-G1
+    import hashlib
+    import re
+    sh = (REPO / "ops" / "staged_sudo" / "install_finance_gate_user.sh").read_text()
+    for name, var in (("chainlog.py", "CHAINLOG_SHA"), ("finpaths.py", "FINPATHS_SHA")):
+        pin = re.search(rf"^{var}=(\w+)$", sh, re.M).group(1)
+        assert pin == hashlib.sha256((REPO / "scripts" / name).read_bytes()).hexdigest(), f"re-pin {var}"
+        assert f'MIG copy-file "$ROOT/scripts/{name}" "$LIB/{name}" "${var}"' in sh
+    # revert: no root shell redirect from $S
+    assert '< "$2"' not in sh and 'MIG read-file "$1" finance-gate' in sh
+
+
+def test_installer_dry_run_refuses_an_edited_chainlog(tmp_path):
+    root = tmp_path / "root"
+    (root / "scripts").mkdir(parents=True)
+    for n in ("chainlog.py", "finpaths.py"):
+        (root / "scripts" / n).write_bytes((REPO / "scripts" / n).read_bytes())
+    with open(root / "scripts" / "chainlog.py", "a") as fh:
+        fh.write("\n# edited after review\n")
+    d = tmp_path / "staged"
+    d.mkdir()
+    (d / "finance_gate_migrate.py").write_bytes(SRC.read_bytes())
+    s = (REPO / "ops" / "staged_sudo" / "install_finance_gate_user.sh").read_text().replace("ROOT=/data/finance", f"ROOT={root}")
+    (d / "inst.sh").write_text(s)
+    r = subprocess.run(["bash", str(d / "inst.sh")], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 3 and "chainlog.py sha256" in r.stderr and "!= pinned" in r.stderr, r.stderr
+
+
+def test_copy_file_pin_and_read_file(tmp_path, capfd):
+    import hashlib
+    src = tmp_path / "chainlog.py"
+    src.write_text("code")
+    dst = tmp_path / "out" / "chainlog.py"
+    dst.parent.mkdir()
+    assert M.main(["copy-file", str(src), str(dst), "0" * 64]) == 3 and not dst.exists()
+    assert M.main(["copy-file", str(src), str(dst), hashlib.sha256(b"code").hexdigest()]) == 0
+    assert dst.read_text() == "code"
+    capfd.readouterr()
+    assert M.main(["read-file", str(src), ME]) == 0 and capfd.readouterr().out == "code"
+    os.symlink(src, tmp_path / "link")
+    assert M.main(["read-file", str(tmp_path / "link"), ME]) == 3
+    assert M.main(["read-file", str(src), "root"]) == 3 or os.getuid() == 0      # wrong owner refused
 
 
 def test_staged_scripts_manifest_is_current():

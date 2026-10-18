@@ -33,6 +33,7 @@ import zipfile
 ROOT = "/data/finance"
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sec_throttle import throttle_sec_url  # noqa: E402
+import research_split as RS  # noqa: E402
 
 LAST_Q = (2026, 3)
 FF_BASE = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
@@ -149,10 +150,14 @@ def cmd_fetch(src, limit=None, only=None):
         items = items[:limit]
     ok = skip = fail = 0
     consecutive = 0
+    arch = RS.archived(ROOT)
     for name, url in items:
         dst = os.path.join(d, name)
         if os.path.exists(dst) and os.path.getsize(dst) > 0:
             skip += 1
+            continue
+        if RS.zip_path(ROOT, DIRS[src], name) or os.path.join(RS.RESEARCH_ZIPS, DIRS[src], name) in arch:
+            skip += 1                          # moved to the research dataset / archived (v5 C-E2): never re-fetch
             continue
         t0 = time.time()
         try:

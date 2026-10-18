@@ -32,7 +32,17 @@ writable mounts).  That redirect is honoured ONLY when the real /data/finance/lo
 NOT visible, i.e. inside the mount namespace; outside it the variable is ignored.  The
 sandbox's records reach the real chains only through the wrapper's outside `record`
 step (scripts/sandbox_host.py).
+
+ARCHIVE MODE (Verifier v5 F1): the sandbox's code is NOT a git checkout but a codetree
+export of one commit (RUN/code, no .git, post-2019 paths left out) with the host's pin
+next to it at RUN/in/code.json.  Detected from the location of THIS file (no env), never
+in tests.  archive_pin() recomputes the tree hash of the code once per process and refuses
+on any difference, so "HEAD" reads (fold_gate._head_blob, fold_data.slice_pin) can come
+from the files themselves.  Inside the sandbox nothing writes a chain or an anchor: the
+grant snapshot is read-only in RUN/in and the variants records go to a plain RUN/logs file
+that the host parses as untrusted input.
 """
+import json
 import os
 import pwd
 import sys
@@ -40,7 +50,9 @@ import tempfile
 
 REAL_ROOT = os.path.realpath("/data/finance")
 CODE_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))   # repo/worktree holding this file
+ARCHIVE_PIN = os.path.join(os.path.dirname(CODE_ROOT), "in", "code.json")    # RUN/in/code.json for RUN/code
 _TEST_ROOT = None
+_ARCHIVE = None
 
 
 class PathOverrideRefused(PermissionError):
@@ -128,6 +140,39 @@ def in_sandbox():
     return sandbox_run() is not None
 
 
+def archive_mode():
+    """The running code is a codetree export (h1_sandbox.sh RUN/code): no .git beside it
+    and the host's pin RUN/in/code.json next to it.  Never in tests."""
+    if _TEST_ROOT is not None:
+        return False
+    return not os.path.lexists(os.path.join(CODE_ROOT, ".git")) and os.path.isfile(ARCHIVE_PIN)
+
+
+def archive_pin():
+    """The pin of the code archive (dict) or None outside archive mode.  The tree hash of
+    CODE_ROOT is recomputed once per process and must equal the pin (else refused)."""
+    global _ARCHIVE
+    if not archive_mode():
+        return None
+    if _ARCHIVE is None:
+        import codetree
+        try:
+            pin = json.load(open(ARCHIVE_PIN))
+            got = codetree.dir_tree(CODE_ROOT)
+        except (OSError, ValueError, codetree.CodeTreeError) as e:
+            raise PathOverrideRefused(f"code archive unreadable ({e}) - refusing") from None
+        if not isinstance(pin, dict) or got != pin.get("tree") or not pin.get("commit"):
+            raise PathOverrideRefused(f"code archive tree {got[:12]} != pinned {str(pin.get('tree'))[:12]} - refusing")
+        _ARCHIVE = pin
+    return _ARCHIVE
+
+
+def sandbox_in(name):
+    """RUN/in/<name> inside the sandbox (read-only, written by the host), else None."""
+    sb = sandbox_run()
+    return os.path.join(sb, "in", name) if sb else None
+
+
 def gate_user_mode():
     if is_test() or in_sandbox() or not os.path.exists(GATE_ENABLED):
         return False
@@ -139,9 +184,8 @@ def state_dir():
     """Second anchor location (outside the repo/log dir)."""
     if is_test():
         return os.path.join(_TEST_ROOT, ".state", "finance-chain")
-    sb = sandbox_run()
-    if sb:
-        return os.path.join(sb, "logs", ".state")
+    if in_sandbox():
+        raise PathOverrideRefused("no chain anchors inside the sandbox (Verifier v5 F2: anchors stay outside RUN)")
     if gate_user_mode():
         return os.path.join(GATE_STATE, "state")
     return os.path.join(home(), ".local", "state", "finance-chain")

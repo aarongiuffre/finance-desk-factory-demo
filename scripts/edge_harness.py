@@ -43,7 +43,6 @@ import math
 import os
 import random
 import statistics
-import subprocess
 import sys
 import zipfile
 from zoneinfo import ZoneInfo
@@ -172,24 +171,19 @@ def spec_sha(spec):
 
 
 def load_prereg(rel):
-    """Committed prereg (HEAD blob == working copy) -> (doc, spec, info)."""
-    root = finpaths.root()
-
-    def git(*a):
-        r = subprocess.run(["git", "-C", root, *a], capture_output=True)
-        return r.returncode, r.stdout
-    absf = os.path.join(root, rel)
-    if not os.path.exists(absf):
-        raise SpecError(f"no prereg {rel}")
-    rc, blob = git("show", f"HEAD:{rel}")
-    if rc != 0:
+    """Committed prereg (HEAD blob == working copy of the CODE checkout; in the sandbox the
+    tree-hash-verified code archive, which has no git - fold_gate._head_blob) -> (doc, spec, info)."""
+    ok, why, blob = fold_gate._head_blob(rel)
+    if not ok:
+        if why.startswith("no file"):
+            raise SpecError(f"no prereg {rel}")
+        if "differs" in why:
+            raise SpecError(f"{rel} differs from HEAD (uncommitted change)")
         raise SpecError(f"{rel} is not committed")
-    if open(absf, "rb").read() != blob:
-        raise SpecError(f"{rel} differs from HEAD (uncommitted change)")
-    rc, c = git("log", "-1", "--format=%H", "--", rel)
+    c = fold_gate._path_commit(rel)
     doc = fold_gate._yaml(blob)
     spec = parse_spec(doc)
-    return doc, spec, {"path": rel, "sha256": hashlib.sha256(blob).hexdigest(), "commit": c.decode().strip(),
+    return doc, spec, {"path": rel, "sha256": hashlib.sha256(blob).hexdigest(), "commit": c,
                        "hypothesis": str(doc.get("hypothesis", "")), "family": str(doc.get("family", "")),
                        "spec_sha256": spec_sha(spec)}
 
@@ -486,9 +480,29 @@ class Benchmarks:
 
 
 # ----------------------------------------------------------------------------- variants chain / DSR
+SANDBOX_MAX_LOCAL = 2000          # records a sandbox run may write (the host enforces it again)
+
+
+def _sandbox_local():
+    """INSIDE: this run's own records (plain JSONL in RUN/logs, untrusted by the host)."""
+    p = finpaths.variants_log()
+    if not os.path.exists(p):
+        return []
+    out = []
+    for ln in open(p, "rb"):
+        r = json.loads(ln)
+        if isinstance(r, dict):
+            out.append(r)
+    return out
+
+
 def read_variants():
     """Strict chain read; when the real remote is reachable the chain must also extend
-    its witnessed head (a reset/rewrite after a gated grant raises - Verifier F12)."""
+    its witnessed head (a reset/rewrite after a gated grant raises - Verifier F12).
+    Inside the sandbox: the host's read-only snapshot of the real chain (RUN/in) + this
+    run's own records."""
+    if finpaths.in_sandbox():
+        return fold_gate._sandbox_snapshot("variants") + _sandbox_local()
     recs = chainlog.read_strict(finpaths.variants_log())
     import witness
     try:
@@ -499,6 +513,14 @@ def read_variants():
 
 
 def log_variant(rec):
+    if finpaths.in_sandbox():               # no chain, no anchor inside RUN (Verifier v5 F2)
+        line = json.dumps(rec, sort_keys=True, ensure_ascii=True, default=str).encode() + b"\n"
+        fd = os.open(finpaths.variants_log(), os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o644)
+        try:
+            os.write(fd, line)
+        finally:
+            os.close(fd)
+        return rec
     return chainlog.append(finpaths.variants_log(), rec)
 
 
@@ -514,7 +536,7 @@ def trial_count(var_recs, gate_recs):
     are logged by the gate, witnessed off-box at every gated grant
     (scripts/witness.py) and, after Aaron's finance-gate step, written by another uid."""
     runs = {v["run_id"] for v in var_recs if v.get("run_id")}
-    toks = {v.get("token") for v in var_recs if v.get("token")}
+    toks = {v.get("token") for v in var_recs if v.get("token") and v.get("run_id")}   # host markers carry no run_id
     orphan = [g for g in gate_recs if g.get("granted") and g.get("token") and g["token"] not in toks]
     return len(runs) + len(orphan), len(runs), len(orphan)
 

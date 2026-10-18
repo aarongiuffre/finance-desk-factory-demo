@@ -18,7 +18,10 @@ Runs as ROOT on slowglow-controlled inputs, so it imports NO repo code and trust
   check-src PATH...                      exit 0 iff every PATH passes the source checks
   migrate SRC_LOGS SRC_STATE DST MARKER  copy + verify + marker (root only)
   verify DST                             strict check of DST/logs/*.jsonl + both anchor sets
-  copy-file SRC DST                      safe copy (root-owned 0644)
+  copy-file SRC DST [SHA256]             safe copy (root-owned 0644); with SHA256 the bytes read must
+                                         hash to it, else nothing is written (Verifier v5 C-G1)
+  read-file SRC OWNER                    safe read to stdout of a file owned by OWNER, ancestors root/OWNER
+                                         (revert reads /var/lib/finance-gate without root following links)
 """
 import fcntl
 import hashlib
@@ -226,9 +229,16 @@ def main(argv):
             print(json.dumps(migrate(*argv[1:])))
         elif argv[:1] == ["verify"] and len(argv) == 2:
             print(json.dumps(verify(argv[1])))
-        elif argv[:1] == ["copy-file"] and len(argv) == 3:
-            write_atomic(argv[2], read_safe(argv[1]))
+        elif argv[:1] == ["copy-file"] and len(argv) in (3, 4):
+            data = read_safe(argv[1])
+            if len(argv) == 4 and hashlib.sha256(data).hexdigest() != argv[3]:
+                raise Refused(f"{argv[1]}: sha256 {hashlib.sha256(data).hexdigest()} != pinned {argv[3]}")
+            write_atomic(argv[2], data)
             print("ok")
+        elif argv[:1] == ["read-file"] and len(argv) == 3:
+            u = _uid(argv[2])
+            sys.stdout.buffer.write(read_safe(argv[1], file_uid=u, dir_uids={0, u}))
+            sys.stdout.buffer.flush()
         else:
             print(__doc__, file=sys.stderr)
             return 2

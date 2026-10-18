@@ -23,6 +23,14 @@
 #     verify-chain runs after it and REMOVES the marker again if it fails
 #   * a visudo failure aborts; revert never chowns through a symlink (it writes as slowglow)
 #
+# Revised for Verifier v5 (2026-10-18):
+#   * C-G1: scripts/chainlog.py and scripts/finpaths.py are sha256-PINNED (below) like the helper;
+#     copy-file refuses unless the bytes it read hash to the pin, so root never installs code that
+#     slowglow edited after review.  Re-pin both whenever either file changes (a test checks it).
+#   * a failing verify-chain removes the marker AND the sudoers rule
+#   * revert reads $S through the helper's read-file (O_NOFOLLOW, owner finance-gate, ancestors
+#     root/finance-gate) - no root shell redirect that would follow a planted link
+#
 #   sudo bash ops/staged_sudo/install_finance_gate_user.sh            # DRY RUN
 #   sudo bash ops/staged_sudo/install_finance_gate_user.sh --apply
 #   sudo bash ops/staged_sudo/install_finance_gate_user.sh --revert [--apply]
@@ -32,7 +40,9 @@ H=/usr/local/libexec/finance-gate-append; SUD=/etc/sudoers.d/finance-gate; M=/et
 ST=/home/slowglow/.local/state/finance-chain; MODE=dry
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 HELPER_SRC=$HERE/finance_gate_migrate.py
-HELPER_SHA=a35cd62c664f43505bba78e26482505ea80511f81f529950a3d75964ed406466
+HELPER_SHA=6ce74569b7362aa1d87148bc87aece43858b61d0a6577caba0e3334bfb3ae2fa
+CHAINLOG_SHA=b0ead552f1c1f5558e4903996dccace25e4475d06a36308bd27ed8ffcd3f5981
+FINPATHS_SHA=f221c33cbad97aae718c2dd6657ab378cb8fc32e6fa15424a1d01c21231f3e21
 for a in "$@"; do case "$a" in --apply) [ "$MODE" = revert ] && MODE=revert-apply || MODE=apply;;
   --revert) [ "$MODE" = apply ] && MODE=revert-apply || MODE=revert;;
   *) echo "unknown argument $a" >&2; exit 2;; esac; done
@@ -55,12 +65,16 @@ import os, sys
 p = sys.argv[1]; d = sys.stdin.buffer.read()
 if os.path.lexists(p) and not os.path.islink(p): os.replace(p, p + ".pre-revert")
 t = p + ".tmp-revert"; fd = os.open(t, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
-os.write(fd, d); os.fsync(fd); os.close(fd); os.replace(t, p)' "$1" < "$2"; }
+os.write(fd, d); os.fsync(fd); os.close(fd); os.replace(t, p)' "$1"; }
+  get() { MIG read-file "$1" finance-gate || die "$1 failed the read checks (symlink/owner) - not reverting from it"; }
   for n in holdout_access variants; do
     if [ ! -f "$S/logs/$n.jsonl" ]; then continue; fi
-    put "$ROOT/logs/$n.jsonl" "$S/logs/$n.jsonl"
-    put "$ROOT/logs/.anchors/$n.jsonl.anchor" "$S/logs/.anchors/$n.jsonl.anchor"
-    put "$ST/$n.jsonl.anchor" "$S/state/$n.jsonl.anchor"
+    get "$S/logs/$n.jsonl" > "$T/$n.log"          # $T is root's own mktemp dir; put reads it via the root-opened fd
+    get "$S/logs/.anchors/$n.jsonl.anchor" > "$T/$n.a1"
+    get "$S/state/$n.jsonl.anchor" > "$T/$n.a2"
+    put "$ROOT/logs/$n.jsonl" < "$T/$n.log"
+    put "$ROOT/logs/.anchors/$n.jsonl.anchor" < "$T/$n.a1"
+    put "$ST/$n.jsonl.anchor" < "$T/$n.a2"
   done
   as_slowglow /usr/bin/python3 "$ROOT/scripts/fold_gate.py" verify-chain
   echo "reverted; $S left in place as evidence"; exit 0
@@ -72,12 +86,17 @@ plan:
   install -d -o finance-gate -m 0755 $S $S/logs $S/logs/.anchors $S/state
   copy $ROOT/logs/{holdout_access,variants}.jsonl under their flocks; anchors written from the chain head
     (idempotent: never older over newer, never an anchor rollback)
-  root-owned copies of scripts/{chainlog,finpaths}.py in $LIB (0644, safe copy); helper $H (0755)
+  root-owned copies of scripts/{chainlog,finpaths}.py in $LIB (0644, safe copy, sha256-pinned); helper $H (0755)
   $SUD:  slowglow ALL=(finance-gate) NOPASSWD: $H holdout_access, $H variants   (visudo-checked; abort on failure)
   marker $M (root 0644) after the destination verifies -> finpaths.gate_user_mode() on
   verify-chain as slowglow; on failure the marker is removed again
   originals renamed $ROOT/logs/*.jsonl.moved-to-finance-gate (kept)
 PLAN
+for pin in "chainlog.py $CHAINLOG_SHA" "finpaths.py $FINPATHS_SHA"; do
+  f=${pin% *}; want=${pin#* }; got=$(sha256sum < "$ROOT/scripts/$f" | cut -d' ' -f1)
+  [ "$got" = "$want" ] || die "scripts/$f sha256 $got != pinned $want (review the change, then re-pin)"
+done
+echo "code pins: chainlog.py + finpaths.py match"
 as_slowglow /usr/bin/python3 "$ROOT/scripts/fold_gate.py" verify-chain
 SRCS=("$ROOT/scripts/chainlog.py" "$ROOT/scripts/finpaths.py")
 for n in holdout_access variants; do
@@ -95,8 +114,8 @@ for d in "$S" "$S/logs" "$S/logs/.anchors" "$S/state" /etc/finance-gate "$LIB" /
 done
 install -d -o finance-gate -g finance-gate -m 0755 "$S" "$S/logs" "$S/logs/.anchors" "$S/state"
 install -d -o root -g root -m 0755 /etc/finance-gate "$LIB" /usr/local/libexec
-MIG copy-file "$ROOT/scripts/chainlog.py" "$LIB/chainlog.py" >/dev/null
-MIG copy-file "$ROOT/scripts/finpaths.py" "$LIB/finpaths.py" >/dev/null
+MIG copy-file "$ROOT/scripts/chainlog.py" "$LIB/chainlog.py" "$CHAINLOG_SHA" >/dev/null || die "chainlog.py refused (pin)"
+MIG copy-file "$ROOT/scripts/finpaths.py" "$LIB/finpaths.py" "$FINPATHS_SHA" >/dev/null || die "finpaths.py refused (pin)"
 cat > "$T/helper" <<'PY'
 #!/usr/bin/python3 -I
 import json, sys
@@ -115,7 +134,7 @@ install -o root -g root -m 0440 "$T/sudoers" "$SUD"
 for n in holdout_access variants; do as_slowglow touch "$ROOT/logs/$n.jsonl.lock"; done
 MIG migrate "$ROOT/logs" "$ST" "$S" "$M" || { rm -f "$SUD"; die "migration refused - marker not written, sudoers rule removed"; }
 if ! as_slowglow /usr/bin/python3 "$ROOT/scripts/fold_gate.py" verify-chain; then
-  rm -f "$M"; die "verify-chain (gate-user mode) failed - marker removed, logs still in $ROOT/logs"
+  rm -f "$M" "$SUD"; die "verify-chain (gate-user mode) failed - marker and sudoers rule removed, logs still in $ROOT/logs"
 fi
 for n in holdout_access variants; do
   if [ -f "$ROOT/logs/$n.jsonl" ]; then as_slowglow mv -n "$ROOT/logs/$n.jsonl" "$ROOT/logs/$n.jsonl.moved-to-finance-gate"; fi

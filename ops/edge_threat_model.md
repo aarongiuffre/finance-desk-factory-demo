@@ -1,4 +1,4 @@
-# Edge validation: threat model (round 2, updated round 4, 2026-10-18)
+# Edge validation: threat model (round 2, updated rounds 4 and 5, 2026-10-18)
 
 **Premise.** Code running as `slowglow` cannot stop `slowglow`. Worse, slowglow is in
 `docker` (root-equivalent) and `wheel`. So every in-process or on-box check is at most
@@ -64,13 +64,58 @@ Not guaranteed today, against a deliberate same-user adversary: editing gate cod
 in-process (F7), overwriting the pin (F6b, needs root), resetting logs before the first
 witness (F3, F12), and deleting witness tags (until the ruleset exists).
 
+## Round 5 (Verifier v5): code archive, hardened record, code freeze, go files
+Supersedes the round-4 details above where they differ (worktree, chain seeding).
+- **F1, code is an archive, not a checkout.** `h1_sandbox.sh` takes the sha from
+  `git ls-remote` of the hardcoded remote (smoke: HEAD), exports
+  `git archive <sha>` of the code selection only (`scripts/codetree.py`: scripts/, ops/,
+  tests/, pytest.ini, requirements; minus universe/, docs/, ops/data/ except the dev-slice
+  pin, every `*.md`) into RUN/code, and verifies its git tree hash. Nothing of `.git` is
+  bound in; `GIT_CEILING_DIRECTORIES=/`. RUN/in/code.json + pins.json carry the commit,
+  tree hash, per-path commits, prereg and slice pins; inside, `finpaths` archive mode
+  re-hashes the tree once per process and refuses on a mismatch, and `fold_gate` reads
+  blobs from the verified files. Inside tests prove `universe/` and `git` are ENOENT /
+  "not a git repository". The host helper runs from the archived copy (`-I -B`), the
+  launcher must equal its archived copy (real mode), and post-check re-hashes the code
+  tree and the venv subset after exit.
+- **Venv subset.** Only numpy, yaml, pytest and their deps are bound (no `.pth`, no torch).
+- **F2, `record` is hardened.** The sandbox cannot produce holdout_access records.
+  Variants records pass a schema allowlist (granted/token/fold/approval/nonce/sandbox_/
+  go_/freeze/trial_of refused), max 16 KB each, max 2000; the host adds token and fold.
+  `find_grant`, family grants and trial counts ignore every record with `sandbox_run`;
+  trials are counted by the host from the grant. `record` is idempotent (keyed on the run
+  id), atomic (one `append_many` under the chain lock; output copied to `.partial`, then
+  renamed; a failure leaves nothing appended) and copies only regular files with
+  O_NOFOLLOW (FIFOs, symlinks refused). Anchors never enter RUN. Verifier's six PoCs are
+  tests (tests/test_gate_round5.py).
+- **Code freeze.** `ops/prereg/amendments/<H>/NNN.yaml` maps each frozen path to its
+  blob sha (H1: every `scripts/h1_*.py` and `insider_*.py`, incl. `h1_events.py`).
+  Preflight and the grant require origin/main's blobs to match; the grant records the
+  freeze sha; the first grant under a new freeze appends a `code_amendment` variant
+  (one more trial); validation needs the freeze of the latest dev grant, holdout also
+  that of the latest validation grant. No amendment is written yet.
+- **Go files.** `gate.require_go_file` (REGISTRY.yaml; dev true until Aaron decides,
+  validation/holdout cannot be turned off). Dev: one standing dev go
+  (`ops/offbox/aaron_sign_dev_go.sh`, ssh signature namespace `finance-go`, or a
+  root-owned `/etc/finance-gate/go/<H>.dev.json`) naming the freeze sha and
+  `max_dev_trials`; refused once that many dev grants carry its sha or when the freeze
+  differs. Validation/holdout: a per-run go with prereg sha and single-use nonce, <= 7 days.
+- **Research dataset (C-E2).** `split_research_dataset.sh` moves the 2020+ research data
+  to `fastpool/finance-research/*` (never snapshotted, excluded from zfs-replicate);
+  `encrypt_full_period.sh` refuses before that. The on-box decrypt check was removed
+  (C-E1): the off-box signed `--decrypt-test` is the only one.
+- **Residual risks.** A same-uid process OUTSIDE the sandbox can still write the real
+  chains directly (until step 6) and read the plaintext (until step 4); public SEC data can
+  be re-downloaded from the internet by any agent with network access; the snapshots
+  taken before the split hold the plaintext until Aaron destroys them.
+
 ## Aaron's steps, and what each one closes
 | # | Step | Closes |
 |---|---|---|
 | 1 | Push the current commits, then `bash ops/offbox/witness_init.sh --apply` | Starts the remote witness, so F1, F2, F3 and F12 fail closed at the next grant |
 | 2 | `bash ops/offbox/github_protect.sh --apply` with Aaron's gh login, plus a non-admin push credential on cachyos | Witness tags and main become append-only, even against root on cachyos (F1, F2, F3, F12 durable; F5 durable) |
 | 3 | `sudo bash ops/staged_sudo/install_gate_key.sh aaron.pub --apply` | F6 and F6b, against non-root |
-| 4 | `bash ops/offbox/encrypt_full_period.sh --recipient-key aaron_pub.asc --recipient-fpr <FPR> --apply`; off-box `--decrypt-test` and the signed, archive-bound custody statement; then `--remove-originals --gnupghome <agent dir> [--apply]` (full streaming decrypt verification, then deletion - no plaintext copy kept); then destroy or knowingly retain the ZFS snapshots / replicas | **F7, F11 and every in-process bypass** for the research copies in scope: no plaintext validation/holdout research copy remains in the live tree. Live `raw/price` 2020+, `facts/`, `universe/` stay readable (operational); snapshots hold the old plaintext until destroyed |
+| 4 | `sudo bash ops/staged_sudo/split_research_dataset.sh --apply` (own dataset, no snapshots, not replicated); then `bash ops/offbox/encrypt_full_period.sh --recipient-key aaron_pub.asc --recipient-fpr <FPR> --apply`; off-box `--decrypt-test` and the signed, archive-bound custody statement (the only decrypt check); then `--remove-originals [--apply]` (deletion, no plaintext copy kept); then, as a separate explicit step, destroy or knowingly retain the pre-split ZFS snapshots / backuppool replicas | **F7, F11 and every in-process bypass** for the research copies in scope: no plaintext validation/holdout research copy remains in the live tree. Live `raw/price` 2020+, `facts/`, `universe/` stay readable (operational); pre-split snapshots hold the old plaintext until destroyed |
 | 5 | `sudo bash ops/staged_sudo/leave_root_equivalent_groups.sh --apply` | Makes steps 3 and 6 real (without it, root defeats them) |
 | 6 | Optional: `sudo bash ops/staged_sudo/install_finance_gate_user.sh --apply` | F3 and F12 truncation/reset between gated grants, against non-root |
 

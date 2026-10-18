@@ -17,6 +17,30 @@ real locks are off-box - see ops/edge_threat_model.md):
     a gated grant that is not covered by a remote witness does not verify (F1/F2)
 v2 rules below still apply where not superseded.
 
+v5 (Verifier v5, 2026-10-18 round 5):
+  * CODE FREEZE: a run of a hypothesis needs a committed prereg AMENDMENT
+    ops/prereg/amendments/<hypothesis>/NNN.yaml {hypothesis, amendment: N,
+    prereg_sha256, code_freeze: {path: git blob sha}}; the latest one counts.  Its
+    blobs must equal the files at the code commit AND at the real remote's main;
+    the grant records freeze_sha (sha256 of the canonical map).  Changing a frozen
+    file needs a new amendment, and the first grant under a new freeze_sha logs a
+    code_amendment variant (one more trial).  H1: every scripts/h1_*.py and
+    scripts/insider_*.py except h1_guard/h1_run must be frozen, h1_events.py
+    included.  Validation/holdout grants need the freeze_sha of the hypothesis's
+    latest sandboxed dev grant (holdout: also of its latest validation grant).
+  * GO FILES (ops/prereg/REGISTRY.yaml gate.require_go_file; validation and holdout
+    always, dev default on): signed by Aaron (ssh-keygen -Y sign -n finance-go,
+    logs/approvals/go/<H>.<fold>.json + .sig) or root-owned
+    (/etc/finance-gate/go/<H>.<fold>.json).  dev: one STANDING go naming the
+    freeze_sha and max_dev_trials (refused once that many dev grants carry its
+    sha, or when the freeze differs).  validation/holdout: per-run go naming the
+    freeze_sha, prereg sha, a single-use nonce and an expiry.
+  * SANDBOX: no grant and no chain write inside ops/gate/h1_sandbox.sh; the grant
+    snapshot is read-only in RUN/in; records carrying sandbox_run (written by the
+    host's record step) never count as grants.  Code is a codetree archive
+    (finpaths.archive_pin): "HEAD" is the pinned commit, files are read from the
+    verified tree, git (host only) runs against the pinned git dir.
+
 A Window is the capability that decides which rows are readable: research
 readers resolve their data root through fold_data.research_root(window), the
 harness loads prices with max_date = window.hi and rejects events outside it.
@@ -88,6 +112,8 @@ SIGN_NAMESPACE = "finance-holdout"
 SIGNER_ID = "aaron"
 GATE_CODE = ("scripts/fold_gate.py", "scripts/chainlog.py", "scripts/finpaths.py", "scripts/fold_data.py",
              "scripts/witness.py",
+             # Verifier v5: the code-archive exporter / tree hash
+             "scripts/codetree.py",
              # H1 sandbox path (Verifier v4 item 4): the slice pin, the entrypoint, its accident
              # guard, the sandbox launcher + its outside helper, and the harness itself
              "ops/data/h1_dev_slice.sha256", "scripts/h1_guard.py", "scripts/h1_run.py",
@@ -100,6 +126,11 @@ FOLDS = {"dev": ("2009-01-01", "2019-12-31"),
          "validation": ("2020-01-01", "2024-03-31"),
          "holdout": ("2024-04-01", "2026-09-30")}
 GATED = ("validation", "holdout")
+AMEND_DIR = PREREG_DIR + "/amendments"
+FREEZE_EXEMPT = ("scripts/h1_guard.py", "scripts/h1_run.py")     # gate infra, pinned via GATE_CODE
+GO_NAMESPACE = "finance-go"
+GO_DIR = os.path.join("logs", "approvals", "go")                 # gitignored; Aaron copies signed go files here
+GO_ROOT_DIR = "/etc/finance-gate/go"                             # alternative: root-owned go files (no signature)
 
 
 class GateRefused(Exception):
@@ -179,13 +210,46 @@ def push_witness(commit):
     return out
 
 
+def _git_cmd():
+    """git argv prefix.  Archive mode (h1_sandbox.sh RUN/code): the pinned git dir, and
+    None inside the sandbox (no git, no object store there)."""
+    pin = finpaths.archive_pin()
+    if pin is not None:
+        return None if finpaths.in_sandbox() else ["git", "--git-dir", pin["git_dir"]]
+    return ["git", "-C", _root()]
+
+
+def _rev():
+    """The code commit: the archive's pinned commit, else HEAD of the checkout."""
+    pin = finpaths.archive_pin()
+    return pin["commit"] if pin is not None else "HEAD"
+
+
 def _git(*args):
-    r = subprocess.run(["git", "-C", _root(), *args], capture_output=True)
+    cmd = _git_cmd()
+    if cmd is None:
+        return 128, b""
+    r = subprocess.run([*cmd, *args], capture_output=True)
     return r.returncode, r.stdout
 
 
+def _sandbox_snapshot(name):
+    """INSIDE the sandbox: the host's read-only snapshot of a real chain (RUN/in/chains.json)."""
+    try:
+        d = json.load(open(finpaths.sandbox_in("chains.json")))
+        recs = d[name]
+        if not isinstance(recs, list):
+            raise TypeError
+        return [r for r in recs if isinstance(r, dict)]
+    except (OSError, ValueError, KeyError, TypeError):
+        raise GateRefused("no readable grant snapshot in the sandbox (RUN/in/chains.json)") from None
+
+
 def _read_log():
-    """Strict chain read.  Raises GateRefused (fail closed) on any integrity problem."""
+    """Strict chain read.  Raises GateRefused (fail closed) on any integrity problem.
+    Inside the sandbox: the host's read-only snapshot (the sandbox has no chain)."""
+    if finpaths.in_sandbox():
+        return _sandbox_snapshot("holdout_access")
     try:
         return chainlog.read_strict(finpaths.gate_log())
     except chainlog.ChainError as e:
@@ -193,6 +257,8 @@ def _read_log():
 
 
 def _append(rec):
+    if finpaths.in_sandbox():
+        raise GateRefused("the sandbox never writes the access log (Verifier v5 F2)")
     try:
         return chainlog.append(finpaths.gate_log(), rec)
     except chainlog.ChainError as e:
@@ -215,19 +281,57 @@ def _yaml(blob):
 
 
 def _head_blob(rel):
-    """(ok, reason, blob) - tracked, present at HEAD, working copy identical."""
+    """(ok, reason, blob) - tracked, present at HEAD, working copy identical.
+    Archive mode: the file of the tree-hash-verified code archive (== the pinned commit)."""
     absf = os.path.join(_root(), rel)
+    if finpaths.archive_pin() is not None:
+        if os.path.isabs(rel) or ".." in rel.split("/") or not os.path.isfile(absf) or os.path.islink(absf):
+            return False, f"no file {rel} in the code archive", b""
+        return True, "ok", open(absf, "rb").read()
     if not os.path.exists(absf):
         return False, f"no file {rel}", b""
     rc, _ = _git("ls-files", "--error-unmatch", rel)
     if rc != 0:
         return False, f"{rel} is not tracked in git", b""
-    rc, blob = _git("show", f"HEAD:{rel}")
+    rc, blob = _git("show", f"{_rev()}:{rel}")
     if rc != 0:
         return False, f"{rel} not present at HEAD", b""
     if open(absf, "rb").read() != blob:
         return False, f"{rel} differs from HEAD (uncommitted change)", b""
     return True, "ok", blob
+
+
+def _tracked_under(prefix):
+    """Tracked files (at the code commit) under a directory prefix ('a/b/'), sorted."""
+    pin = finpaths.archive_pin()
+    if pin is not None:
+        base = os.path.join(_root(), prefix)
+        out = []
+        for dp, _, fns in os.walk(base):
+            out += [os.path.relpath(os.path.join(dp, f), _root()).replace(os.sep, "/") for f in fns]
+        return sorted(out)
+    rc, o = _git("ls-tree", "-r", "--name-only", "-z", _rev(), "--", prefix)
+    return sorted(x for x in o.decode().split("\0") if x) if rc == 0 else []
+
+
+def _path_commit(rel):
+    """Last commit touching rel at the code commit ('' if none).  Inside the sandbox
+    (no git) from the archive pin's path_commits, computed by the host at export."""
+    pin = finpaths.archive_pin()
+    if pin is not None and finpaths.in_sandbox():
+        return str((pin.get("path_commits") or {}).get(rel, ""))
+    rc, c = _git("log", "-1", "--format=%H", _rev(), "--", rel)
+    return c.decode().strip() if rc == 0 else ""
+
+
+def load_registry_doc():
+    ok, why, blob = _head_blob(REGISTRY)
+    if not ok:
+        return None, why
+    try:
+        return _yaml(blob), "ok"
+    except ValueError as e:
+        return None, f"{REGISTRY}: {e}"
 
 
 def load_registry():
@@ -281,8 +385,7 @@ def prereg_status(hypothesis):
     if hypothesis not in (f.get("hypotheses") or []):
         out["reason"] = f"hypothesis {hypothesis!r} is not listed under family {fam!r} in {REGISTRY}"
         return out
-    rc, c = _git("log", "-1", "--format=%H", "--", rel)
-    out["commit"] = c.decode().strip() if rc == 0 else ""
+    out["commit"] = _path_commit(rel)
     if not out["commit"]:
         out["reason"] = f"{rel}: no commit found"
         return out
@@ -301,6 +404,13 @@ def tree_status(remote_sha=None):
     if not finpaths.is_test() and (data == code or data.startswith(code + os.sep)):
         return False, ("gated reads must run from a fresh worktree of the pushed commit, not the data "
                        "checkout: bash ops/gate/gated_run.sh -- <command>")
+    pin = finpaths.archive_pin()
+    if pin is not None:                      # codetree export: tree hash verified == pinned commit
+        if finpaths.in_sandbox():
+            return False, "no gated tree check inside the sandbox"
+        if remote_sha and pin["commit"] != remote_sha:
+            return False, f"code archive commit {pin['commit'][:12]} != pushed remote main {remote_sha[:12]}"
+        return True, "ok"
     if remote_sha:
         rc, head = _git("rev-parse", "HEAD")
         head = head.decode().strip()
@@ -337,7 +447,10 @@ def origin_status(prereg_rel, prereg_commit, remote_sha=None):
         remote_sha, why = remote_head()
         if remote_sha is None:
             return False, why
-    r = subprocess.run(["git", "-C", _root(), "fetch", "-q", witness.remote_url(), "refs/heads/main"],
+    cmd = _git_cmd()
+    if cmd is None:
+        return False, "no remote access inside the sandbox"
+    r = subprocess.run([*cmd, "fetch", "-q", witness.remote_url(), "refs/heads/main"],
                        capture_output=True, timeout=180, env=witness.GIT_ENV)
     rc, _ = _git("cat-file", "-e", f"{remote_sha}^{{commit}}")
     if r.returncode != 0 or rc != 0:
@@ -347,9 +460,9 @@ def origin_status(prereg_rel, prereg_commit, remote_sha=None):
         return False, f"prereg commit {prereg_commit[:12]} is not on the real remote's main (push it first)"
     for rel in (prereg_rel, REGISTRY) + GATE_CODE:
         rc_o, ob = _git("show", f"{remote_sha}:{rel}")
-        rc_h, hb = _git("show", f"HEAD:{rel}")
-        if rc_o != 0 and rc_h != 0 and rel in GATE_CODE[5:]:
-            continue                       # absent on BOTH sides (test repos): consistent, nothing to run
+        rc_h, hb = _git("show", f"{_rev()}:{rel}")
+        if rc_o != 0 and rc_h != 0 and rel in GATE_CODE[5:] and finpaths.is_test():
+            continue                       # absent on BOTH sides of a TEST repo: consistent, nothing to run
         if rc_o != 0 or rc_h != 0 or ob != hb:
             return False, f"{rel} at HEAD differs from the real remote's main (push and review first)"
     return True, "ok"
@@ -377,28 +490,73 @@ def sandbox_window_path():
     return os.path.join(sb, "in", "window.json") if sb else None
 
 
+def code_archive_status():
+    """(ok, reason): the running code is the pinned codetree archive (tree hash recomputed
+    once per process and cached; finpaths.archive_pin)."""
+    try:
+        return (finpaths.archive_pin() is not None), "ok"
+    except finpaths.PathOverrideRefused as e:
+        return False, str(e)
+
+
+def sandbox_pins():
+    """INSIDE: the host's preflight values for this run (RUN/in/pins.json)."""
+    try:
+        d = json.load(open(finpaths.sandbox_in("pins.json")))
+        return d if isinstance(d, dict) else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+
 def sandbox_ready(hypothesis):
     """INSIDE ops/gate/h1_sandbox.sh: (ok, reason, Window).  The gate check proper
-    (prereg commit on the real remote via ls-remote, slice == prereg == pin) ran OUTSIDE
-    before launch (scripts/sandbox_host.py preflight); the grant was made outside and
-    seeded into the sandbox chain.  Here: the sandbox is real, the committed prereg is
-    intact, the seeded window verifies, and the slice manifest == prereg sha == HEAD pin."""
+    (prereg commit == real remote main via ls-remote, code freeze blobs == remote, go file,
+    slice == prereg == pin) ran OUTSIDE before launch (scripts/sandbox_host.py preflight +
+    grant).  Here, with no git and no chain: the code is the pinned archive (tree hash
+    recomputed now), the committed prereg / freeze / slice computed from that archive equal
+    the host's pins, and the window is the snapshot's sandboxed dev grant for this commit."""
     if not finpaths.in_sandbox():
         return False, "H1 runs only inside the OS sandbox: ops/gate/h1_sandbox.sh --real", None
+    try:
+        pin = finpaths.archive_pin()
+    except finpaths.PathOverrideRefused as e:
+        return False, str(e), None
+    if pin is None:
+        return False, "sandbox code is not a pinned code archive (RUN/in/code.json)", None
+    pins = sandbox_pins()
+    if not pins or pins.get("commit") != pin["commit"] or pins.get("tree") != pin["tree"]:
+        return False, "RUN/in/pins.json does not name this code archive", None
     st = prereg_status(hypothesis)
     if not st["ok"]:
         return False, st["reason"], None
+    if st["sha"] != pins.get("prereg_sha") or st["commit"] != pins.get("prereg_commit"):
+        return False, "prereg in the archive differs from the host's preflight", None
     try:
         d = json.load(open(sandbox_window_path()))
         w = Window(**{k: d[k] for k in ("hypothesis", "fold", "lo", "hi", "token", "prereg_sha",
                                         "family", "prereg_commit")})
     except (OSError, ValueError, KeyError, TypeError) as e:
         return False, f"no sandbox window ({e.__class__.__name__})", None
-    if w.hypothesis != hypothesis or w.fold != "dev" or not verify(w):
+    if w.hypothesis != hypothesis or w.fold != "dev":
         return False, "sandbox window does not verify (not the seeded dev grant)", None
+    try:
+        g = find_grant(w)
+    except GateRefused as e:
+        return False, str(e), None
+    if g is None or not isinstance(g.get("sandbox_launch"), dict) or g["sandbox_launch"].get("commit") != pin["commit"]:
+        return False, "sandbox window does not verify (not the seeded dev grant)", None
+    ok, why, fz = code_freeze(hypothesis, st)
+    if not ok:
+        return False, why, None
+    if not (fz["freeze_sha"] == g.get("freeze_sha") == pins.get("freeze_sha")):
+        return False, "code freeze of the archive differs from the grant's freeze_sha", None
+    if go_required("dev") and not g.get("go_sha"):
+        return False, "the dev grant carries no go file (require_go_file.dev)", None
     want, why = prereg_slice_sha(hypothesis)
     if want is None:
         return False, why, None
+    if want != pins.get("price_slice_sha256"):
+        return False, "prereg slice sha differs from the host's preflight", None
     import fold_data
     try:
         for rel in fold_data.SLICES:
@@ -408,8 +566,214 @@ def sandbox_ready(hypothesis):
     return True, "ok", w
 
 
+# ----------------------------------------------------------------------------- code freeze
+def _blob_sha(rel):
+    """git blob sha of rel at the code commit (working copy == HEAD / archive verified)."""
+    import codetree
+    ok, why, blob = _head_blob(rel)
+    return (codetree.blob_sha(blob), "ok") if ok else (None, why)
+
+
+def freeze_sha(cf):
+    return hashlib.sha256(json.dumps(cf, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def freeze_coverage(hypothesis):
+    """Files a hypothesis's code freeze must cover.  H1: all H1 sources (h1_guard lint set)
+    except the gate infrastructure (pinned via GATE_CODE), h1_events.py included."""
+    if not hypothesis.startswith("H1_"):
+        return set(), ()
+    req = {p for p in _tracked_under("scripts/") if "/" not in p[len("scripts/"):]
+           and p.endswith(".py") and os.path.basename(p).startswith(("h1_", "insider_")) and p not in FREEZE_EXEMPT}
+    return req, ("scripts/h1_events.py",)
+
+
+def code_freeze(hypothesis, st=None):
+    """(ok, reason, {amendment, n, freeze, freeze_sha}) of the latest committed amendment."""
+    st = st or prereg_status(hypothesis)
+    if not st["ok"]:
+        return False, st["reason"], None
+    prefix = f"{AMEND_DIR}/{hypothesis}/"
+    rels = _tracked_under(prefix)
+    if not rels:
+        return False, (f"no code_freeze amendment for {hypothesis} ({prefix}NNN.yaml): nothing runs "
+                       f"unfrozen"), None
+    nums = []
+    for r in rels:
+        m = re.fullmatch(r"(\d{3})\.yaml", r[len(prefix):])
+        if not m:
+            return False, f"unexpected file {r} in {prefix}", None
+        nums.append(int(m.group(1)))
+    if nums != list(range(1, len(nums) + 1)):
+        return False, f"amendments in {prefix} must be numbered 001..{len(nums):03d} without gaps", None
+    rel = rels[-1]
+    ok, why, blob = _head_blob(rel)
+    if not ok:
+        return False, why, None
+    try:
+        doc = _yaml(blob)
+    except ValueError as e:
+        return False, f"{rel}: {e}", None
+    if str(doc.get("hypothesis", "")) != hypothesis:
+        return False, f"{rel} declares hypothesis {doc.get('hypothesis')!r}", None
+    if doc.get("amendment") != nums[-1]:
+        return False, f"{rel} declares amendment {doc.get('amendment')!r}, not {nums[-1]}", None
+    if doc.get("prereg_sha256") != st["sha"]:
+        return False, f"{rel} amends prereg {str(doc.get('prereg_sha256'))[:12]}, not the committed {st['sha'][:12]}", None
+    cf = doc.get("code_freeze")
+    if not isinstance(cf, dict) or not cf:
+        return False, f"{rel} has no code_freeze mapping", None
+    import codetree
+    for path, want in cf.items():
+        if (not isinstance(path, str) or not isinstance(want, str) or not re.fullmatch(r"[0-9a-f]{40}", want)
+                or path.startswith("/") or ".." in path.split("/") or not codetree.selected(path)):
+            return False, f"{rel}: bad code_freeze entry {path!r}: {want!r}", None
+        got, why = _blob_sha(path)
+        if got is None:
+            return False, f"frozen file {path}: {why}", None
+        if got != want:
+            return False, (f"{path} blob {got[:12]} != frozen {want[:12]} in {rel} "
+                           f"(a change needs a new amendment = a new variant)"), None
+    req, must = freeze_coverage(hypothesis)
+    missing = sorted((req | set(must)) - set(cf))
+    if missing:
+        return False, f"{rel} does not freeze {', '.join(missing)}", None
+    return True, "ok", {"amendment": rel, "n": nums[-1], "freeze": dict(cf), "freeze_sha": freeze_sha(cf)}
+
+
+# ----------------------------------------------------------------------------- go files
+def go_required(fold):
+    """REGISTRY.yaml gate.require_go_file.<fold>.  validation/holdout: always (setting
+    them false refuses); dev: default True.  Unreadable registry -> required."""
+    doc, _ = load_registry_doc()
+    rg = ((doc or {}).get("gate") or {}).get("require_go_file") or {}
+    if not isinstance(rg, dict):
+        rg = {}
+    if fold in GATED:
+        if rg.get(fold, True) is not True:
+            raise GateRefused(f"{REGISTRY}: gate.require_go_file.{fold} cannot be turned off")
+        return True
+    return rg.get("dev", True) is not False
+
+
+def go_root_dir():
+    return finpaths.p(".state", "etc", "go") if finpaths.is_test() else GO_ROOT_DIR
+
+
+def go_files(hypothesis, fold):
+    name = f"{hypothesis}.{fold}.json"
+    signed = os.path.join(finpaths.root(), GO_DIR, name)
+    return signed, signed + ".sig", os.path.join(go_root_dir(), name)
+
+
+def _read_small(p, limit=65536):
+    import codetree
+    try:
+        return codetree.read_regular(p, limit)
+    except codetree.CodeTreeError as e:
+        raise GateRefused(str(e)) from None
+
+
+def load_go(hypothesis, fold):
+    """(ok, reason, doc, raw bytes, kind 'root'|'signed')."""
+    signed, sig, ro = go_files(hypothesis, fold)
+    if os.path.lexists(ro):
+        data, st = _read_small(ro)
+        if not finpaths.is_test():
+            d = os.stat(os.path.dirname(ro))
+            if st.st_uid != 0 or st.st_mode & 0o022 or d.st_uid != 0 or d.st_mode & 0o022:
+                return False, f"{ro} must be root-owned and not group/other-writable", None, b"", ""
+        kind = "root"
+    elif os.path.lexists(signed) and os.path.lexists(sig):
+        data, _ = _read_small(signed)
+        sg, _ = _read_small(sig)
+        ok, why = verify_signature(data, sg, GO_NAMESPACE)
+        if not ok:
+            return False, f"go file {os.path.basename(signed)}: {why}", None, b"", ""
+        kind = "signed"
+    else:
+        return False, (f"no go file for {hypothesis} {fold}: Aaron-signed {GO_DIR}/{hypothesis}.{fold}.json"
+                       f"(+.sig, ops/offbox/aaron_sign_dev_go.sh) or root-owned {ro}"), None, b"", ""
+    try:
+        doc = json.loads(data)
+    except ValueError:
+        return False, "go file is not JSON", None, b"", ""
+    if not isinstance(doc, dict):
+        return False, "go file is not a JSON object", None, b"", ""
+    return True, "ok", doc, data, kind
+
+
+def check_go(hypothesis, fold, freeze, prereg_sha, recs, now=None):
+    """(ok, reason, grant fields).  freeze: the freeze_sha the grant will carry."""
+    required = go_required(fold)
+    signed, sig, ro = go_files(hypothesis, fold)
+    if not required and not (os.path.lexists(ro) or os.path.lexists(signed)):
+        return True, "ok", {"go_required": False}
+    ok, why, doc, data, kind = load_go(hypothesis, fold)
+    if not ok:
+        return False, why, None
+    go_sha = hashlib.sha256(data).hexdigest()
+    want_kind = "standing_dev_go" if fold == "dev" else "run_go"
+    for k, v in (("v", 1), ("kind", want_kind), ("hypothesis", hypothesis), ("fold", fold)):
+        if doc.get(k) != v:
+            return False, f"go file {k}={doc.get(k)!r}, need {v!r}", None
+    if doc.get("freeze_sha") != freeze:
+        return False, f"go file names freeze {str(doc.get('freeze_sha'))[:12]}, the code freeze is {freeze[:12]}", None
+    now = now or _now()
+    if not isinstance(doc.get("expires"), str) or now > doc["expires"]:
+        return False, "go file expired", None
+    live = [r for r in recs if "sandbox_run" not in r]
+    if fold == "dev":
+        m = doc.get("max_dev_trials")
+        if not isinstance(m, int) or isinstance(m, bool) or m < 1:
+            return False, "standing dev go needs max_dev_trials >= 1", None
+        used = sum(1 for r in live if r.get("granted") and r.get("fold") == "dev"
+                   and r.get("hypothesis") == hypothesis and r.get("go_sha") == go_sha)
+        if used >= m:
+            return False, f"standing dev go used up: {used}/{m} dev trials granted under it", None
+        return True, "ok", {"go_sha": go_sha, "go_kind": kind, "go_trial": used + 1, "go_max_trials": m}
+    if doc.get("prereg_sha256") != prereg_sha:
+        return False, "go file names a different prereg sha", None
+    nonce = doc.get("nonce")
+    if not isinstance(nonce, str) or len(nonce) < 8:
+        return False, "go file has no nonce", None
+    if any(r.get("go_nonce") == nonce for r in recs):
+        return False, "go nonce already used (replay)", None
+    return True, "ok", {"go_sha": go_sha, "go_kind": kind, "go_nonce": nonce}
+
+
+def _authorize(hypothesis, fold, st, recs, remote_sha):
+    """Code freeze + go file for a sandboxed dev grant or a gated grant -> grant fields."""
+    ok, why, fz = code_freeze(hypothesis, st)
+    if not ok:
+        raise GateRefused(why)
+    for path, want in sorted(fz["freeze"].items()):
+        rc, o = _git("rev-parse", f"{remote_sha}:{path}")
+        if rc != 0 or o.decode().strip() != want:
+            raise GateRefused(f"frozen {path} differs on the real remote's main {remote_sha[:12]}")
+    live = [r for r in recs if r.get("granted") and r.get("hypothesis") == hypothesis and "sandbox_run" not in r]
+    if fold in GATED:
+        dev = [r for r in live if r.get("fold") == "dev" and r.get("freeze_sha")]
+        if not dev:
+            raise GateRefused(f"no sandboxed dev grant for {hypothesis} under a code freeze - dev first")
+        if dev[-1]["freeze_sha"] != fz["freeze_sha"]:
+            raise GateRefused(f"code freeze {fz['freeze_sha'][:12]} != the latest dev grant's "
+                              f"{dev[-1]['freeze_sha'][:12]} (validate what was developed)")
+        if fold == "holdout":
+            val = [r for r in live if r.get("fold") == "validation" and r.get("freeze_sha")]
+            if val and val[-1]["freeze_sha"] != fz["freeze_sha"]:
+                raise GateRefused("code freeze differs from the latest validation grant's")
+    ok, why, go = check_go(hypothesis, fold, fz["freeze_sha"], st["sha"], recs)
+    if not ok:
+        raise GateRefused(why)
+    out = {"freeze_sha": fz["freeze_sha"], "freeze_amendment": fz["amendment"], **go}
+    new = not any(r.get("freeze_sha") == fz["freeze_sha"] for r in live)
+    return out, (fz if new else None)
+
+
 def _family_grants(recs, family, fold):
-    return [r for r in recs if r.get("granted") and r.get("fold") == fold and r.get("family") == family]
+    return [r for r in recs if r.get("granted") and r.get("fold") == fold and r.get("family") == family
+            and "sandbox_run" not in r]
 
 
 def _approval_files(family):
@@ -417,7 +781,7 @@ def _approval_files(family):
     return base, base + ".sig"
 
 
-def verify_signature(data, sig):
+def verify_signature(data, sig, namespace=SIGN_NAMESPACE):
     """ssh-keygen -Y verify against the root-owned pinned key file. -> (ok, reason)."""
     ok, why, signers = pinned_signers()
     if not ok:
@@ -426,7 +790,7 @@ def verify_signature(data, sig):
         a, s = os.path.join(td, "allowed"), os.path.join(td, "x.sig")
         open(a, "wb").write(signers)
         open(s, "wb").write(sig)
-        r = subprocess.run(["ssh-keygen", "-Y", "verify", "-f", a, "-I", SIGNER_ID, "-n", SIGN_NAMESPACE, "-s", s],
+        r = subprocess.run(["ssh-keygen", "-Y", "verify", "-f", a, "-I", SIGNER_ID, "-n", namespace, "-s", s],
                            input=data, capture_output=True)
     return (r.returncode == 0), ("ok" if r.returncode == 0 else "signature does not verify against allowed_signers")
 
@@ -452,14 +816,21 @@ def check_approval(data, sig, family, hypothesis, st, now=None):
     return True, "ok"
 
 
-def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None):
-    """Return a Window or raise GateRefused.  Every call is logged in the chain."""
+def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None, sandboxed=False, launch=None):
+    """Return a Window or raise GateRefused.  Every call is logged in the chain.
+    sandboxed=True: the dev grant behind an ops/gate/h1_sandbox.sh --real run (made by
+    scripts/sandbox_host.py, launch = {run, commit, tree}); it needs what a gated grant
+    needs of the code (prereg + code on the real remote, pristine/archived tree, code
+    freeze, go file) but reads only dev."""
+    if finpaths.in_sandbox():
+        raise GateRefused("no grants inside the sandbox (the host grants before launch)")
     recs = _read_log()                                         # fail closed before anything else
     gated = fold in GATED
     rec = {"ts": _now(), "hypothesis": hypothesis, "fold": fold, "kind": kind, "purpose": purpose,
            "user": getpass.getuser(), "pid": os.getpid(), "gate_version": 2}
-    rc, head = _git("rev-parse", "HEAD")
+    rc, head = _git("rev-parse", _rev())
     rec["git_head"] = head.decode().strip() if rc == 0 else ""
+    new_freeze = None
 
     def refuse(why):
         rec.update(granted=False, reason=why)
@@ -473,7 +844,9 @@ def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None):
     if lo < flo or hi > fhi or lo > hi:
         refuse(f"requested {lo}..{hi} outside fold {fold} {flo}..{fhi}")
     extra = {}
-    if fold in GATED:
+    if sandboxed and (fold != "dev" or kind != "hypothesis" or not isinstance(launch, dict)):
+        refuse("sandboxed grants are dev hypothesis grants with a launch record")
+    if fold in GATED or sandboxed:
         if kind != "hypothesis":
             refuse(f"kind={kind} is dev-only")
         st = prereg_status(hypothesis)
@@ -495,7 +868,18 @@ def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None):
             check_witness(required=True)
         except GateRefused as e:
             refuse(str(e))
-        if fold == "validation":
+        try:
+            auth, new_freeze = _authorize(hypothesis, fold, st, recs, remote_sha)
+        except GateRefused as e:
+            refuse(str(e))
+        extra.update(auth)
+        if sandboxed:
+            extra["sandbox_launch"] = {k: str(launch.get(k, "")) for k in ("run", "commit", "tree")}
+            if extra["sandbox_launch"]["commit"] != remote_sha:
+                refuse("sandbox launch commit != the real remote's main")
+        if fold == "dev":
+            pass
+        elif fold == "validation":
             prior = _family_grants(recs, fam, "validation")
             if len(prior) >= MAX_VALIDATION_READS:
                 refuse(f"family {fam!r} used all {MAX_VALIDATION_READS} validation reads")
@@ -520,8 +904,8 @@ def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None):
             nonce = json.loads(data)["nonce"]
             if any(r.get("approval_nonce") == nonce for r in recs):
                 refuse("approval nonce already used (replay)")
-            extra = {"approval": data.decode(), "approval_sig": sig.decode(), "approval_nonce": nonce,
-                     "approval_sha256": hashlib.sha256(data).hexdigest()}
+            extra.update(approval=data.decode(), approval_sig=sig.decode(), approval_nonce=nonce,
+                         approval_sha256=hashlib.sha256(data).hexdigest())
         extra.update(prereg=st["path"], prereg_sha=st["sha"], prereg_commit=st["commit"], family=fam)
     else:
         try:                                    # dev: witness checked when reachable, mismatch fails closed
@@ -529,11 +913,19 @@ def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None):
         except GateRefused as e:
             refuse(str(e))
     tok = uuid.uuid4().hex
+    if new_freeze is not None:              # a new code freeze is one more variant (trial), logged first
+        try:
+            chainlog.append(finpaths.variants_log(), {
+                "event": "code_amendment", "run_id": f"amend:{hypothesis}:{new_freeze['freeze_sha'][:16]}",
+                "hypothesis": hypothesis, "amendment": new_freeze["amendment"], "n": new_freeze["n"],
+                "freeze_sha": new_freeze["freeze_sha"], "ts": rec["ts"]})
+        except chainlog.ChainError as e:
+            refuse(f"variants log integrity check failed - gate closed: {e}")
     rec.update(granted=True, reason="ok", lo=lo, hi=hi, token=tok, **extra)
     rec.setdefault("prereg_sha", "")
     rec.setdefault("family", "")
     _append(rec)
-    if gated:
+    if gated or sandboxed:
         push_witness(rec["remote_main"])
     return Window(hypothesis, fold, lo, hi, tok, rec["prereg_sha"], rec["family"], rec.get("prereg_commit", ""))
 
@@ -548,6 +940,8 @@ def find_grant(window, recs=None):
     except GateRefused:
         return None
     for r in recs:
+        if "sandbox_run" in r:              # host-copied sandbox output is never a grant (Verifier v5 F2)
+            continue
         if (r.get("granted") and r.get("token") == window.token and r.get("fold") == window.fold
                 and r.get("hypothesis") == window.hypothesis and r.get("lo") == window.lo
                 and r.get("hi") == window.hi and r.get("prereg_sha", "") == window.prereg_sha
@@ -576,7 +970,7 @@ def verify(window):
 
 
 def grant_records():
-    return [r for r in _read_log() if r.get("granted")]
+    return [r for r in _read_log() if r.get("granted") and "sandbox_run" not in r]
 
 
 def iter_jsonl_in_window(path, window, date_key="date"):

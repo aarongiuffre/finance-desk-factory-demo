@@ -577,6 +577,16 @@ def slice_pin(fold, rel):
     if pin is None:
         raise FoldDataError(f"no committed pin for slice {fold}:{rel} - refusing")
     root = finpaths.code_root()
+    arch = finpaths.archive_pin()           # codetree export (sandbox): tree hash verified == pinned commit
+    if arch is not None:
+        key = (root, arch["commit"], pin)
+        if key not in _PIN_CACHE:
+            fp = os.path.join(root, pin)
+            v = open(fp).read().split()[:1] if os.path.isfile(fp) and not os.path.islink(fp) else []
+            if not v:
+                raise FoldDataError(f"slice pin {pin} not in the code archive {root} - refusing")
+            _PIN_CACHE[key] = v[0]
+        return _PIN_CACHE[key]
     h = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"], capture_output=True, text=True)
     if h.returncode != 0:
         raise FoldDataError(f"slice pin: {root} is not a git checkout - refusing")

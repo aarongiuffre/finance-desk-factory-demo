@@ -222,7 +222,9 @@ def test_h1_sources_pass_the_ast_rules_and_entrypoint_installs_the_guard_first()
     src = [ast.unparse(b) for b in stmts]
     # Verifier v4 blocker: numpy + edge_harness (C extensions) load BEFORE the accident guard
     i = src.index("h1_guard.install()")
-    assert src[:i] == ["import numpy", "import edge_harness", "import fold_gate", "import h1_guard"], src[:i]
+    # v5: the code archive is verified (codetree walk) BEFORE the guard, which would hide the tree
+    assert src[:i] == ["import numpy", "import edge_harness", "import fold_gate", "import h1_guard",
+                       "CODE = fold_gate.code_archive_status()"], src[:i]
     assert all(not x.startswith(("import ", "from ")) for x in src[i + 1:]), src
 
 
@@ -252,7 +254,8 @@ t("open_dev", lambda: open(os.path.join(dev, "ZZ1.json")).read())
 t("listdir_dev", lambda: os.listdir(dev))
 t("write_edge_log", lambda: open(os.path.join(root, "logs", "edge", "x.txt"), "w").write("x"))
 t("git", lambda: subprocess.run(["git", "--version"], capture_output=True))
-t("ctypes", lambda: __import__("ctypes").CDLL(None))
+t("ctypes_none", lambda: __import__("ctypes").CDLL(None))          # dlopen(NULL): allowed (Verifier v5)
+t("ctypes", lambda: __import__("ctypes").CDLL("/tmp/x_not_python.so"))
 print(json.dumps(res))
 '''
 
@@ -276,7 +279,7 @@ def test_audit_hook_refuses_the_full_h1_universe(tmp_path):
     for k in ("open_full", "os_open_full", "listdir_full", "scandir_full", "glob_full", "traversal",
               "cat_full", "write_dev", "ctypes"):
         assert res[k] == "refused", (k, res)
-    for k in ("open_dev", "listdir_dev", "write_edge_log", "git"):
+    for k in ("open_dev", "listdir_dev", "write_edge_log", "git", "ctypes_none"):
         assert res[k] == "ok", (k, res)
 
 

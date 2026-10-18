@@ -15,7 +15,7 @@ import finpaths
 
 REPO = Path(__file__).resolve().parent.parent
 GIT = ["git", "-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false"]
-GATE_CODE = ("fold_gate.py", "chainlog.py", "finpaths.py", "fold_data.py", "witness.py")
+GATE_CODE = ("fold_gate.py", "chainlog.py", "finpaths.py", "fold_data.py", "witness.py", "codetree.py")
 SPEC = {"hold_trading_days": 63, "direction": "long", "same_day_ok": False, "min_price": 5.0,
         "costs": {"fee_bps": 15, "half_spread_bps": {"large": 5, "mid": 15, "small": 40}, "slip_bps": 10,
                   "large_adv": 50000000, "mid_adv": 5000000, "floor_roundtrip_bps": 0, "borrow_bps_annual": 50},
@@ -42,6 +42,7 @@ class Env:
         for f in GATE_CODE:
             shutil.copy(REPO / "scripts" / f, os.path.join(self.root, "scripts", f))
         self.families = {}
+        self.gate = None                     # REGISTRY.yaml gate: section (None = absent = defaults)
         self.register("FAM9", ["H9"], commit=False)
         self.commit("init", ".")
         self.push()
@@ -68,8 +69,8 @@ class Env:
     # ---- registry / prereg
     def register(self, family, hyps, retired=False, commit=True, push=True):
         self.families[family] = {"hypotheses": list(hyps), **({"retired": True} if retired else {})}
-        open(os.path.join(self.root, "ops", "prereg", "REGISTRY.yaml"), "w").write(
-            yaml.safe_dump({"families": self.families}))
+        doc = {"families": self.families, **({"gate": self.gate} if self.gate is not None else {})}
+        open(os.path.join(self.root, "ops", "prereg", "REGISTRY.yaml"), "w").write(yaml.safe_dump(doc))
         if commit:
             self.commit(f"register {family}", "ops/prereg/REGISTRY.yaml")
             if push:
@@ -97,7 +98,7 @@ class Env:
         pub = open(k + ".pub").read().split()
         p = fold_gate.signers_path()
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        open(p, "w").write(f'aaron namespaces="finance-holdout" {pub[0]} {pub[1]}\n')
+        open(p, "w").write(f'aaron namespaces="finance-holdout,finance-go" {pub[0]} {pub[1]}\n')
         self.key = k
         return k
 
@@ -117,6 +118,54 @@ class Env:
         subprocess.run(["ssh-keygen", "-q", "-Y", "sign", "-f", key or self.key, "-n", "finance-holdout", jf],
                        check=True, capture_output=True)
         return jf
+
+    # ---- v5: code freeze amendments + go files (mimic ops/offbox/aaron_sign_dev_go.sh)
+    def freeze(self, h="H9", files=None, n=None, push=True, over=None):
+        """Commit ops/prereg/amendments/<h>/NNN.yaml freezing `files` (default: a helper
+        scripts/<h>_events.py written here) at their current blobs.  -> freeze_sha."""
+        import fold_gate
+        if files is None:
+            f = os.path.join(self.root, "scripts", f"{h.lower()}_events.py")
+            if not os.path.exists(f):
+                open(f, "w").write("# synthetic frozen event code\nEVENTS = []\n")
+                self.commit("events", os.path.relpath(f, self.root))
+            files = [os.path.relpath(f, self.root)]
+        st = fold_gate.prereg_status(h)
+        d = os.path.join(self.root, "ops", "prereg", "amendments", h)
+        os.makedirs(d, exist_ok=True)
+        n = n or len([x for x in os.listdir(d) if x.endswith(".yaml")]) + 1
+        cf = {r: git(self.root, "hash-object", r).stdout.decode().strip() for r in files}
+        doc = {"hypothesis": h, "amendment": n, "prereg_sha256": st["sha"], "code_freeze": cf,
+               "reason": "test freeze", **(over or {})}
+        p = os.path.join(d, f"{n:03d}.yaml")
+        open(p, "w").write(yaml.safe_dump(doc, sort_keys=True))
+        self.commit(f"amend {h} {n}", os.path.relpath(p, self.root))
+        if push:
+            self.push()
+        return fold_gate.freeze_sha(cf)
+
+    def go(self, h, fold, freeze_sha, key=None, root_owned=False, **over):
+        """A go file: standing dev go (max_dev_trials) or a per-run validation/holdout go."""
+        import fold_gate
+        doc = {"v": 1, "hypothesis": h, "fold": fold, "freeze_sha": freeze_sha,
+               "issued": "2026-10-18T10:00:00-04:00", "expires": "2099-01-01T00:00:00-04:00"}
+        if fold == "dev":
+            doc.update(kind="standing_dev_go", max_dev_trials=3)
+        else:
+            st = fold_gate.prereg_status(h)
+            doc.update(kind="run_go", prereg_sha256=st["sha"], nonce=os.urandom(8).hex())
+        doc.update(over)
+        signed, sig, ro = fold_gate.go_files(h, fold)
+        for q in (signed, sig, ro):
+            if os.path.exists(q):
+                os.remove(q)
+        target = ro if root_owned else signed
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        open(target, "w").write(json.dumps(doc, sort_keys=True))
+        if not root_owned:
+            subprocess.run(["ssh-keygen", "-q", "-Y", "sign", "-f", key or self.key, "-n", "finance-go", target],
+                           check=True, capture_output=True)
+        return target
 
     def log(self):
         p = os.path.join(self.root, "logs", "holdout_access.jsonl")

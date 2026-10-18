@@ -24,7 +24,7 @@ fi
 grep -q 'PRIVATE KEY' "$PUB" && { echo "that is a PRIVATE key - refusing" >&2; exit 2; }
 read -r T K _ < "$PUB"
 case "$T" in ssh-ed25519|ecdsa-sha2-*|ssh-rsa|sk-ssh-ed25519@openssh.com) ;; *) echo "not an ssh public key" >&2; exit 2;; esac
-LINE="aaron namespaces=\"finance-holdout,finance-custody\" $T $K"
+LINE="aaron namespaces=\"finance-holdout,finance-custody,finance-go\" $T $K"
 echo "$F <- $LINE"; ssh-keygen -l -f "$PUB"
 [ "$MODE" = apply ] || { echo "DRY RUN (add --apply; needs root)"; exit 0; }
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 2; }

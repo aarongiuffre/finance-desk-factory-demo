@@ -154,26 +154,38 @@ def append(path, rec, state=None):
         lock.close()
 
 
-def seed(path, recs, state):
-    """Write a NEW chain file that is a verbatim copy of an intact chain (recs from
-    read_strict) plus both anchors, the second under the explicit dir `state`.
-    Used by the H1 sandbox wrapper to give the sandbox a snapshot of the real chains
-    (so trial counts inside are complete).  Refuses an existing file."""
-    if os.path.lexists(path):
-        raise ChainError(f"{path} exists - seed() only creates new chains")
-    prev = GENESIS
-    for n, r in enumerate(recs):
-        if r.get("seq") != n or r.get("prev") != prev or r.get("h") != rec_hash(r):
-            raise ChainError(f"seed: record {n} is not an intact chain record")
-        prev = r["h"]
+def append_many(path, recs):
+    """Append several records under ONE lock with ONE write + fsync (all or nothing for a
+    crash-free run: every record is built and the chain re-read before anything is written).
+    finance-gate mode: one helper call per record (the caller makes its batch resumable)."""
+    recs = [dict(r) for r in recs]
+    if not recs:
+        return []
+    if (finpaths.gate_user_mode() and path.startswith(finpaths.GATE_STATE + os.sep)
+            and not os.access(os.path.dirname(path), os.W_OK)):
+        return [_via_helper(path, r) for r in recs]
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "xb") as fh:
-        for r in recs:
-            fh.write(json.dumps(r, sort_keys=True, ensure_ascii=True).encode() + b"\n")
-        fh.flush()
-        os.fsync(fh.fileno())
-    _write_anchor(path, recs, state)
-    return len(recs)
+    lock = open(path + ".lock", "a")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        cur = read_strict(path)
+        out, buf = [], b""
+        for rec in recs:
+            r = {k: v for k, v in rec.items() if k not in ("seq", "prev", "h")}
+            r["seq"] = len(cur) + len(out)
+            r["prev"] = out[-1]["h"] if out else (cur[-1]["h"] if cur else GENESIS)
+            r["h"] = rec_hash(r)
+            out.append(r)
+            buf += json.dumps(r, sort_keys=True, ensure_ascii=True).encode() + b"\n"
+        with open(path, "ab") as fh:
+            fh.write(buf)
+            fh.flush()
+            os.fsync(fh.fileno())
+        _write_anchor(path, cur + out)
+        return out
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
 
 
 def migrate_v1(path):

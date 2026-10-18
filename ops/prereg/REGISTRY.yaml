@@ -3,6 +3,15 @@
 # Renaming a hypothesis does not reset anything: the family is the key.
 # Adding/changing a family is a committed AND pushed change (fold_gate refuses gated
 # reads while this file differs from origin/main), so it is visible to Aaron on GitHub.
+# gate: (v5, Verifier round 5) a go file is required per fold before a grant: Aaron-signed
+# (ssh-keygen -Y sign -n finance-go, ops/offbox/aaron_sign_dev_go.sh) or root-owned in
+# /etc/finance-gate/go/.  validation/holdout: always (false refuses); dev: a STANDING go
+# naming the code freeze sha + max_dev_trials.  dev stays required until Aaron decides.
+gate:
+  require_go_file:
+    dev: true
+    validation: true
+    holdout: true
 families:
   H4_inventory:
     retired: true                # failed its pre-registered PIT calibration 2026-10-18

@@ -15,7 +15,10 @@ from _gate_env import Env, git
 
 
 @pytest.fixture
-def env(tmp_path):
+def env(tmp_path, monkeypatch):
+    # the v5 code-freeze + go-file stage is tested end to end in tests/test_gate_round5.py;
+    # here it is passed through so these tests keep testing the v2/v3 rules they were written for
+    monkeypatch.setattr(G, "_authorize", lambda *a, **k: ({}, None))
     return Env(tmp_path)
 
 

@@ -35,7 +35,9 @@ H1_FOLDER_ALLOW = {"scripts/fold_data.py", "scripts/eodhd_final_pull.py", "ops/c
                    # prove the full folder is ENOENT inside
                    "ops/gate/h1_sandbox.sh", "scripts/sandbox_host.py", "tests/test_h1_sandbox.py",
                    "tests/test_zz_sandbox_inside.py",
-                   "tests/test_staged_encrypt.py"}                   # stub root for encrypt_full_period.sh
+                   "tests/test_staged_encrypt.py",                   # stub root for encrypt_full_period.sh
+                   # v5 C-E2: moves the folder onto its own never-snapshotted dataset (+ its stub test)
+                   "ops/staged_sudo/split_research_dataset.sh", "tests/test_staged_split_dataset.py"}
 
 
 @pytest.fixture

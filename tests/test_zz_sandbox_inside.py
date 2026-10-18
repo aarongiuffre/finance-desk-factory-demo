@@ -7,6 +7,10 @@ INSIDE the bubblewrap sandbox against REAL paths that exist outside (RUN/in/targ
 written outside by stat only) and must end in ENOENT.  Results: RUN/out/probe.json.
 Plus: numpy / edge_harness / PriceStore load, and a tiny SYNTHETIC dev-only run in a
 throwaway test root on the sandbox's /tmp tmpfs (no real grant, no real variant).
+
+Verifier v5 F1: the code is a codetree archive (no .git anywhere, universe/ & co. left out);
+git finds no repository, universe/ is ENOENT in the code and in /data/finance, and the
+archive's tree hash equals RUN/in/code.json.
 """
 import errno
 import importlib.util
@@ -65,7 +69,14 @@ def test_targets_are_enoent_inside():
         assert set(out[k].values()) == {"ENOENT"}, (k, out[k])
     out["/data/finance listing"] = sorted(os.listdir(DATA))
     out["/data/finance/folds listing"] = sorted(os.listdir(os.path.join(DATA, "folds")))
-    assert set(out["/data/finance listing"]) <= {"folds", ".venv-embed", ".git"}
+    assert set(out["/data/finance listing"]) <= {"folds", ".venv-embed"}
+    venv = os.path.join(DATA, ".venv-embed")
+    sp = os.path.join(venv, "lib", "python3.14", "site-packages")
+    out["venv listing"] = sorted(os.listdir(venv))
+    out["site-packages listing"] = sorted(os.listdir(sp))
+    assert set(out["venv listing"]) <= {"pyvenv.cfg", "bin", "lib", "lib64"}
+    assert "numpy" in out["site-packages listing"] and not [n for n in out["site-packages listing"]
+                                                            if n.endswith(".pth") or n.startswith(("torch", "nvidia"))]
     assert out["/data/finance/folds listing"] == ["dev"]
     for p in ("/proc/self/root" + DATA + "/raw", "/proc/1/root" + DATA + "/logs", DATA + "/folds/dev/../validation"):
         out[p] = _errno_of(lambda: os.stat(p))
@@ -113,17 +124,74 @@ def test_3a_git_argv_bypasses_end_in_enoent():
         _assert_enoent_on_disk(p)
         r["underlying errno"] = "ENOENT"
         out[k] = r
-    # prices, fold copies, facts and logs were never committed: nothing under raw/ folds/ logs/
-    # facts/ in any reachable commit.  (universe/ holds two committed reference files - the
-    # DJIA component list and the NASDAQ dead roster - no prices; they are code-visible anyway.)
-    x = _git("-C", code, "log", "--all", "--name-only", "--format=", "--", "raw", "folds", "logs", "facts")
-    out["git history names raw|folds|logs|facts"] = sorted({ln for ln in x.stdout.splitlines() if ln})
-    assert out["git history names raw|folds|logs|facts"] == []
-    x = _git("-C", code, "log", "--all", "--name-only", "--format=", "--", "universe")
-    out["git history names universe (reference lists, no prices)"] = sorted({ln for ln in x.stdout.splitlines() if ln})
-    assert set(out["git history names universe (reference lists, no prices)"]) <= {
-        "universe/djia_components.csv", "universe/nasdaq_dead_roster.json"}
+    # Verifier v5 F1: there is no repository at all - no history to read tracked dated files from
+    for args in (("-C", code, "log", "--all", "--name-only"), ("-C", code, "show", "HEAD:universe/nasdaq_dead_roster.json"),
+                 ("-C", code, "cat-file", "--batch-all-objects", "--batch-check"),
+                 ("--git-dir", os.path.join(DATA, ".git"), "show", "HEAD:universe/djia_components.csv")):
+        x = _git(*args)
+        out["git " + " ".join(args[2:])] = (x.returncode, x.stderr.strip()[-90:])
+        assert x.returncode != 0 and not x.stdout and ("not a git repository" in x.stderr or "No such file" in x.stderr), x.stderr
     _save("3a_git", out)
+
+
+# ---------------------------------------------------------------- F1: code archive, no universe/, no .git
+ARCHIVE_PROBE = r'''
+import json, os, sys
+import finpaths, fold_gate
+pin = finpaths.archive_pin()
+res = {"archive_mode": finpaths.archive_mode(), "pin_tree": pin["tree"], "in_sandbox": finpaths.in_sandbox()}
+res["git_inside"] = fold_gate._git("rev-parse", "HEAD")[0]
+ok, why, blob = fold_gate._head_blob("ops/prereg/REGISTRY.yaml")
+res["head_blob_registry"] = ok
+ok, why, blob = fold_gate._head_blob("universe/nasdaq_dead_roster.json")
+res["head_blob_universe"] = why
+try:
+    fold_gate.request("H1_opportunistic_insider_buys", "dev")
+    res["request"] = "GRANTED"
+except fold_gate.GateRefused as e:
+    res["request"] = str(e)
+try:
+    finpaths.state_dir(); res["state_dir"] = "ok"
+except PermissionError as e:
+    res["state_dir"] = "refused"
+print(json.dumps(res))
+'''
+
+
+def test_F1_code_is_the_pinned_archive_without_universe_or_git(tmp_path):
+    code = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    pin = json.load(open(os.path.join(RUN, "in", "code.json")))
+    out = {"code": code, "pin_commit": pin["commit"], "pin_tree": pin["tree"]}
+    for rel in ("universe", "universe/nasdaq_dead_roster.json", "universe/djia_components.csv", ".git", "docs",
+                "ops/data/EODHD_MANIFEST.sha256", "ops/data/sp_identity_overrides.json", "ops/cleanup_staged"):
+        out["code/" + rel] = _errno_of(lambda: os.stat(os.path.join(code, rel)))
+        assert out["code/" + rel] == "ENOENT", (rel, out)
+    for rel in ("universe", "universe/nasdaq_dead_roster.json", ".git", pin["git_dir"]):
+        p = rel if rel.startswith("/") else os.path.join(DATA, rel)
+        out[p] = {"stat": _errno_of(lambda: os.stat(p)), "open": _errno_of(lambda: open(p, "rb").read(1))}
+        assert set(out[p].values()) == {"ENOENT"}, (p, out[p])
+    found = []
+    for base in (code, DATA, "/home/h1"):
+        for dp, dns, fns in os.walk(base):
+            if ".git" in dns or ".git" in fns:
+                found.append(dp)
+    out["dirs holding .git"] = found
+    assert out["dirs holding .git"] == []
+    x = _git("rev-parse", "--show-toplevel", cwd=code)
+    out["git rev-parse in code"] = (x.returncode, x.stderr.strip()[-80:])
+    assert x.returncode != 0 and "not a git repository" in x.stderr
+    f = tmp_path / "archive_probe.py"
+    f.write_text(ARCHIVE_PROBE)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST")}
+    env["PYTHONPATH"] = os.path.join(code, "scripts")
+    y = subprocess.run([sys.executable, str(f)], capture_output=True, text=True, env=env, timeout=120)
+    res = json.loads(y.stdout.strip().splitlines()[-1]) if y.stdout.strip() else {"stderr": y.stderr[-400:]}
+    out["archive_probe"] = res
+    _save("F1_archive", out)
+    assert res.get("archive_mode") and res.get("in_sandbox") and res["pin_tree"] == pin["tree"], res
+    assert res["git_inside"] == 128 and res["head_blob_registry"] is True
+    assert "no file" in res["head_blob_universe"] and "no grants inside the sandbox" in res["request"]
+    assert res["state_dir"] == "refused"
 
 
 # ---------------------------------------------------------------- 3b. dir_fd / chdir / sqlite3
