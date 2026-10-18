@@ -13,3 +13,6 @@ families:
   DIAG_lang_shift:
     kind: diagnostic             # dev-only
     hypotheses: [lang_shift]
+  H1_insider:
+    kind: hypothesis             # registered 2026-10-18; dev-only until Verifier + Aaron unlock
+    hypotheses: [H1_opportunistic_insider_buys]

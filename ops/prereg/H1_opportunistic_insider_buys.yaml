@@ -1,0 +1,73 @@
+# PRE-REGISTRATION - H1 opportunistic insider purchases (Cohen, Malloy & Pomorski 2012).
+# Written 2026-10-18 under Verifier's CONDITIONAL PASS for DEV-PERIOD work only.
+# NOT RUN.  Before the first run it must be pushed (finance-gitpush.service) and its
+# commit verified on the real remote with `git ls-remote` (Verifier condition 5).
+# This file authorizes DEV-fold builds only; validation / holdout stay locked (fold_gate
+# v3 + ops/edge_threat_model.md) and are not requested by this prereg.
+hypothesis: H1_opportunistic_insider_buys
+family: H1_insider
+kind: hypothesis
+literature: Cohen, Malloy & Pomorski (2012, JF); Seyhun (1986); Lakonishok & Lee (2001)
+fold: dev
+window: {lo: "2009-01-01", hi: "2019-12-31"}     # dev period only (signals usable from 2009: 3-yr routine history)
+
+data:
+  insider: folds/dev/raw/dera_insider             # SEC DERA Form 3/4/5 data sets, dev copy (cut at 2019-12-31)
+  prices: edge_harness.H1_DIRS                   # = the materialized DEV slice folds/dev/raw/price/h1_universe only
+  price_slice_sha256: fc8f700fbee8666eebe07a4cfcb4f4c13d5859fbc93601433282a41704bce107   # ops/data/h1_dev_slice.sha256
+  factors: folds/dev/raw/ff                      # Kenneth French FF5 + UMD, monthly
+  rule: H1 code may not name the full-period folder or the live root (tests/test_dev_scope.py);
+        any loaded frame past 2019-12-31 raises; every run logs data_root_real, loaded min/max dates, slice sha
+
+events:
+  source: non-derivative open-market PURCHASES (TRANS_CODE == P) by officers or directors, as filed
+  event_time: DERA FILING_DATE -> next regular-session OPEN (same_day_ok false)
+  opportunistic: insider with >= 3 calendar years of trading history who is NOT routine
+                 (routine = traded in the same calendar month in each of the 3 prior years)
+  exclusions: 10% owners only (no officer/director role); purchase value < $10,000; price < $5;
+              amended filings superseded by the original filing date; duplicates by ACCESSION_NUMBER
+  unit: issuer-month (first qualifying filing in the month triggers entry)
+
+variants:                                         # the WHOLE budget - no other variant may be run
+  primary_cmp2012: issuer-month with >= 1 opportunistic purchase (published definition)
+  cluster_or_0.1pct_mcap: issuer-month with >= 2 distinct opportunistic insiders buying,
+                          OR a single opportunistic buy > 0.1% of market cap (shares out x price, PIT)
+
+universe: PIT S&P members + NASDAQ commons with prices in the H1 dev slice; price >= $5; ADV20 >= $1M
+weighting: equal weight, max 5% per name, long-only
+
+execution:
+  hold_trading_days: 21                           # 1 month
+  direction: long
+  same_day_ok: false
+  min_price: 5.0
+  costs:                                          # edge_plan.md section 6, direction-aware (harness)
+    fee_bps: 15
+    half_spread_bps: {large: 5, mid: 15, small: 40}
+    slip_bps: 10
+    large_adv: 50000000
+    mid_adv: 5000000
+    floor_roundtrip_bps: 40                       # H1 floor (small/mid caps)
+    borrow_bps_annual: 0                          # long-only
+  delisting: {perf_base: -0.30, other_base: 0.0}  # base case -30%; adverse rerun -100% (harness ADVERSE[long])
+
+benchmarks: SPY total return (same fill convention) AND equal-weight PIT universe
+metrics: CAGR, vol, Sharpe vs SPY, net excess, max DD, hit rate, turnover, cost drag,
+         FF5+UMD alpha with Newey-West t (lag 6), deflated Sharpe on the alpha series
+
+pass_bar:                                         # ALL must hold, per variant, on the dev fold
+  alpha_t_nw_ge: 3.0                              # FF5+UMD monthly alpha, Newey-West lag 6 (Harvey, Liu & Zhu 2016)
+  dsr_ge: 0.95                                    # deflated Sharpe on the factor-neutral alpha series (p < 0.05);
+                                                  # N = every run ever started + every gate grant (per-grant count)
+  net_excess_vs_spy_gt: 0
+  net_excess_vs_ew_universe_gt: 0
+  delisting_cases: both -30% (base) and -100% (adverse) keep alpha t >= 3
+  cost_stress: 2x all cost components keeps alpha t >= 3
+  era_max_share_le: 0.40                          # no calendar year > 40% of cumulative alpha
+  min_events: 100
+  holm: adjusted across hypotheses tested (H1 is the first; Holm applies once H2/H3 run)
+
+decision:
+  pass: dev evidence only - eligible to ASK for a validation read, which needs Verifier sign-off,
+        Aaron's steps (ops/edge_threat_model.md) and a frozen, pushed prereg commit
+  fail: any pass-bar miss on both variants retires H1 permanently (no re-test under a new name)
