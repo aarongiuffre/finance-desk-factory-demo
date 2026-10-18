@@ -1,4 +1,4 @@
-# Edge plan phase 1 - STATUS: COMPLETE (2026-10-18 ~09:50 EDT). Resumed after the 08:25 boot; post_boot_check PASS.
+# Edge plan phase 1 - STATUS: COMPLETE (2026-10-18 09:32 EDT). Resumed after the 08:25 boot; post_boot_check PASS.
 Everything under "Pending" below was done; see ops/edge_harness_README.md for the verification sheet.
 Post-resume changes: survivorship coverage recount (strict rule) + gap fill (EODHD total 257 requests);
 harness tier order sp_exits-first; pre-registered H4 PIT calibration (FAILED its criterion, recorded as is).

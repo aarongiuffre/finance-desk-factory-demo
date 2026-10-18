@@ -42,7 +42,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 ROOT = os.environ.get("EDGE_ROOT", "/data/finance")
-TIERS_OLD = ("raw/price", "raw/price/dead", "raw/price/sp_exits")   # runs before 2026-10-18 09:45 (no price_dirs in report)
+TIERS_OLD = ("raw/price", "raw/price/dead", "raw/price/sp_exits")   # runs before 2026-10-18 09:25 (no price_dirs in report)
 ET = ZoneInfo("America/New_York")
 TOL = 1e-9
 FAILS = []

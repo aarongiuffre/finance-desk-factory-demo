@@ -148,7 +148,7 @@ def cmd_fetch(budget, limit, gaps=False):
     days = spy_days()
     cov = load_cov()
     if gaps:
-        # 2026-10-18 09:40: files that exist but are empty / start too late / stop
+        # 2026-10-18 09:22: files that exist but are empty / start too late / stop
         # early were counted as covered by `status`; re-target them.
         by_t = {}
         for r in exits():
@@ -215,7 +215,7 @@ def cmd_status():
     for r in ex:
         rows.setdefault(r["ticker"], []).append(r)
     # COVERED = some file covers every 2015+ S&P window (same rule as fetch);
-    # a file merely existing is not enough (fixed 2026-10-18 09:40).
+    # a file merely existing is not enough (fixed 2026-10-18 09:22).
     have = [t for t in tick if existing_covers(t, rows[t], days)]
     files = [t for t in tick if price_path(t)]
     tier = [t for t in tick if os.path.exists(os.path.join(TIER, f"{t}.json"))]

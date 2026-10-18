@@ -50,7 +50,7 @@ import fold_gate  # noqa: E402
 ET = ZoneInfo("America/New_York")
 # sp_exits first: those files are only written when they pass the S&P-window
 # coverage rule (survivorship_fill.py), and they replace empty / late-starting
-# files in the other tiers for those names.  Changed 2026-10-18 09:45; runs
+# files in the other tiers for those names.  Changed 2026-10-18 09:25; runs
 # before that used raw/price -> dead -> sp_exits (each trade records its file+sha).
 PRICE_DIRS = ("raw/price/sp_exits", "raw/price", "raw/price/dead")
 VARIANTS = os.environ.get("EDGE_VARIANTS", os.path.join(ROOT, "logs", "variants.jsonl"))

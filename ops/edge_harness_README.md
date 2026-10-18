@@ -44,4 +44,4 @@ Tampering with the trades, the price files or the token makes it fail (tested).
 - Non-hypothesis kinds (calibration, placebo, synthetic, diagnostic) are dev-only.
 - The second holdout read is refused forever, and every request, granted or refused, is logged.
 - The harness refuses any window that `fold_gate` did not issue, and `PriceStore` never loads bars after window.hi.
-- The price tier order is `sp_exits`, then `raw/price`, then `dead`, since 2026-10-18 09:45 ET. Each run records `price_dirs` and each trade its file and sha.
+- The price tier order is `sp_exits`, then `raw/price`, then `dead`, since 2026-10-18 09:25 ET. Each run records `price_dirs` and each trade its file and sha.
