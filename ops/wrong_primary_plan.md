@@ -1,5 +1,14 @@
 # Wrong-Primary Filings Debt — Findings & Fix Plan (Grok batch 3)
 
+> **STATUS: CLOSED 2026-10-18.** Re-verified on live disk: **0 of 6,420** fixlist
+> entries are still wrong — for every `logs/primary_fixlist.json` row, the first
+> document in `parsed/<T>/<FORM>/<ACC>/metadata.json` is the fixlist's `new_primary`
+> with `doc_type: primary` (6,420/6,420; 0 still on `old_primary`, 0 missing dirs).
+> The "~5.9k" figure is the same population (earlier detector count). No index
+> action needed. Index size note: the "10,311,469 rows" below is the Oct 8 rebuild;
+> the live table is **49,753,754 rows (≈49.75M, 2026-10-18)** after the NASDAQ bulk
+> append — the wrong-primary set is S&P-legacy and untouched by that append.
+
 **Author:** Hermes (read-only investigation, 2026-10-09). **Decision owner:** Aaron.
 **Headline: the 6,420 wrong-primary filings were already reparsed (2026-09-30)
 and the INDEX is already correct. Strongest evidence (Grok, batch-3 review):
@@ -105,6 +114,9 @@ The right shape for correcting text in the index without a full rebuild:
    result — do not rely on restore after more than a week.**
 
 ## 6. Recommendation
+
+**Closed 2026-10-18** (0 of 6,420 still wrong, verified against `metadata.json`).
+Original recommendation kept below for the record.
 
 No action on the index. Fix the two stale SKILL.md lines (done in this
 commit's companion edit). Optional hygiene: fold the `primary_fixlist.json`

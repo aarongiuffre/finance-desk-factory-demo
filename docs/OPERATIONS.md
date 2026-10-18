@@ -21,6 +21,9 @@ rules — verified against the live system 2026-10-09.
 | `finance-universe.timer` | Sun 08:30 | universe refresh + survivorship self-healing |
 | `nasdaq-scan.timer` | Sun 09:45 | `nasdaq_scan.py` scan+fundamentals+report: TA screen over all ~3,978 live-tier NASDAQ commons + SEC-frames rev-YoY join + ranked report -> `logs/nasdaq-scan-cron.log`, `logs/nasdaq_scan_latest.tsv` |
 | `nasdaq-facts.timer` | monthly 1st 07:00 | `nasdaq_scan.py facts` (resumable bulk reduced companyfacts -> `facts/nasdaq/`, ~45 min first run) + `flags` (edgar_screen anomaly flags -> `logs/nasdaq_flags_latest.tsv`) |
+| `finance-health.timer` | daily 07:40 (Persistent) | `scripts/finance_health.py run`: read-only health checks → **local** alert outbox `alerts/outbox.jsonl` (nothing leaves the machine). See Health & alerts |
+| `finance-health-onfailure@.service` | on failure | template wired as `OnFailure=` (drop-in `10-finance-health-onfailure.conf`) on eda-pull, finance-search, finance-embed-sweep, finance-tree-sweep, finance-gitpush, finance-logrotate, finance-universe, nasdaq-scan, nasdaq-facts, nasdaq-watch-filings, nasdaq-watch-price, paper-driver, hermes-gateway, finance-walkforward |
+| `finance-walkforward.timer` | Sat 05:30 (Persistent) | `scripts/walkforward_weekly.sh`: walk-forward backtest with the bug6-full config (2016-01-01 → today, N=10, 20 bps/side, monthly), CPU-only, then `check_walkforward.py` sanity gate → `logs/walkforward-weekly-<YYYYMMDD>.jsonl/.log` |
 | `finance-search.service` | always-on | search API, 127.0.0.1:8091 — **re-opens the table on every query**; appends are visible without restarts |
 | `finance-crawl.service` | — | **RETIRED 2026-10-08** (Sep-2026 S&P fleet supervisor; its `backfill_embed_watch.sh` was 2 checkpoint lines from firing a full index overwrite). Stopped, disabled, and `universe/.backfill_embed_done` stamped so the watcher can never fire. USER unit |
 
@@ -82,6 +85,7 @@ use `browse-edgar` or the EODHD delisted list instead.
 
 ## Index operations
 
+- **Live size (verified 2026-10-18 00:12 ET): 49,753,754 rows** in table `filings` (≈49.75M; `/health` on :8091 reports the same number). The older "~10.3M" figure (Oct 8 full rebuild, 10,311,469 rows) predates the NASDAQ bulk append of Oct 15–16 (`nasdaq_bulk_embed.py`, ~47M chunks) and is obsolete. Growth is checked daily by finance-health (`rows_growth`, Tue–Sat).
 - **The 30-min append-only sweep is the sole embedder.** Full rebuilds
   (`edgar_embed.py`) are MANUAL-ONLY (schema/model changes): run rebuild →
   `lance_cleanup.py` → restart finance-search (wholesale overwrite only).
@@ -175,7 +179,14 @@ use `browse-edgar` or the EODHD delisted list instead.
 ### Tests
 
 - Run: `scripts/run_tests.sh` (offline pytest in `tests/`, venv
-  `.venv-embed`, deps `requirements-test.txt`). 87 passed in ~6 s.
+  `.venv-embed`, deps `requirements-test.txt`). 149 passed in ~6 s (2026-10-18).
+- SEC throttle coverage (`tests/test_sec_throttle_coverage.py`): AST scan of every
+  `scripts/**.py` — in any module that touches SEC (mentions sec.gov or the SEC
+  User-Agent), a function making a direct HTTP call must call `wait_token` /
+  `WAIT_TOKEN` / `throttle_sec_url`, or mark a provably non-SEC call with
+  `# sec-throttle: non-SEC (<host>)`; shell scripts curling sec.gov must use
+  `python3 scripts/sec_throttle.py`. Also asserts the rate ceiling: `MAX_RATE`
+  9.5 clamps any `SEC_RATE` (default 6.5).
 - Offline-guarded: `tests/conftest.py` blocks any socket connect outside
   127.0.0.1/::1/localhost and passes AF_UNIX through; tests never touch
   `data/`, `raw/`, `facts/`, `logs/`, or `/tmp/sec_bucket.state` (tmp_path
@@ -212,12 +223,38 @@ calendar-quarter (June-fiscal filers map imperfectly); biotech "surges"
 are launch base-effects (excluded by the close>=10 + judgment rule); no
 earnings-quality layer below $10. Facts dir is gitignored (like facts/).
 
+## Health & alerts (finance-health)
+
+- Checker: `scripts/finance_health.py run` (stdlib only, read-only; daily timer +
+  `OnFailure=` on the key user units). Checks: failed watched units (user + system,
+  `^(finance-|nasdaq-|eda-pull|hermes-gateway|paper-driver|zfs-replicate)`); embed sweep
+  with no completed pass ("incremental pass done" or "0 not yet embedded") > 2 h; LanceDB
+  rows not growing over 24 h (via :8091 `/health`, evaluated Tue–Sat; baseline bootstraps
+  from the sweep journal's "table now N"); :8091 `/health` and :8092 `/health`; last
+  `zfs-replicate` "ok: hourly-*" > 2 h old; new lines in `logs/sec_pull_failures.jsonl`;
+  any 10-min SEC rate > 9.5/s (exact per-minute ledger `logs/sec_rate_minutes.log` written
+  by `sec_throttle.wait_token`, plus eda-pull "10m: X req/s" progress lines).
+- **Outbox** `alerts/outbox.jsonl` (gitignored): one JSON object per line —
+  `id, ts (ISO, ET offset), severity (critical|warning|info), check, message, details,
+  trigger (timer|manual|onfailure:<unit>|onfailure-system:<unit>), test`. Each id is
+  written once (`alerts/state.json` keeps seen ids, incident episodes, file offsets,
+  row samples, last-run results). Nothing is sent anywhere: Server Bot relays the file.
+- `finance_health.py status` = last run; `clear-test` drops `test:true` records
+  (units named `finance-health-dummy*`). Verify the install: `ops/checks/check_finance_health.sh`.
+- System units (finance-quote, finance-refresh, finance-facts, zfs-replicate) get the
+  same wiring only after Aaron runs `sudo bash ops/staged_sudo/install_finance_health_system_onfailure.sh --apply`
+  (staged; until then their failures are caught by the daily run's failed-unit scan).
+
 ## Conventions
 
 - Commit messages describe the stack's state (git = code-only; `raw/`,
   `parsed/`, `index/`, `facts/`, `logs/`, keys gitignored).
-- Paper trading is structurally Alpaca-PAPER-only (`paper_bridge.py` refuses
-  live endpoints).
+- Paper trading is Alpaca-PAPER-only **by hard-coded base URL**: `paper_bridge.py`
+  only hard-codes the paper URL (`PAPER_BASE = "https://paper-api.alpaca.markets"`;
+  same in `paper_driver.py`/`paper_calib.py`) — there is NO code that inspects and
+  refuses a live endpoint (its docstring overclaims; noted 2026-10-09, re-verified
+  2026-10-18). Nothing reads a base URL from env/config, so going live would need a
+  code change.
 - Backups: `git bundle` to `backups/` (gitignored — same-disk copy, not a
   real backup); an off-machine remote is still owed.
 - Screen/facts questions: see the **finance-desk skill** (screen layer, TTM
