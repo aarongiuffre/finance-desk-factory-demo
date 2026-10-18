@@ -210,4 +210,6 @@ def main():
     {"filings": cmd_filings, "price": cmd_price}[cmd]()
 
 if __name__ == "__main__":
+    import fold_data  # noqa: E402  live desk: explicit opt-in to live data (Verifier O1)
+    fold_data.use_live(__file__)
     main()

@@ -76,11 +76,24 @@ def load_bars(t):
             bars = d.get("bars") or []
             if not bars and d.get("timestamps"):
                 bars = _translate_eodhd(d)
-            if bars:
-                return bars
         except Exception:  # noqa: BLE001
             continue
+        if bars:
+            _assert_in_scope(t, bars, p)
+            return bars
     return None
+
+
+def _assert_in_scope(t, bars, path):
+    """Fail closed (Verifier dev-only condition 2): outside the live desk, a frame
+    past the reader cutoff means a wrong root or a bad copy - raise, never trim."""
+    import fold_data
+    if fold_data.is_operational():
+        return
+    cut = fold_data.reader_cutoff()
+    mx = max((b.get("d") or "" for b in bars), default="")
+    if mx > cut:
+        raise fold_data.FoldDataError(f"{t}: loaded frame max date {mx} > cutoff {cut} ({os.path.realpath(path)})")
 
 
 # ---------- primitives (all on adjclose series aligned by date) ----------

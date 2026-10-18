@@ -14,12 +14,24 @@ Tests may swap the WHOLE root (data + logs + anchors together) for a temp dir:
                             that is not inside /data/finance.
 Because data and logs move together, a test root can never pair real data with
 a fake access log.
+
+NOT A SECURITY BOUNDARY (Verifier O3, 2026-10-18 round 2): the pytest check below
+is an ACCIDENT guard.  Any code running as slowglow can stub sys.modules["pytest"]
+and set PYTEST_CURRENT_TEST.  What that buys is limited by realpath checks
+elsewhere: fold copies and every price file must resolve INSIDE the root they were
+reached through, so a fake root cannot be paired with real data via symlinks
+(fold_data.research_root, edge_harness.PriceStore).  The real locks against a
+same-user process are off-box (ops/edge_threat_model.md).
+
+HOME is taken from the passwd database (pwd.getpwuid), never from $HOME (O2).
 """
 import os
+import pwd
 import sys
 import tempfile
 
-REAL_ROOT = "/data/finance"
+REAL_ROOT = os.path.realpath("/data/finance")
+CODE_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))   # repo/worktree holding this file
 _TEST_ROOT = None
 
 
@@ -63,6 +75,17 @@ def root():
     return _TEST_ROOT if is_test() else REAL_ROOT
 
 
+def code_root():
+    """The git checkout the running gate code came from.  Production: /data/finance
+    (main checkout) or a fresh worktree of the pushed commit (ops/gate/gated_run.sh).
+    Tests: the test root (tests/_gate_env.Env is code and data in one repo)."""
+    return _TEST_ROOT if is_test() else CODE_ROOT
+
+
+def home():
+    return pwd.getpwuid(os.getuid()).pw_dir
+
+
 def p(*parts):
     return os.path.join(root(), *parts)
 
@@ -71,7 +94,7 @@ def state_dir():
     """Second anchor location (outside the repo/log dir)."""
     if is_test():
         return os.path.join(_TEST_ROOT, ".state", "finance-chain")
-    return os.path.join(os.path.expanduser("~"), ".local", "state", "finance-chain")
+    return os.path.join(home(), ".local", "state", "finance-chain")
 
 
 def gate_log():

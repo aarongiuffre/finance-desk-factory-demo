@@ -60,6 +60,9 @@ HARNESS_VERSION = 2
 ET = ZoneInfo("America/New_York")
 SAME_DAY_CUTOFF = datetime.time(9, 25)
 PRICE_DIRS = ("raw/price/sp_exits", "raw/price", "raw/price/dead")
+# H1 price universe: the DEV SLICE of the EODHD final pull (fold_data.SLICES), resolved
+# inside the window's copy.  H1 code passes dirs=H1_DIRS and never names the folder.
+H1_DIRS = fold_data.SLICES[:1]
 FF5_ZIP = "F-F_Research_Data_5_Factors_2x3_daily_CSV.zip"
 MOM_ZIP = "F-F_Momentum_Factor_daily_CSV.zip"
 FACTORS = ("Mkt-RF", "SMB", "HML", "RMW", "CMA", "UMD")
@@ -230,15 +233,45 @@ def _split_after_fn(splits):
 
 class PriceStore:
     """Lazy per-ticker price loader bounded by a VERIFIED fold_gate window.
-    Root = fold_data.research_root(window); hard max_date = window.hi."""
+    Root = fold_data.research_root(window); hard max_date = window.hi.
+
+    Fail-closed (Verifier dev-only conditions, 2026-10-18):
+      * dirs must be relative tier names inside the root (no absolute path, no '..');
+        every loaded file must REALPATH inside the root (no symlink escape)
+      * in dev/validation scope any loaded frame whose max bar date is past the
+        copy cutoff RAISES (it is not silently trimmed: such a frame means a wrong
+        root or a bad copy)
+      * a registered slice dir (fold_data.SLICES) must carry its manifest and every
+        file must match its sha there"""
 
     def __init__(self, window, dirs=PRICE_DIRS):
         self.root = fold_data.research_root(window)
         self.max_date = window.hi
         self.window = window
+        self.scope_cutoff = fold_data.CUTOFF.get(window.fold)     # None for holdout (live root)
         self.dirs = tuple(dirs)
+        for d in self.dirs:
+            if os.path.isabs(d) or ".." in d.replace("\\", "/").split("/"):
+                raise fold_gate.GateRefused(f"price dir {d!r} must be a relative tier inside the window root")
+        self._slices = {}
+        for d in self.dirs:
+            if d in fold_data.SLICES:
+                m, sha = fold_data.slice_manifest(self.root, d)
+                if m is None:
+                    raise fold_data.FoldDataError(f"slice {d} has no manifest under {self.root} "
+                                                  f"(python3 scripts/fold_data.py build-slice --fold dev --apply)")
+                if self.scope_cutoff and m.get("cutoff") != self.scope_cutoff:
+                    raise fold_data.FoldDataError(f"slice {d} cutoff {m.get('cutoff')} != scope {self.scope_cutoff}")
+                self._slices[d] = (m["files"], sha)
         self._c = {}
         self.low_trust = set()
+
+    def slice_shas(self):
+        return {d: sha for d, (_, sha) in self._slices.items()}
+
+    def loaded_range(self):
+        ss = [x for x in self._c.values() if x is not None and x.d]
+        return (min(x.d[0] for x in ss), max(x.d[-1] for x in ss), len(ss)) if ss else (None, None, 0)
 
     def path_of(self, t):
         for d in self.dirs:
@@ -256,12 +289,26 @@ class PriceStore:
         p = self.path_of(t)
         if not p:
             return None
+        rp = os.path.realpath(p)
+        if not rp.startswith(os.path.realpath(self.root) + os.sep):
+            raise fold_data.FoldDataError(f"{p} resolves to {rp}, outside the window root {self.root}")
         blob = open(p, "rb").read()
+        tier = os.path.relpath(os.path.dirname(p), self.root)
+        if tier in self._slices:
+            files, _ = self._slices[tier]
+            if files.get(os.path.basename(p)) != hashlib.sha256(blob).hexdigest():
+                raise fold_data.FoldDataError(f"{tier}/{os.path.basename(p)} not in / differs from its slice manifest")
         try:
             doc = json.loads(blob)
         except ValueError:
             return None
         bars = doc.get("bars") or []
+        if self.scope_cutoff:
+            fmax = max((b.get("d") or "" for b in bars), default="")
+            if fmax > self.scope_cutoff:
+                raise fold_data.FoldDataError(
+                    f"{t}: loaded frame max date {fmax} > {self.window.fold} cutoff {self.scope_cutoff} "
+                    f"({rp}) - refusing (wrong data root or bad copy)")
         src = doc.get("source", "")
         eod = src.startswith("eodhd")
         if eod:
@@ -440,7 +487,16 @@ def log_variant(rec):
 
 
 def trial_count(var_recs, gate_recs):
-    """N = distinct runs ever started + gate grants no run references."""
+    """N = sum over gate grants of max(1, runs started under that grant) [+ runs with
+    no grant, which run() cannot produce].  Equivalently: distinct runs + grants no
+    run references.  Every grant is at least one trial.
+
+    BEST EFFORT, stated plainly (Verifier F11/F12): this counts what passes through
+    run()/run_events().  Code in the same process can evaluate variants with
+    position() directly, and a same-uid process can delete the logs; neither is
+    countable in-process.  The per-grant floor is the part that survives: grants
+    are logged by the gate, witnessed off-box at every gated grant
+    (scripts/witness.py) and, after Aaron's finance-gate step, written by another uid."""
     runs = {v["run_id"] for v in var_recs if v.get("run_id")}
     toks = {v.get("token") for v in var_recs if v.get("token")}
     orphan = [g for g in gate_recs if g.get("granted") and g.get("token") and g["token"] not in toks]
@@ -877,11 +933,14 @@ def run(name, kind, events, window, prereg, robustness=True, universe_fn=None, v
     events = list(events)
     now = datetime.datetime.now()
     run_id = f"{now.strftime('%Y%m%dT%H%M%S')}-{name}"
+    root, store, universe_fn = _inputs(window, universe_fn, store)
+    data_root_real = os.path.realpath(store.root)
     log_variant({"event": "start", "run_id": run_id, "name": name, "kind": kind, "variant": variant,
                  "token": window.token, "fold": window.fold, "hypothesis": window.hypothesis,
                  "prereg_sha256": pinfo["sha256"], "spec_sha256": pinfo["spec_sha256"],
+                 "data_root_real": data_root_real, "price_dirs": list(store.dirs),
+                 "slice_sha256": store.slice_shas(),
                  "ts": now.astimezone().isoformat(timespec="seconds")})
-    root, store, universe_fn = _inputs(window, universe_fn, store)
     ff = load_ff(os.path.join(root, "raw", "ff"))
     trades, info, store, cal = run_events(events, window, spec, universe_fn, store, _run_id=run_id)
     rep = evaluate(trades, info, store, cal, window, universe_fn, ff)
@@ -917,12 +976,17 @@ def run(name, kind, events, window, prereg, robustness=True, universe_fn=None, v
             "cost_model": spec["cost"], "robustness": bool(robustness and trades),
             "n_events_in": len(events), "price_dirs": list(store.dirs),
             "data_root": os.path.relpath(store.root, finpaths.root()),
+            "data_root_real": data_root_real, "slice_sha256": store.slice_shas(),
+            "loaded_min_date": store.loaded_range()[0], "loaded_max_date": store.loaded_range()[1],
+            "loaded_series": store.loaded_range()[2],
             "generated": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
     d = write_run(run_id, trades, rep, meta)
     log_variant({"event": "done", "run_id": run_id, "name": name, "kind": kind, "token": window.token,
                  "fold": window.fold, "hypothesis": window.hypothesis, "sr_alpha": f.get("sr_alpha"),
                  "n_periods": f.get("n"), "alpha_t_nw": f.get("alpha_t_nw"), "dsr": dsr, "N": N,
-                 "passed": passed, "params": params or {}, "ts": meta["generated"]})
+                 "passed": passed, "params": params or {}, "ts": meta["generated"],
+                 "data_root_real": data_root_real, "slice_sha256": store.slice_shas(),
+                 "loaded_min_date": meta["loaded_min_date"], "loaded_max_date": meta["loaded_max_date"]})
     return rep, d, trades
 
 

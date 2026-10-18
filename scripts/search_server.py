@@ -179,6 +179,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    import fold_data  # noqa: E402  live desk: explicit opt-in to live data (Verifier O1)
+    fold_data.use_live(__file__)
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"[boot] listening on http://{HOST}:{PORT}", flush=True)
     srv.serve_forever()

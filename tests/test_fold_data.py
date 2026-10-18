@@ -101,12 +101,16 @@ def test_reader_root_routing(tmp_path, monkeypatch):
     with pytest.raises(FD.FoldDataError, match="missing"):
         FD.reader_root()                                      # research never falls back to live data
     FD.build("dev", apply=True)
-    assert FD.reader_root() == str(root / "folds" / "dev") and FD.reader_cutoff() == "2019-12-31"
-    for op in ("paper_driver.py", "paper_bridge.py", "confluence.py", "nasdaq_scan.py"):
+    dev = os.path.realpath(str(root / "folds" / "dev"))
+    assert FD.reader_root() == dev and FD.reader_cutoff() == "2019-12-31"
+    # O1 (round 2): naming the process like a live-desk script no longer selects live data
+    for op in ("paper_driver.py", "paper_bridge.py", "confluence.py", "nasdaq_scan.py", "quotes.py"):
         monkeypatch.setattr(sys, "argv", [f"/data/finance/scripts/{op}"])
-        assert FD.reader_root() == str(root) and FD.is_operational()
-    monkeypatch.setattr(sys, "argv", ["-c"])
-    assert FD.reader_root() == str(root / "folds" / "dev")
+        assert FD.reader_root() == dev and not FD.is_operational()
+    # live only through the explicit opt-in the live-desk mains make
+    monkeypatch.setattr(FD, "_LIVE", None)
+    FD.use_live("/data/finance/scripts/paper_driver.py")
+    assert FD.reader_root() == os.path.realpath(str(root)) and FD.reader_cutoff() == "9999-12-31"
     assert not (set(RESEARCH) & FD.OPERATIONAL)
 
 
@@ -128,7 +132,10 @@ def test_walkforward_and_ta_read_the_dev_copy(tmp_path, monkeypatch):
     wf._FACTS.clear()
     assert [b["d"] for b in ta.load_bars("ZZZ")] == ["2019-12-31"]
     assert [r["filed"] for r in wf.facts_of("ZZZ")["units"]["USD"]["Rev"]] == ["2019-02-01"]
-    monkeypatch.setattr(sys, "argv", ["paper_driver.py"])
+    monkeypatch.setattr(sys, "argv", ["paper_driver.py"])              # argv0 alone: still the dev copy
+    assert [b["d"] for b in ta.load_bars("ZZZ")] == ["2019-12-31"]
+    monkeypatch.setattr(FD, "_LIVE", None)
+    FD.use_live("paper_driver.py")                                       # explicit live-desk opt-in
     wf._FACTS.clear()
     assert [b["d"] for b in ta.load_bars("ZZZ")][-1] == "2025-01-02"
     wf._FACTS.clear()

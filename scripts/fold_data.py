@@ -14,8 +14,18 @@ Resolution (research_root / reader_root):
   * fold_gate Window, fold dev             -> folds/dev
   * fold_gate Window, fold validation      -> folds/validation (window verified on the chain)
   * fold_gate Window, fold holdout         -> live root (window verified: Aaron-signed, first read)
-  * operational scripts (OPERATIONAL, by the running main script's file name)
-                                            -> live root (the live desk needs today's data)
+  * live desk: ONLY after an explicit fold_data.use_live(__file__) in the
+    script's __main__ block (2026-10-18 round 2, Verifier O1: the old
+    argv0-name allowlist let any process pick the live root by renaming itself).
+    use_live() refuses callers whose file is not in OPERATIONAL - an accident
+    guard, not security (any same-uid code can call it); tests/test_fold_data.py
+    fails if research or H1 code calls it.
+  * every returned root is a REALPATH and must resolve inside the root it was
+    reached through (a folds/<fold> symlink to elsewhere is refused, O3).
+Slices (condition 1 of Verifier's dev-only pass): SLICES are separate dev-period
+materializations with their OWN sha manifest, e.g. folds/dev/raw/price/h1_universe/
+MANIFEST.json.  H1 code reads them only via edge_harness.H1_DIRS; nothing in H1
+code may name the live folder.  build-slice / verify-slice below.
 Copies contain, per fold cutoff C:
   raw/price{,/dead,/sp_exits}/*.json  bars with d <= C.  Split adjustment is
         re-based so the copy embeds NO post-C split: Yahoo o/h/l/c x F_after(C),
@@ -74,12 +84,29 @@ def copy_root(fold):
     return finpaths.p("folds", fold)
 
 
-def main_script():
-    return os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else ""
+_LIVE = None
+
+
+def use_live(caller_file):
+    """Live desk opt-in.  Call from the __main__ block of an OPERATIONAL script only."""
+    global _LIVE
+    name = os.path.basename(str(caller_file))
+    if name not in OPERATIONAL:
+        raise FoldDataError(f"use_live() from {name}: only live-desk scripts (fold_data.OPERATIONAL) may read live data")
+    if _PROCESS_WINDOW is not None:
+        raise FoldDataError("use_live() after a fold window was bound")
+    _LIVE = name
 
 
 def is_operational():
-    return main_script() in OPERATIONAL
+    return _LIVE is not None
+
+
+def _contained(path, base):
+    rp, rb = os.path.realpath(path), os.path.realpath(base)
+    if rp != rb and not rp.startswith(rb + os.sep):
+        raise FoldDataError(f"{path} resolves to {rp}, outside {rb} (symlink escape refused)")
+    return rp
 
 
 def _manifest(fold):
@@ -99,11 +126,19 @@ def research_root(window):
     if not isinstance(window, fold_gate.Window) or not fold_gate.verify(window):
         raise fold_gate.GateRefused("window not issued by fold_gate (token not in an intact access log)")
     if window.fold == "holdout":
-        return finpaths.root()
+        return os.path.realpath(finpaths.root())
     _manifest(window.fold)
     if window.hi > CUTOFF[window.fold]:
         raise fold_gate.GateRefused(f"window hi {window.hi} beyond the {window.fold} copy cutoff")
-    return copy_root(window.fold)
+    return _contained_copy(window.fold)
+
+
+def _contained_copy(fold):
+    want = os.path.join(os.path.realpath(finpaths.root()), "folds", fold)
+    rp = os.path.realpath(copy_root(fold))
+    if rp != want:
+        raise FoldDataError(f"fold copy {copy_root(fold)} resolves to {rp}, not {want} (symlink refused)")
+    return rp
 
 
 _PROCESS_WINDOW = None
@@ -112,6 +147,8 @@ _PROCESS_WINDOW = None
 def use_window(window):
     """Bind the process-wide reader root (ta / walkforward) to a verified window."""
     global _PROCESS_WINDOW
+    if _LIVE is not None:
+        raise FoldDataError("use_window() in a live-desk process")
     research_root(window)
     _PROCESS_WINDOW = window
 
@@ -121,9 +158,9 @@ def reader_root():
     if _PROCESS_WINDOW is not None:
         return research_root(_PROCESS_WINDOW)
     if is_operational():
-        return finpaths.root()
+        return os.path.realpath(finpaths.root())
     _manifest("dev")
-    return copy_root("dev")
+    return _contained_copy("dev")
 
 
 def reader_cutoff():
@@ -390,7 +427,106 @@ def build(fold, apply=False, src_root=None):
         os.replace(stage, dst)
         if os.path.exists(old):
             shutil.rmtree(old)
+        for rel in SLICES:                      # a rebuild must not drop the registered slices
+            if os.path.isdir(os.path.join(src, rel)):
+                build_slice(fold, rel, apply=True, src_root=src)
     return man
+
+
+# ------------------------------------------------------------------ slices
+SLICES = ("raw/price/h1_universe",)
+SLICE_MANIFEST = "MANIFEST.json"
+
+
+def slice_dir(fold, rel):
+    return os.path.join(copy_root(fold), rel)
+
+
+def build_slice(fold, rel, apply=False, src_root=None):
+    """Materialize the fold-period cut of one price tier (cut_price, same rules as the
+    copy) into folds/<fold>/<rel>/ with its own manifest.  _meta/ (raw vendor
+    responses, full period) is never copied."""
+    if rel not in SLICES:
+        raise FoldDataError(f"{rel} is not a registered slice")
+    cutoff = CUTOFF[fold]
+    src = os.path.join(src_root or finpaths.root(), rel)
+    dst = slice_dir(fold, rel)
+    stage = dst + ".building"
+    if apply:
+        if os.path.exists(stage):
+            shutil.rmtree(stage)
+        os.makedirs(stage)
+    man = {"slice": rel, "fold": fold, "cutoff": cutoff, "source": rel,
+           "built": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+           "files": {}, "max_date": "", "min_date": "", "counts": {"in": 0, "out": 0, "empty_after_cut": 0}}
+    for fn in sorted(os.listdir(src)):
+        if not fn.endswith(".json") or fn.startswith("_") or fn == SLICE_MANIFEST:
+            continue
+        man["counts"]["in"] += 1
+        try:
+            doc = json.load(open(os.path.join(src, fn)))
+        except ValueError:
+            continue
+        if not isinstance(doc, dict):
+            continue
+        nd, _ = cut_price(doc, None, cutoff)
+        if nd is None:
+            man["counts"]["empty_after_cut"] += 1
+            continue
+        ds = [b["d"] for b in nd.get("bars") or []]
+        if ds and max(ds) > cutoff:
+            raise FoldDataError(f"{fn}: cut left {max(ds)} > {cutoff}")
+        data = json.dumps(nd, separators=(",", ":")).encode()
+        if apply:
+            with open(os.path.join(stage, fn), "wb") as fh:
+                fh.write(data)
+        man["files"][fn] = hashlib.sha256(data).hexdigest()
+        man["counts"]["out"] += 1
+        if ds:
+            man["max_date"] = max(man["max_date"], ds[-1])
+            man["min_date"] = min(man["min_date"] or ds[0], ds[0])
+    if apply:
+        with open(os.path.join(stage, SLICE_MANIFEST), "w") as fh:
+            fh.write(json.dumps(man, indent=0, sort_keys=True))
+        if os.path.exists(dst):
+            shutil.rmtree(dst)
+        os.replace(stage, dst)
+    return man
+
+
+def slice_manifest(root, rel):
+    """(manifest dict, sha256 of the manifest bytes) for a slice under a data root, or (None, None)."""
+    mp = os.path.join(root, rel, SLICE_MANIFEST)
+    if not os.path.isfile(mp):
+        return None, None
+    b = open(mp, "rb").read()
+    return json.loads(b), hashlib.sha256(b).hexdigest()
+
+
+def verify_slice(fold, rel):
+    root = copy_root(fold)
+    m, sha = slice_manifest(root, rel)
+    if m is None:
+        return [f"{rel}: no slice manifest in {fold} copy"], None
+    bad = []
+    if m.get("cutoff") != CUTOFF[fold]:
+        bad.append(f"slice cutoff {m.get('cutoff')} != {CUTOFF[fold]}")
+    d = os.path.join(root, rel)
+    on_disk = {f for f in os.listdir(d) if f.endswith(".json") and f != SLICE_MANIFEST}
+    if on_disk != set(m["files"]):
+        bad.append(f"files on disk ({len(on_disk)}) != manifest ({len(m['files'])})")
+    for fn, h in m["files"].items():
+        p = os.path.join(d, fn)
+        if not os.path.isfile(p):
+            continue
+        b = open(p, "rb").read()
+        if hashlib.sha256(b).hexdigest() != h:
+            bad.append(f"{fn}: sha != slice manifest")
+            continue
+        ds = [x["d"] for x in json.loads(b).get("bars") or []]
+        if ds and max(ds) > CUTOFF[fold]:
+            bad.append(f"{fn}: {max(ds)} > cutoff")
+    return bad, sha
 
 
 def verify_copy(fold):
@@ -440,10 +576,22 @@ def verify_copy(fold):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["build", "verify"])
+    ap.add_argument("cmd", choices=["build", "verify", "build-slice", "verify-slice"])
+    ap.add_argument("--slice", default="raw/price/h1_universe")
     ap.add_argument("--fold", choices=sorted(CUTOFF), required=True)
     ap.add_argument("--apply", action="store_true", help="write the copy (default: dry run)")
     a = ap.parse_args()
+    if a.cmd == "build-slice":
+        m = build_slice(a.fold, a.slice, a.apply)
+        print(json.dumps({k: m[k] for k in ("slice", "fold", "cutoff", "counts", "min_date", "max_date")}, indent=1))
+        if not a.apply:
+            print("DRY RUN - nothing written (add --apply)")
+        return
+    if a.cmd == "verify-slice":
+        bad, sha = verify_slice(a.fold, a.slice)
+        print(json.dumps({"slice": a.slice, "fold": a.fold, "slice_sha256": sha, "problems": bad[:20],
+                          "n_problems": len(bad)}, indent=1))
+        sys.exit(1 if bad else 0)
     if a.cmd == "build":
         m = build(a.fold, a.apply)
         print(json.dumps({"fold": a.fold, "cutoff": m["cutoff"], "apply": a.apply, "counts": m["counts"],

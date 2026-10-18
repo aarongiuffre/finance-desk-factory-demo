@@ -76,6 +76,7 @@ def main():
         print(f"{d}: {len(files)}/{want} files, {sum(f['bytes'] for f in files)/1e9:.2f} GB, {rows:,} data rows")
     print(f"total {tot_b/1e9:.2f} GB")
     eodhd(bad, fast)
+    h1_dev_slice(bad)
     for b in bad:
         print("FAIL", b)
     print("RESULT:", "PASS" if not bad else f"FAIL ({len(bad)})")
@@ -83,6 +84,25 @@ def main():
 
 
 FROZEN = ("raw/price/sp_exits/", "raw/price/h1_universe/")
+
+
+def h1_dev_slice(bad):
+    """Verifier dev-only condition 1: folds/dev/raw/price/h1_universe is cut at the dev
+    cutoff, every file matches the slice manifest, and the manifest sha equals the pin
+    committed at HEAD (ops/data/h1_dev_slice.sha256)."""
+    import subprocess
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import fold_data
+    rel = "raw/price/h1_universe"
+    probs, sha = fold_data.verify_slice("dev", rel)
+    bad.extend(f"h1 dev slice: {p}" for p in probs)
+    pin = "ops/data/h1_dev_slice.sha256"
+    r = subprocess.run(["git", "-C", ROOT, "show", f"HEAD:{pin}"], capture_output=True, text=True)
+    if r.returncode != 0 or r.stdout.split()[:1] != [sha]:
+        bad.append(f"h1 dev slice sha {sha} != committed pin {pin}")
+    m, _ = fold_data.slice_manifest(fold_data.copy_root("dev"), rel)
+    if m:
+        print(f"h1 dev slice: {len(m['files'])} files, {m['min_date']}..{m['max_date']}, sha {str(sha)[:16]}")
 TOKEN_RE = re.compile(rb"api_token=(?!REDACTED)[A-Za-z0-9.]{8,}")
 
 
