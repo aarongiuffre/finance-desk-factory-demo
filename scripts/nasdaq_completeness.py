@@ -13,6 +13,7 @@ Report lines:
 """
 import json
 import os
+import re
 import sys
 import time
 
@@ -52,15 +53,20 @@ def raw_accns():
 
 def parsed_accns():
     accs = set()
+    empty_jsonl = []
     for root, dirs, files in os.walk(OUT):
         for f in files:
             if f.endswith(".chunks.jsonl"):
+                p = os.path.join(root, f)
+                if os.path.getsize(p) == 0:
+                    empty_jsonl.append(p)  # degenerate parse output; nothing to embed
                 accs.add(f[:-13])
         for d in list(dirs):
             if os.path.isfile(os.path.join(root, d, "document.md")):
-                accs.add(d)
+                m = re.fullmatch(r"(\d{4}-\d{2}-\d{2})_(\d{10}-\d{2}-\d{6})", d)
+                accs.add(m.group(2) if m else d)  # DATE_ACCN dirs -> plain accession
                 dirs.remove(d)
-    return accs
+    return accs, empty_jsonl
 
 
 def embedded_accns():
@@ -78,8 +84,8 @@ def main():
     ts = time.strftime("%Y%m%d_%H%M%S")
     raw = raw_accns()
     print(f"raw accns: {len(raw)}")
-    parsed = parsed_accns()
-    print(f"parsed accns: {len(parsed)}")
+    parsed, empty_jsonl = parsed_accns()
+    print(f"parsed accns: {len(parsed)} (zero-byte jsonl: {len(empty_jsonl)})")
     emb = embedded_accns()
 
     raw_missing = sorted(set(raw) - parsed)
@@ -105,8 +111,12 @@ def main():
         fh.write(f"embedded accessions:  {len(emb)}\n\n")
         fh.write(f"raw without parsed:   {len(raw_missing)}  -> {p1}\n")
         fh.write(f"parsed not embedded:  {len(unembedded)}  -> {p2}\n")
+        fh.write(f"zero-byte jsonl (nothing to embed): {len(empty_jsonl)}\n")
+        for p in empty_jsonl[:20]:
+            fh.write(f"  {p}\n")
         empty_n = sum(1 for a in raw_missing
-                      if not any(f.is_file() for _, _, fs in os.walk(raw[a][2]) for f in fs))
+                      if not any(os.path.isfile(os.path.join(dp, f))
+                                 for dp, _, fs in os.walk(raw[a][2]) for f in fs))
         fh.write(f"  of which empty (0 files): {empty_n}\n")
     print(open(report).read())
     return 0

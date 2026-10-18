@@ -20,3 +20,7 @@ __pycache__/
 *.ckpt
 .alpaca_key
 backups/
+
+# scratch experiments (14G embed bake-off) + local alert outbox/state (finance-health)
+scratch/
+alerts/
