@@ -1,3 +1,10 @@
+# Edge plan phase 1 - STATUS: COMPLETE (2026-10-18 ~09:50 EDT). Resumed after the 08:25 boot; post_boot_check PASS.
+Everything under "Pending" below was done; see ops/edge_harness_README.md for the verification sheet.
+Post-resume changes: survivorship coverage recount (strict rule) + gap fill (EODHD total 257 requests);
+harness tier order sp_exits-first; pre-registered H4 PIT calibration (FAILED its criterion, recorded as is).
+Phase 2 is NOT started: no H1 prereg, no validation/holdout reads, no Alpaca trades.
+
+---- original pause record below ----
 # Edge plan phase 1 - RESUME FILE (paused 2026-10-18 ~08:05 EDT for hardware shutdown)
 
 On resume: run `bash /data/finance/ops/checks/post_boot_check.sh` first (expect the 12 user timers to be back via enable-at-boot), then continue from 'Pending' below.

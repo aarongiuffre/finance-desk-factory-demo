@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """edge_calibrate.py - phase-1 harness calibration runs (DEV fold only).
 
-  h4      : H4 inventory-build events, 2015-01-01..2019-12-31, 63-day hold,
-            direction -1 (expected NEGATIVE abnormal return).  Calibration
-            criterion (pre-registered in ops/edge_harness_README.md):
+  h4      : FIRST calibration (superseded): H4 inventory-build events from the
+            confluence ledger (today's 499 names = survivor universe),
+            2015-01-01..2019-12-31, 63-day hold, direction -1.  Criterion written
+            before its first run (in this docstring; not committed first):
             mean gross abnormal vs the per-date EW universe < 0 AND
-            month-clustered t <= -2.0.
+            month-clustered t <= -2.0.  Result: FAILED (+1.82%, t +2.50).
+            The within-name comparison (h4diag) was added AFTER seeing that
+            result - it is POST HOC and is reported as such, never as a pass.
   placebo : HARNESS NULL - random point-in-time S&P members on random dates in
             the same window, same event count, K seeded draws, every draw with
             the full robustness reruns.  Expected: mean abnormal ~0 (|mean| < 1%),

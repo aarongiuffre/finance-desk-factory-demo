@@ -2,8 +2,8 @@
 """edge_harness.py - shared event / calendar-time portfolio backtester (edge plan phase 1).
 
 One reusable lever for every hypothesis (H1-H4) and every test:
-  PriceStore      prices from raw/price (Yahoo live), raw/price/dead (EODHD NASDAQ
-                  dead tier), raw/price/sp_exits (EODHD S&P exits); bars after
+  PriceStore      prices from raw/price/sp_exits (EODHD S&P exits, coverage-validated),
+                  raw/price (Yahoo live), raw/price/dead (EODHD NASDAQ dead tier); bars after
                   window.hi are NEVER loaded (leakage firewall).
   fills           entry = OPEN of the first trading day strictly after the event
                   date (event known at filing/acceptance); same-day open only when
@@ -48,7 +48,11 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import fold_gate  # noqa: E402
 
 ET = ZoneInfo("America/New_York")
-PRICE_DIRS = ("raw/price", "raw/price/dead", "raw/price/sp_exits")
+# sp_exits first: those files are only written when they pass the S&P-window
+# coverage rule (survivorship_fill.py), and they replace empty / late-starting
+# files in the other tiers for those names.  Changed 2026-10-18 09:45; runs
+# before that used raw/price -> dead -> sp_exits (each trade records its file+sha).
+PRICE_DIRS = ("raw/price/sp_exits", "raw/price", "raw/price/dead")
 VARIANTS = os.environ.get("EDGE_VARIANTS", os.path.join(ROOT, "logs", "variants.jsonl"))
 RUNS = os.environ.get("EDGE_RUNS", os.path.join(ROOT, "logs", "edge"))
 MEMBERSHIP = os.path.join(ROOT, "universe", "sp500_ticker_start_end.csv")
@@ -753,7 +757,7 @@ def run(name, kind, events, window, hold=63, cost=None, dl_mode="-30", direction
             "window": {"hypothesis": window.hypothesis, "fold": window.fold, "lo": window.lo, "hi": window.hi,
                        "token": window.token, "prereg_sha": window.prereg_sha},
             "hold": hold, "dl_mode": dl_mode, "direction": direction, "cost_model": cost.as_dict(),
-            "n_events_in": len(events), "generated": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
+            "n_events_in": len(events), "price_dirs": list(store.dirs), "generated": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
     d = write_run(run_id, trades, rep, meta, runs_dir)
     log_variant({"ts": meta["generated"], "run_id": run_id, "name": name, "kind": kind, "variant": variant,
                  "fold": window.fold, "hypothesis": window.hypothesis, "sr_period": port.get("sr_period"),

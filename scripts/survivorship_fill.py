@@ -113,6 +113,22 @@ def candidates(t, dl_codes):
     return c
 
 
+def existing_covers(t, rows, days):
+    """True iff some existing file (any tier) covers every 2015+ S&P window of t."""
+    for p in (os.path.join(ROOT, "raw", "price", f"{t}.json"),
+              os.path.join(ROOT, "raw", "price", "dead", f"{t}.json"),
+              os.path.join(TIER, f"{t}.json")):
+        if not os.path.exists(p):
+            continue
+        try:
+            bars = [{"date": b["d"]} for b in json.load(open(p)).get("bars", []) if b.get("d") and b.get("c")]
+        except ValueError:
+            continue
+        if all(covers(bars, r, days)[0] for r in rows):
+            return True
+    return False
+
+
 def requests_used():
     if not os.path.exists(REQLOG):
         return 0
@@ -123,7 +139,7 @@ def load_cov():
     return json.load(open(COVERAGE)) if os.path.exists(COVERAGE) else {"names": {}}
 
 
-def cmd_fetch(budget, limit):
+def cmd_fetch(budget, limit, gaps=False):
     os.makedirs(META, exist_ok=True)
     dl = json.load(open(DELISTED))
     dl_codes = {}
@@ -131,12 +147,21 @@ def cmd_fetch(budget, limit):
         dl_codes.setdefault(x["Code"], x.get("Name"))
     days = spy_days()
     cov = load_cov()
-    todo = [r for r in exits() if not price_path(r["ticker"])]
+    if gaps:
+        # 2026-10-18 09:40: files that exist but are empty / start too late / stop
+        # early were counted as covered by `status`; re-target them.
+        by_t = {}
+        for r in exits():
+            by_t.setdefault(r["ticker"], []).append(r)
+        todo = [rs[0] for t, rs in sorted(by_t.items()) if not existing_covers(t, rs, days)]
+    else:
+        todo = [r for r in exits() if not price_path(r["ticker"])]
     seen = set()
     n = 0
     for r in todo:
         t = r["ticker"]
-        if t in seen or (t in cov["names"] and cov["names"][t].get("status") in ("ok", "missing")):
+        if t in seen or (t in cov["names"] and cov["names"][t].get("status") in ("ok", "missing")
+                         and not (gaps and cov["names"][t].get("status") == "ok")):
             continue
         seen.add(t)
         if limit and n >= limit:
@@ -185,12 +210,20 @@ def cmd_fetch(budget, limit):
 def cmd_status():
     ex = exits()
     tick = sorted({r["ticker"] for r in ex})
-    have = [t for t in tick if price_path(t)]
-    tier = [t for t in tick if price_path(t) and price_path(t).startswith(TIER)]
+    days = spy_days()
+    rows = {}
+    for r in ex:
+        rows.setdefault(r["ticker"], []).append(r)
+    # COVERED = some file covers every 2015+ S&P window (same rule as fetch);
+    # a file merely existing is not enough (fixed 2026-10-18 09:40).
+    have = [t for t in tick if existing_covers(t, rows[t], days)]
+    files = [t for t in tick if price_path(t)]
+    tier = [t for t in tick if os.path.exists(os.path.join(TIER, f"{t}.json"))]
     cov = load_cov()
-    miss = [t for t in tick if not price_path(t)]
+    miss = [t for t in tick if t not in have]
     summary = {"exit_windows_since_2015": len(ex), "exit_tickers": len(tick),
-               "with_price_file": len(have), "from_sp_exits_tier": len(tier),
+               "with_price_file": len(have), "any_file_incl_noncovering": len(files),
+               "from_sp_exits_tier": len(tier),
                "missing": len(miss), "eodhd_requests_logged": requests_used(),
                "missing_names": miss}
     cov["summary"] = summary
@@ -208,10 +241,11 @@ def main():
     f = sub.add_parser("fetch")
     f.add_argument("--budget", type=int, default=290)
     f.add_argument("--limit", type=int)
+    f.add_argument("--gaps", action="store_true", help="re-target names whose existing file fails coverage")
     sub.add_parser("status")
     a = ap.parse_args()
     if a.cmd == "fetch":
-        cmd_fetch(a.budget, a.limit)
+        cmd_fetch(a.budget, a.limit, a.gaps)
     else:
         cmd_status()
 
