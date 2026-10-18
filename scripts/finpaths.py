@@ -90,19 +90,41 @@ def p(*parts):
     return os.path.join(root(), *parts)
 
 
+# Optional finance-gate user (Aaron step, ops/staged_sudo/install_finance_gate_user.sh):
+# when the ROOT-OWNED marker exists, both chained logs and their anchors live in a
+# directory owned by the finance-gate system user; slowglow can only append through
+# the sudo helper (no truncate / delete / reset - Verifier F3, F12).
+GATE_STATE = "/var/lib/finance-gate"
+GATE_ENABLED = "/etc/finance-gate/gate-user.enabled"
+GATE_HELPER = "/usr/local/libexec/finance-gate-append"
+
+
+def gate_user_mode():
+    if is_test() or not os.path.exists(GATE_ENABLED):
+        return False
+    st = os.stat(GATE_ENABLED)
+    return st.st_uid == 0 and not st.st_mode & 0o022
+
+
 def state_dir():
     """Second anchor location (outside the repo/log dir)."""
     if is_test():
         return os.path.join(_TEST_ROOT, ".state", "finance-chain")
+    if gate_user_mode():
+        return os.path.join(GATE_STATE, "state")
     return os.path.join(home(), ".local", "state", "finance-chain")
 
 
+def _chain_dir():
+    return os.path.join(GATE_STATE, "logs") if gate_user_mode() else p("logs")
+
+
 def gate_log():
-    return p("logs", "holdout_access.jsonl")
+    return os.path.join(_chain_dir(), "holdout_access.jsonl")
 
 
 def variants_log():
-    return p("logs", "variants.jsonl")
+    return os.path.join(_chain_dir(), "variants.jsonl")
 
 
 def runs_dir():

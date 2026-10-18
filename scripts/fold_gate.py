@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
-"""fold_gate.py - the ONLY way to obtain a validation or holdout window (v2, 2026-10-18).
+"""fold_gate.py - the ONLY way to obtain a validation or holdout window (v3, 2026-10-18 round 2).
+
+v3 (Verifier round 2; premise: code running as slowglow cannot stop slowglow, so the
+real locks are off-box - see ops/edge_threat_model.md):
+  * "on origin" = the REAL remote: `git ls-remote <pinned URL>` + fetch by sha;
+    the local refs/remotes/origin/main and .git/config are never trusted (F5)
+  * gated reads run from a checkout whose HEAD IS the pushed commit and whose
+    `git status --porcelain --ignored --untracked-files=all` is empty - in
+    production a fresh worktree made by ops/gate/gated_run.sh, outside the data
+    checkout (F9/F10)
+  * Aaron's public key is read from a ROOT-OWNED file outside the repo,
+    /etc/finance-gate/allowed_signers (staged sudo script); the repo copy is
+    ignored (F6).  Holdout approval nonces are recorded and single-use.
+  * both chained logs are checked against the remote witness (scripts/witness.py)
+    before every grant and their new heads are pushed after every gated grant;
+    a gated grant that is not covered by a remote witness does not verify (F1/F2)
+v2 rules below still apply where not superseded.
 
 A Window is the capability that decides which rows are readable: research
 readers resolve their data root through fold_data.research_root(window), the
@@ -16,12 +32,12 @@ v2 rules (Verifier finding 4):
              - ops/prereg/<hypothesis>.yaml tracked, working copy == HEAD,
                YAML with `hypothesis:` == request and `family:` registered in
                ops/prereg/REGISTRY.yaml (family lists the hypothesis, not retired)
-             - clean tree: no tracked modification anywhere, no untracked file
-               under scripts/ ops/ tests/
-             - the prereg commit is an ancestor of refs/remotes/origin/main and
-               the prereg blob, REGISTRY.yaml, ops/gate/allowed_signers and the
-               gate code (fold_gate/chainlog/finpaths/fold_data) are identical
-               on origin/main (already pushed => visible to Aaron on GitHub)
+             - pristine code checkout: HEAD == remote main, nothing untracked or
+               ignored anywhere (--ignored), outside the data root (ops/gate/gated_run.sh)
+             - the prereg commit is an ancestor of main on the REAL remote
+               (git ls-remote of the pinned URL, objects fetched by sha) and the
+               prereg blob, REGISTRY.yaml and the gate code (fold_gate/chainlog/
+               finpaths/fold_data/witness) are identical there (v3)
   validation at most MAX_VALIDATION_READS per family; a re-read needs a prereg
              commit that is a STRICT DESCENDANT of the previously granted one
              (commit --amend / rebase => refused)
@@ -29,7 +45,8 @@ v2 rules (Verifier finding 4):
              hypothesis does not help: the family is the key), AND an approval
              signed by Aaron with his own SSH key (ssh-keygen -Y sign -n
              finance-holdout) over {family, hypothesis, prereg sha256, prereg
-             commit, nonce, expiry}; verified against ops/gate/allowed_signers.
+             commit, nonce, expiry}; verified against /etc/finance-gate/allowed_signers
+             (root-owned pin, v3); each nonce is single-use.
              No on-box process holds that key, so no agent can mint it.
 Every request - granted or refused - is appended to the chain.  verify()
 re-checks a Window against the chain (and, for holdout, the stored signature
@@ -60,15 +77,19 @@ import uuid
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import chainlog  # noqa: E402
 import finpaths  # noqa: E402
+import witness  # noqa: E402
 
 PREREG_DIR = os.path.join("ops", "prereg")
 REGISTRY = os.path.join(PREREG_DIR, "REGISTRY.yaml")
-ALLOWED_SIGNERS = os.path.join("ops", "gate", "allowed_signers")
+ALLOWED_SIGNERS = "/etc/finance-gate/allowed_signers"   # root-owned, outside the repo (staged sudo script)
 APPROVALS_DIR = os.path.join("logs", "approvals")          # gitignored; Aaron copies signed files here
 SIGN_NAMESPACE = "finance-holdout"
 SIGNER_ID = "aaron"
-ORIGIN_REF = "refs/remotes/origin/main"
-GATE_CODE = ("scripts/fold_gate.py", "scripts/chainlog.py", "scripts/finpaths.py", "scripts/fold_data.py")
+GATE_CODE = ("scripts/fold_gate.py", "scripts/chainlog.py", "scripts/finpaths.py", "scripts/fold_data.py",
+             "scripts/witness.py")
+LOG_NAMES = ("holdout_access", "variants")                 # witness names of the two chains
+TEST_DATA_DIRS = ("logs", "raw", "folds", "universe", "facts", ".state")
+CODE_EXT = (".py", ".pyc", ".sh", ".so", ".pth", ".ipynb", ".pyx")
 MAX_VALIDATION_READS = 3
 FOLDS = {"dev": ("2009-01-01", "2019-12-31"),
          "validation": ("2020-01-01", "2024-03-31"),
@@ -100,7 +121,57 @@ def _now():
 
 
 def _root():
-    return finpaths.root()
+    """git operations run in the CODE checkout (fresh worktree for gated reads)."""
+    return finpaths.code_root()
+
+
+def signers_path():
+    return finpaths.p(".state", "etc", "allowed_signers") if finpaths.is_test() else ALLOWED_SIGNERS
+
+
+def pinned_signers():
+    """(ok, reason, bytes).  Production: the file and its directory must be owned by root
+    and not group/other-writable, so slowglow (without root) cannot swap the key."""
+    p = signers_path()
+    if not os.path.isfile(p):
+        return False, f"{p} missing (Aaron step: ops/staged_sudo/install_gate_key.sh)", b""
+    if not finpaths.is_test():
+        for q in (p, os.path.dirname(p)):
+            st = os.stat(q)
+            if st.st_uid != 0 or st.st_mode & 0o022:
+                return False, f"{q} must be root-owned and not group/other-writable", b""
+    return True, "ok", open(p, "rb").read()
+
+
+def _chains():
+    """{witness name: records} for both chained logs (strict; GateRefused on any break)."""
+    try:
+        return {"holdout_access": chainlog.read_strict(finpaths.gate_log()),
+                "variants": chainlog.read_strict(finpaths.variants_log())}
+    except chainlog.ChainError as e:
+        raise GateRefused(f"log integrity check failed - gate closed: {e}") from None
+
+
+def check_witness(required):
+    """Local chains must extend the remote witness.  required => unreachable/absent fails closed."""
+    ch = _chains()
+    for name in LOG_NAMES:
+        try:
+            witness.check(name, ch[name], required)
+        except witness.WitnessError as e:
+            raise GateRefused(str(e)) from None
+    return ch
+
+
+def push_witness(commit):
+    ch = _chains()
+    out = {}
+    for name in LOG_NAMES:
+        try:
+            out[name] = witness.push(name, ch[name], commit)
+        except witness.WitnessError as e:
+            raise GateRefused(f"{e} - the grant is recorded but NOT witnessed, so it will not verify") from None
+    return out
 
 
 def _git(*args):
@@ -214,39 +285,66 @@ def prereg_status(hypothesis):
     return out
 
 
-def tree_status():
-    """(clean, reason)."""
-    rc, s = _git("status", "--porcelain=v1", "--untracked-files=all")
+def tree_status(remote_sha=None):
+    """(clean, reason) for a GATED read.  The code checkout must be the pushed commit
+    and carry NOTHING untracked or ignored (whole repo, --ignored), so code outside
+    scripts/ops/tests or in gitignored dirs cannot ride along (F9/F10).  Production:
+    the checkout must be a fresh worktree OUTSIDE the data root (ops/gate/gated_run.sh);
+    tests: data dirs of the test root are exempt unless they hold code files."""
+    code = os.path.realpath(_root())
+    data = os.path.realpath(finpaths.root())
+    if not finpaths.is_test() and (data == code or data.startswith(code + os.sep)):
+        return False, ("gated reads must run from a fresh worktree of the pushed commit, not the data "
+                       "checkout: bash ops/gate/gated_run.sh -- <command>")
+    if remote_sha:
+        rc, head = _git("rev-parse", "HEAD")
+        head = head.decode().strip()
+        if rc != 0 or head != remote_sha:
+            return False, f"code checkout HEAD {head[:12]} != pushed remote main {remote_sha[:12]}"
+    rc, s = _git("status", "--porcelain=v1", "--ignored", "--untracked-files=all")
     if rc != 0:
         return False, "git status failed"
     bad = []
     for ln in s.decode().splitlines():
-        code, path = ln[:2], ln[3:]
-        if code == "??":
-            if path.split("/", 1)[0] in ("scripts", "ops", "tests"):
-                bad.append(ln)
-        else:
-            bad.append(ln)
+        path = ln[3:]
+        if (finpaths.is_test() and path.split("/", 1)[0] in TEST_DATA_DIRS
+                and not path.rstrip("/").endswith(CODE_EXT)):
+            continue
+        bad.append(ln)
     if bad:
-        return False, f"working tree not clean ({len(bad)} entries, e.g. {bad[0]!r})"
+        return False, f"code checkout not pristine ({len(bad)} entries incl. untracked/ignored, e.g. {bad[0]!r})"
     return True, "ok"
 
 
-def origin_status(prereg_rel, prereg_commit):
-    """(ok, reason): prereg commit is on origin/main; prereg, registry, signers, gate code identical there."""
-    rc, _ = _git("rev-parse", "--verify", "-q", ORIGIN_REF)
+def remote_head():
+    """(sha or None, reason): refs/heads/main on the REAL remote (git ls-remote, pinned URL)."""
+    try:
+        return witness.remote_main(), "ok"
+    except (witness.WitnessError, subprocess.TimeoutExpired, OSError) as e:
+        return None, f"cannot read the real remote ({e}) - gate closed"
+
+
+def origin_status(prereg_rel, prereg_commit, remote_sha=None):
+    """(ok, reason): the prereg commit is in the REAL remote's main (ls-remote sha, objects
+    fetched by sha - never the local tracking ref) and prereg, registry and gate code at
+    HEAD are identical to the remote commit."""
+    if remote_sha is None:
+        remote_sha, why = remote_head()
+        if remote_sha is None:
+            return False, why
+    r = subprocess.run(["git", "-C", _root(), "fetch", "-q", witness.remote_url(), "refs/heads/main"],
+                       capture_output=True, timeout=180, env=witness.GIT_ENV)
+    rc, _ = _git("cat-file", "-e", f"{remote_sha}^{{commit}}")
+    if r.returncode != 0 or rc != 0:
+        return False, f"could not fetch remote main {remote_sha[:12]} - gate closed"
+    rc, _ = _git("merge-base", "--is-ancestor", prereg_commit, remote_sha)
     if rc != 0:
-        return False, f"no {ORIGIN_REF} (prereg must be pushed first)"
-    rc, _ = _git("merge-base", "--is-ancestor", prereg_commit, ORIGIN_REF)
-    if rc != 0:
-        return False, f"prereg commit {prereg_commit[:12]} is not on origin/main yet (wait for the push)"
-    for rel in (prereg_rel, REGISTRY, ALLOWED_SIGNERS) + GATE_CODE:
-        rc_o, ob = _git("show", f"{ORIGIN_REF}:{rel}")
+        return False, f"prereg commit {prereg_commit[:12]} is not on the real remote's main (push it first)"
+    for rel in (prereg_rel, REGISTRY) + GATE_CODE:
+        rc_o, ob = _git("show", f"{remote_sha}:{rel}")
         rc_h, hb = _git("show", f"HEAD:{rel}")
-        if rel == ALLOWED_SIGNERS and rc_o != 0 and rc_h != 0:
-            continue                      # absent on both: holdout check reports it
         if rc_o != 0 or rc_h != 0 or ob != hb:
-            return False, f"{rel} at HEAD differs from origin/main (push and review first)"
+            return False, f"{rel} at HEAD differs from the real remote's main (push and review first)"
     return True, "ok"
 
 
@@ -255,15 +353,15 @@ def _family_grants(recs, family, fold):
 
 
 def _approval_files(family):
-    base = os.path.join(_root(), APPROVALS_DIR, f"{family}.json")
+    base = os.path.join(finpaths.root(), APPROVALS_DIR, f"{family}.json")
     return base, base + ".sig"
 
 
 def verify_signature(data, sig):
-    """ssh-keygen -Y verify against ops/gate/allowed_signers at HEAD. -> (ok, reason)."""
-    ok, why, signers = _head_blob(ALLOWED_SIGNERS)
+    """ssh-keygen -Y verify against the root-owned pinned key file. -> (ok, reason)."""
+    ok, why, signers = pinned_signers()
     if not ok:
-        return False, f"{ALLOWED_SIGNERS}: {why} (Aaron has not installed his public key)"
+        return False, why
     with tempfile.TemporaryDirectory() as td:
         a, s = os.path.join(td, "allowed"), os.path.join(td, "x.sig")
         open(a, "wb").write(signers)
@@ -297,6 +395,7 @@ def check_approval(data, sig, family, hypothesis, st, now=None):
 def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None):
     """Return a Window or raise GateRefused.  Every call is logged in the chain."""
     recs = _read_log()                                         # fail closed before anything else
+    gated = fold in GATED
     rec = {"ts": _now(), "hypothesis": hypothesis, "fold": fold, "kind": kind, "purpose": purpose,
            "user": getpass.getuser(), "pid": os.getpid(), "gate_version": 2}
     rc, head = _git("rev-parse", "HEAD")
@@ -322,12 +421,20 @@ def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None):
             refuse(st["reason"])
         fam = st["family"]
         rec["family"] = fam
-        ok, why = tree_status()
+        remote_sha, why = remote_head()
+        if remote_sha is None:
+            refuse(why)
+        rec["remote_main"] = remote_sha
+        ok, why = origin_status(st["path"], st["commit"], remote_sha)
         if not ok:
             refuse(why)
-        ok, why = origin_status(st["path"], st["commit"])
+        ok, why = tree_status(remote_sha)
         if not ok:
             refuse(why)
+        try:
+            check_witness(required=True)
+        except GateRefused as e:
+            refuse(str(e))
         if fold == "validation":
             prior = _family_grants(recs, fam, "validation")
             if len(prior) >= MAX_VALIDATION_READS:
@@ -350,15 +457,28 @@ def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None):
             ok, why = check_approval(data, sig, fam, hypothesis, st)
             if not ok:
                 refuse(why)
-            extra = {"approval": data.decode(), "approval_sig": sig.decode(),
+            nonce = json.loads(data)["nonce"]
+            if any(r.get("approval_nonce") == nonce for r in recs):
+                refuse("approval nonce already used (replay)")
+            extra = {"approval": data.decode(), "approval_sig": sig.decode(), "approval_nonce": nonce,
                      "approval_sha256": hashlib.sha256(data).hexdigest()}
         extra.update(prereg=st["path"], prereg_sha=st["sha"], prereg_commit=st["commit"], family=fam)
+    else:
+        try:                                    # dev: witness checked when reachable, mismatch fails closed
+            check_witness(required=False)
+        except GateRefused as e:
+            refuse(str(e))
     tok = uuid.uuid4().hex
     rec.update(granted=True, reason="ok", lo=lo, hi=hi, token=tok, **extra)
     rec.setdefault("prereg_sha", "")
     rec.setdefault("family", "")
     _append(rec)
+    if gated:
+        push_witness(rec["remote_main"])
     return Window(hypothesis, fold, lo, hi, tok, rec["prereg_sha"], rec["family"], rec.get("prereg_commit", ""))
+
+
+_WITNESSED = set()      # tokens already seen covered by the (append-only) remote witness
 
 
 def find_grant(window, recs=None):
@@ -379,8 +499,13 @@ def find_grant(window, recs=None):
                 ok, _ = verify_signature(r.get("approval", "").encode(), r.get("approval_sig", "").encode())
                 if not ok:
                     return None
-            if window.fold in GATED and not r.get("prereg_commit"):
-                return None
+            if window.fold in GATED:
+                if not r.get("prereg_commit"):
+                    return None
+                if r["token"] not in _WITNESSED:
+                    if not witness.covers("holdout_access", r["seq"] + 1):
+                        return None
+                    _WITNESSED.add(r["token"])
             return r
     return None
 
@@ -429,6 +554,37 @@ def main():
     elif cmd == "verify-chain":
         rows = _read_log()
         print(f"chain OK: {len(rows)} records, head {rows[-1]['h'][:16] if rows else '-'}")
+    elif cmd == "tree-check":
+        # used by ops/gate/gated_run.sh --check: would this checkout pass the gated-tree rule?
+        sha, why = remote_head()
+        if sha is None:
+            print(why); sys.exit(1)
+        ok, why = tree_status(sha)
+        print(f"gated tree check vs remote main {sha[:12]}: {'OK' if ok else 'REFUSED: ' + why}")
+        sys.exit(0 if ok else 1)
+    elif cmd == "witness-init":
+        # Aaron step: publish the CURRENT heads of both chains as the first remote witness.
+        # DRY RUN unless --apply.  Pushes tags to the real remote (externally visible).
+        apply = "--apply" in sys.argv[2:]
+        sha, why = remote_head()
+        if sha is None:
+            print(why); sys.exit(1)
+        ch = check_witness(required=False)
+        for name in LOG_NAMES:
+            n = len(ch[name]); h = ch[name][-1]["h"] if ch[name] else chainlog.GENESIS
+            print(f"{'push' if apply else 'DRY RUN would push'} {witness.PREFIX}{name}/{n:08d}-{h} -> {sha[:12]}")
+        if apply:
+            print(push_witness(sha))
+    elif cmd == "witness-status":
+        ch = _chains()
+        for name in LOG_NAMES:
+            try:
+                w = witness.check(name, ch[name], required=False)
+                print(f"{name}: local {len(ch[name])} records; remote witness "
+                      f"{'none' if w is None else f'count {w[0]} head {w[1][:16]}'} - consistent")
+            except witness.WitnessError as e:
+                print(f"{name}: WITNESS MISMATCH: {e}")
+                sys.exit(1)
     elif cmd == "check-prereg":
         st = prereg_status(sys.argv[2])
         st.pop("doc", None)

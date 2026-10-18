@@ -115,8 +115,23 @@ def _write_anchor(path, recs):
         os.replace(tmp, ap)
 
 
+def _via_helper(path, rec):
+    """finance-gate mode: append as the finance-gate user through the root-owned helper."""
+    import subprocess
+    name = os.path.basename(path)[:-len(".jsonl")]
+    r = subprocess.run(["sudo", "-n", "-u", "finance-gate", finpaths.GATE_HELPER, name],
+                       input=json.dumps(rec, sort_keys=True), capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        raise ChainError(f"finance-gate append helper failed: {r.stderr.strip()[:200]}")
+    return json.loads(r.stdout)
+
+
 def append(path, rec):
     """Append rec (dict) to the chain under an exclusive lock; returns the stored record."""
+    if (finpaths.gate_user_mode() and path.startswith(finpaths.GATE_STATE + os.sep)
+            and os.path.basename(os.path.dirname(os.path.dirname(path))) == "finance-gate"
+            and not os.access(os.path.dirname(path), os.W_OK)):
+        return _via_helper(path, rec)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     lock = open(path + ".lock", "a")
     try:

@@ -15,7 +15,7 @@ import finpaths
 
 REPO = Path(__file__).resolve().parent.parent
 GIT = ["git", "-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false"]
-GATE_CODE = ("fold_gate.py", "chainlog.py", "finpaths.py", "fold_data.py")
+GATE_CODE = ("fold_gate.py", "chainlog.py", "finpaths.py", "fold_data.py", "witness.py")
 SPEC = {"hold_trading_days": 63, "direction": "long", "same_day_ok": False, "min_price": 5.0,
         "costs": {"fee_bps": 15, "half_spread_bps": {"large": 5, "mid": 15, "small": 40}, "slip_bps": 10,
                   "large_adv": 50000000, "mid_adv": 5000000, "floor_roundtrip_bps": 0, "borrow_bps_annual": 50},
@@ -46,6 +46,14 @@ class Env:
         self.commit("init", ".")
         self.push()
         self.key = None
+        self.init_witness()
+
+    def init_witness(self):
+        """Genesis witness tags on the bare origin (mimics ops/offbox/witness_init.sh)."""
+        import witness
+        head = git(self.root, "rev-parse", "HEAD").stdout.decode().strip()
+        for name in ("holdout_access", "variants"):
+            witness.push(name, [], head)
 
     # ---- git
     def commit(self, msg, *paths):
@@ -80,15 +88,16 @@ class Env:
 
     # ---- Aaron test key + approvals (mimics ops/gate/aaron_sign_holdout_approval.sh)
     def install_key(self, push=True):
+        """Aaron's test key at the PINNED location (production: root-owned
+        /etc/finance-gate/allowed_signers; tests: <root>/.state/etc/allowed_signers).
+        Nothing is committed: the repo copy of allowed_signers is ignored by the gate."""
+        import fold_gate
         k = os.path.join(self.tmp, "aaron_key")
         subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "aaron-test", "-f", k], check=True)
         pub = open(k + ".pub").read().split()
-        os.makedirs(os.path.join(self.root, "ops", "gate"), exist_ok=True)
-        open(os.path.join(self.root, "ops", "gate", "allowed_signers"), "w").write(
-            f'aaron namespaces="finance-holdout" {pub[0]} {pub[1]}\n')
-        self.commit("allowed_signers", "ops/gate/allowed_signers")
-        if push:
-            self.push()
+        p = fold_gate.signers_path()
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, "w").write(f'aaron namespaces="finance-holdout" {pub[0]} {pub[1]}\n')
         self.key = k
         return k
 

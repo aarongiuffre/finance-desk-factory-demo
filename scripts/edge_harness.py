@@ -479,7 +479,15 @@ class Benchmarks:
 
 # ----------------------------------------------------------------------------- variants chain / DSR
 def read_variants():
-    return chainlog.read_strict(finpaths.variants_log())
+    """Strict chain read; when the real remote is reachable the chain must also extend
+    its witnessed head (a reset/rewrite after a gated grant raises - Verifier F12)."""
+    recs = chainlog.read_strict(finpaths.variants_log())
+    import witness
+    try:
+        witness.check("variants", recs, required=False)
+    except witness.WitnessError as e:
+        raise chainlog.ChainError(str(e)) from None
+    return recs
 
 
 def log_variant(rec):

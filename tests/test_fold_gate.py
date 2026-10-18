@@ -61,7 +61,7 @@ def test_refuses_wrong_hypothesis_or_family(env):
 
 def test_prereg_must_be_on_origin(env):
     env.prereg(push=False)
-    with pytest.raises(G.GateRefused, match="not on origin"):
+    with pytest.raises(G.GateRefused, match="not on the real remote"):
         G.request("H9", "validation")
     env.push()
     assert G.request("H9", "validation").fold == "validation"
@@ -71,7 +71,7 @@ def test_gate_code_must_match_origin(env):
     env.prereg()
     open(os.path.join(env.root, "scripts", "fold_gate.py"), "a").write("# local patch\n")
     env.commit("patch gate", "scripts/fold_gate.py")                 # committed but NOT pushed
-    with pytest.raises(G.GateRefused, match="scripts/fold_gate.py at HEAD differs from origin"):
+    with pytest.raises(G.GateRefused, match="scripts/fold_gate.py at HEAD differs from the real remote"):
         G.request("H9", "validation")
 
 
@@ -79,12 +79,12 @@ def test_attack_E_dirty_tree_refused(env):
     """gate_break E: a dirty scripts/harness.py while asking for validation."""
     env.prereg()
     open(os.path.join(env.root, "scripts", "harness.py"), "w").write("x = 1\n")      # untracked under scripts/
-    with pytest.raises(G.GateRefused, match="not clean"):
+    with pytest.raises(G.GateRefused, match="not pristine"):
         G.request("H9", "validation")
     env.commit("harness", "scripts/harness.py")
     env.push()
     open(os.path.join(env.root, "scripts", "harness.py"), "a").write("y = 2\n")      # tracked modification
-    with pytest.raises(G.GateRefused, match="not clean"):
+    with pytest.raises(G.GateRefused, match="not pristine"):
         G.request("H9", "validation")
 
 

@@ -22,17 +22,30 @@
 # gpg --list-packets that the recipient key id is the only one.  ORIGINALS ARE KEPT.
 #
 # --remove-originals refuses unless ops/offbox/KEY_CUSTODY_CONFIRMED(.sig) exists and
-# verifies against ops/gate/allowed_signers (namespace finance-custody), i.e. Aaron has
+# verifies against the ROOT-OWNED pin /etc/finance-gate/allowed_signers (namespace
+# finance-custody; ops/staged_sudo/install_gate_key.sh), i.e. Aaron has
 # signed "I hold the private key off-box and tested a decrypt".  Losing the key = losing
 # that data, so this step is deliberately Aaron-only.  Even then it MOVES the files to
 # offbox/removed_<date>/ first; a later `rm -rf` of that dir is Aaron's call.
-# REVERT (any time, with the key):  gpg -d full_period_<date>.tar.gpg | tar -x -C /data/finance
+# The dev copy (folds/dev, incl. the H1 dev slice folds/dev/raw/price/h1_universe) stays
+# PLAINTEXT: dev-period research keeps working.  The full-period h1_universe folder and
+# folds/validation are what get encrypted.
+# --revert: ON A MACHINE WITH THE PRIVATE KEY (or with it imported temporarily), restores
+#   every path from the archive; DRY RUN lists the archive, --revert --apply extracts.
+#   Manual equivalent: gpg -d offbox/full_period_<date>.tar.gpg | tar -x -C /data/finance
 set -euo pipefail
 ROOT=/data/finance; cd "$ROOT"
-KEY=""; APPLY=0; REMOVE=0
+KEY=""; APPLY=0; REMOVE=0; REVERT=0
 while [ $# -gt 0 ]; do case "$1" in
-  --recipient-key) KEY=$2; shift 2;; --apply) APPLY=1; shift;; --remove-originals) REMOVE=1; shift;;
+  --recipient-key) KEY=$2; shift 2;; --apply) APPLY=1; shift;; --remove-originals) REMOVE=1; shift;; --revert) REVERT=1; shift;;
   *) echo "unknown arg $1" >&2; exit 2;; esac; done
+if [ "$REVERT" = 1 ]; then
+  A=$(ls -1 offbox/full_period_*.tar.gpg 2>/dev/null | tail -1); [ -n "$A" ] || { echo "no archive" >&2; exit 3; }
+  sha256sum -c "$A.sha256"
+  echo "archive $A: $(wc -l < "${A%.tar.gpg}.files") top-level paths"
+  [ "$APPLY" = 1 ] || { echo "DRY RUN: would decrypt + extract into $ROOT (needs the private key; add --apply)"; exit 0; }
+  gpg --batch -d "$A" | tar -x -C "$ROOT"; echo "restored from $A"; exit 0
+fi
 mapfile -t FILES < <( { ls raw/dera_insider/202[0-6]q*.zip raw/dera_fsds/202[0-6]q*.zip 2>/dev/null;
                         [ -d raw/price/h1_universe ] && echo raw/price/h1_universe;
                         [ -d folds/validation ] && echo folds/validation; } )
@@ -43,7 +56,7 @@ OUT=offbox/full_period_${STAMP}.tar.gpg
 if [ "$REMOVE" = 1 ]; then
   C=ops/offbox/KEY_CUSTODY_CONFIRMED
   [ -f "$C" ] && [ -f "$C.sig" ] || { echo "REFUSED: $C(.sig) missing - Aaron has not confirmed key custody" >&2; exit 3; }
-  ssh-keygen -Y verify -f ops/gate/allowed_signers -I aaron -n finance-custody -s "$C.sig" < "$C" \
+  ssh-keygen -Y verify -f /etc/finance-gate/allowed_signers -I aaron -n finance-custody -s "$C.sig" < "$C" \
     || { echo "REFUSED: custody confirmation does not verify" >&2; exit 3; }
   ls offbox/full_period_*.tar.gpg >/dev/null 2>&1 || { echo "REFUSED: no archive" >&2; exit 3; }
   [ "$APPLY" = 1 ] || { echo "DRY RUN: would move the paths above to offbox/removed_${STAMP}/"; exit 0; }
