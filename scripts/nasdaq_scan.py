@@ -44,6 +44,8 @@ def _ua():
 
 
 def _get(url, timeout=90):
+    from sec_throttle import throttle_sec_url
+    throttle_sec_url(url)  # SEC frames/companyfacts/tickers: shared bucket
     req = urllib.request.Request(url, headers={"User-Agent": _ua()})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())

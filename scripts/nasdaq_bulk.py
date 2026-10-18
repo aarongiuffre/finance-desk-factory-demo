@@ -413,7 +413,7 @@ def cmd_dead_roster(out="/data/finance/universe/nasdaq_dead_roster.json"):
     import urllib.request as _u
     key = open(os.path.join(ROOT, ".eodhd_key")).read().strip()
     key = key.split("=", 1)[-1].strip() if "=" in key else key
-    dl = json.loads(_u.urlopen(
+    dl = json.loads(_u.urlopen(  # sec-throttle: non-SEC (EODHD)
         "https://eodhd.com/api/exchange-symbol-list/US?fmt=json&delisted=1"
         f"&api_token={key}", timeout=120).read().decode())
     commons = [x for x in dl

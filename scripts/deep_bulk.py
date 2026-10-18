@@ -42,6 +42,7 @@ import edgar_facts  # noqa: E402
 import ta  # noqa: E402
 from edgar_pull import get_user_agent  # noqa: E402
 from survivorship import current_members  # noqa: E402
+from sec_throttle import throttle_sec_url  # noqa: E402
 
 STATE = os.path.join(BASE, "universe", "deep_state.json")
 RANKF = os.path.join(BASE, "universe", "deep_rank.json")
@@ -93,6 +94,7 @@ def filing_abstracts(t, ua):
         return "no cik"
     url = f"https://data.sec.gov/submissions/CIK{cik:010d}.json"
     try:
+        throttle_sec_url(url)
         req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept-Encoding": "gzip, deflate"})
         b = urllib.request.urlopen(req, timeout=30).read()
         try:
@@ -112,6 +114,7 @@ def filing_abstracts(t, ua):
             cik10 = str(cik).zfill(10)
             u = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc.replace('-', '')}/{doc}"
             try:
+                throttle_sec_url(u)
                 rr = urllib.request.Request(u, headers={"User-Agent": ua, "Accept-Encoding": "gzip, deflate"})
                 bb = urllib.request.urlopen(rr, timeout=30).read()
                 try:

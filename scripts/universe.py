@@ -34,6 +34,7 @@ ROOT = "/data/finance"
 UROOT = os.path.join(ROOT, "universe")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from edgar_pull import get_user_agent, fetch as _sec_fetch  # noqa: E402
+from sec_throttle import throttle_sec_url  # noqa: E402
 
 UA_HTML = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
            "Accept": "text/html"}
@@ -48,6 +49,7 @@ def sec_ua():
 
 
 def _get(url, headers, timeout=25):
+    throttle_sec_url(url)  # generic helper: token only for *.sec.gov
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()

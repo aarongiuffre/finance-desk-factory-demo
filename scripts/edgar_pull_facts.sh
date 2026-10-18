@@ -30,8 +30,16 @@ while IFS=$'\t' read -r acc form date primary; do
     log "skip (no Financial_Report in index): $acc"
     none=$((none+1)); continue
   fi
-  if curl -fsSL -A "$UA" --retry 3 --retry-delay 2 -o "$dst" \
-      "https://www.sec.gov/Archives/edgar/data/$CIKN/$accn/Financial_Report.xlsx"; then
+  ok=0
+  for attempt in 1 2 3 4; do
+    python3 /data/finance/scripts/sec_throttle.py   # one shared-bucket token per attempt
+    if curl -fsSL -A "$UA" -o "$dst" \
+        "https://www.sec.gov/Archives/edgar/data/$CIKN/$accn/Financial_Report.xlsx"; then
+      ok=1; break
+    fi
+    sleep 2
+  done
+  if [[ $ok -eq 1 ]]; then
     log "ok $acc"; got=$((got+1))
   else
     log "FAIL $acc"; rm -f "$dst"

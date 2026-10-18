@@ -118,7 +118,7 @@ def cmd_filings():
 
     # 2. EODHD live-list diff (new listings / delistings)
     key = open(os.path.join(ROOT, ".eodhd_key")).read().strip().split("=", 1)[-1].strip()
-    dl_live = json.loads(urllib.request.urlopen(
+    dl_live = json.loads(urllib.request.urlopen(  # sec-throttle: non-SEC (EODHD)
         f"https://eodhd.com/api/exchange-symbol-list/US?fmt=json&api_token={key}",
         timeout=120).read().decode())
     live_set = {x["Code"].upper() for x in dl_live

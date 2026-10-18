@@ -36,6 +36,7 @@ SRC_URL = "https://raw.githubusercontent.com/fja05680/sp500/master/sp500_ticker_
 UA_HTML = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
            "Accept": "application/json"}
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sec_throttle import throttle_sec_url  # noqa: E402
 
 SINCE = "2023-01-01"  # recon floor (230-bar window + facts depth)
 
@@ -43,6 +44,7 @@ SINCE = "2023-01-01"  # recon floor (230-bar window + facts depth)
 def ensure_pit():
     if not os.path.isfile(PIT_CSV):
         os.makedirs(UROOT, exist_ok=True)
+        throttle_sec_url(SRC_URL)  # github raw today; token only if ever pointed at sec.gov
         req = urllib.request.Request(SRC_URL, headers={"User-Agent": UA_HTML["User-Agent"]})
         with open(PIT_CSV, "wb") as fh:
             fh.write(urllib.request.urlopen(req, timeout=30).read())
@@ -119,6 +121,7 @@ def fetch_bars(t):
         return "cached"
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{t}?interval=1d&range=5y"
     try:
+        throttle_sec_url(url)  # yahoo: no-op
         req = urllib.request.Request(url, headers=UA_HTML)
         d = json.loads(urllib.request.urlopen(req, timeout=25).read())
         r0 = d["chart"]["result"][0]
@@ -152,6 +155,7 @@ def fetch_facts(t, ua, cik_map):
         return "no CIK"
     url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
     try:
+        throttle_sec_url(url)  # data.sec.gov companyfacts: shared bucket
         req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept": "application/json"})
         raw = json.loads(urllib.request.urlopen(req, timeout=30).read())
     except Exception as e:  # noqa: BLE001
