@@ -13,11 +13,9 @@ h4_inventory_events(window): INVENTORY-build flag transitions from
 import os
 import sys
 
-ROOT = os.environ.get("EDGE_ROOT", "/data/finance")
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fold_data  # noqa: E402
 import fold_gate  # noqa: E402
-
-LEDGER = os.path.join(ROOT, "logs", "confluence-history.jsonl")
 
 
 def _norm(f):
@@ -25,12 +23,13 @@ def _norm(f):
     return re.sub(r"\(.*?\)", "", str(f)).strip()
 
 
-def h4_inventory_events(window, ledger=LEDGER):
+def h4_inventory_events(window):
     """Exact event rule of scripts/event_study.py.load_and_detect: an event is
     a ledger day on which a NEW normalized flag line appears for a ticker vs
     its previous ledger day (a new filing changes the flag text), skipping
     the second day of a two-day burst; the event is INV when any added flag
     starts with INVENTORY."""
+    ledger = os.path.join(fold_data.research_root(window), "logs", "confluence-history.jsonl")
     rows = sorted(fold_gate.iter_jsonl_in_window(ledger, window, "date"), key=lambda r: r["date"])
     days = [r["date"] for r in rows]
     per_t = {}

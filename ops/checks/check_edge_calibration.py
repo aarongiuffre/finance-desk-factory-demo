@@ -23,7 +23,9 @@ import statistics
 import subprocess
 import sys
 
-ROOT = os.environ.get("EDGE_ROOT", "/data/finance")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "scripts"))
+import finpaths  # noqa: E402
+ROOT = finpaths.root()          # fixed /data/finance; no env override (tests swap the whole root under pytest)
 SUMMARY = os.path.join(ROOT, "logs", "edge", "calibration_summary.json")
 PREREG = "ops/prereg/H4_inventory_calibration_pit.yaml"
 bad = []
@@ -50,7 +52,12 @@ def git(*a):
 
 def main():
     s = json.load(open(SUMMARY))
-    var = [json.loads(x) for x in open(os.path.join(ROOT, "logs", "variants.jsonl"))]
+    import chainlog
+    try:
+        var = chainlog.read_strict(finpaths.variants_log())       # strict hash-chain read
+    except chainlog.ChainError as e:
+        print("FAIL variants chain:", e)
+        sys.exit(1)
     # ---- h4pit
     p = s["h4pit"]
     blob = git("show", f"HEAD:{PREREG}").stdout
@@ -99,14 +106,19 @@ def main():
         bad.append("placebo_pass not reproducible")
     print(f"placebo (PIT, {len(ms)} draws): mean abn {statistics.fmean(ms)*100:+.3f}% share|t|>2 {share:.2f} "
           f"any passed bar {anyp} -> placebo_pass={ok}")
-    # ---- full recomputation of the pre-registered run
+    # ---- v2 status of these runs
     spec = importlib.util.spec_from_file_location("ce", os.path.join(ROOT, "ops", "checks", "check_edge.py"))
     ce = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ce)
-    okr, _ = ce.check_run(p["run_dir"], ROOT, 15)
-    if not okr:
+    okr, _ = ce.check_run(p["run_dir"], 15)
+    if okr is not True and okr != "LEGACY":
         bad.extend(ce.FAILS)
-    print(f"check_edge on h4pit: {'PASS' if okr else 'FAIL'}")
+    print(f"check_edge on h4pit: {okr if okr == 'LEGACY' else ('PASS' if okr else 'FAIL')}")
+    print("   LEGACY v1-harness runs (Verifier 3a/3b): costs/delisting were applied long-side then sign-flipped,")
+    print("   and DSR counted hypothesis runs only.  The H4 criteria above use the GROSS long-basis abnormal")
+    print("   return vs EW, which involves no costs, direction or DSR -> the H4 verdict (FAILED, retired) stands.")
+    print("   The placebo 'any passed bar' used the v1 pass bar -> NOT trusted; the v2 harness null")
+    print("   (long AND short placebo draws) must be re-run on a dev grant before H1 (not run: no grants today).")
     for b in bad:
         print("FAIL", b)
     print("RESULT:", "PASS" if not bad else f"FAIL ({len(bad)})")

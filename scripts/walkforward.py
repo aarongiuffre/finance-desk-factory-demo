@@ -66,8 +66,16 @@ import edgar_screen as es        # noqa: E402
 import ta as ta_mod              # noqa: E402
 import watchlist_lib             # noqa: E402
 
-MEMBERSHIP = os.path.join(ROOT, "universe", "sp500_ticker_start_end.csv")
-LEDGER_DIR = os.path.join(ROOT, "logs")
+LEDGER_DIR = os.path.join(ROOT, "logs")      # OUTPUT (walk-forward result ledgers)
+
+
+def _data_root():
+    """INPUT root: research runs read the dev fold copy (<= 2019-12-31) unless a
+    verified fold_gate token is bound (--gate-token); the live desk scripts that
+    import this module (paper_driver/bridge/feedback/tracker) read live data.
+    See scripts/fold_data.py.  Verifier finding 4."""
+    import fold_data
+    return fold_data.reader_root()
 
 # ---------------------------------------------------------------- data caches
 _FACTS = {}
@@ -78,8 +86,8 @@ def facts_of(t):
     """Full facts dict for t (live or dead). Cached."""
     if t not in _FACTS:
         d = None
-        for p in (os.path.join(ROOT, "facts", f"{t}.json"),
-                  os.path.join(ROOT, "facts", "dead", f"{t}.json")):
+        for p in (os.path.join(_data_root(), "facts", f"{t}.json"),
+                  os.path.join(_data_root(), "facts", "dead", f"{t}.json")):
             if os.path.isfile(p):
                 try:
                     d = json.load(open(p))
@@ -99,7 +107,7 @@ def bars_of(t):
 def load_membership():
     """PIT membership: ticker -> list of (start, end_or_None)."""
     m = {}
-    with open(MEMBERSHIP) as fh:
+    with open(os.path.join(_data_root(), "universe", "sp500_ticker_start_end.csv")) as fh:
         for row in csv.DictReader(fh):
             t = row["ticker"].strip().upper()
             if not t:
@@ -261,7 +269,7 @@ def eps_split_factors(t):
     share (4:1 -> 4.0)."""
     if t in SPLIT_CACHE:
         return SPLIT_CACHE[t]
-    p = os.path.join(ROOT, "raw", "splits", f"{t}.json")
+    p = os.path.join(_data_root(), "raw", "splits", f"{t}.json")
     out = {}
     if os.path.exists(p):
         out = json.load(open(p)).get("splits", {})
@@ -510,7 +518,10 @@ def report_block(name, monthly, spy, labels, per_year=12):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", default="2016-01-01")
-    ap.add_argument("--end", default="2026-09-30")
+    ap.add_argument("--end", default=None,
+                    help="default: the data cutoff (dev 2019-12-31 without a gate token)")
+    ap.add_argument("--gate-token", default=None,
+                    help="token of a GRANTED fold_gate window (validation/holdout) to read beyond dev")
     ap.add_argument("--n", type=int, default=10)
     ap.add_argument("--cost-bps", type=float, default=20.0)
     ap.add_argument("--limit", type=int, default=0, help="smoke: max rebalances")
@@ -521,6 +532,22 @@ def main():
     ap.add_argument("--cadence", choices=["monthly", "weekly"], default="monthly",
                     help="weekly = re-rank every Monday (tests price-churn cadence)")
     args = ap.parse_args()
+    import fold_data
+    import fold_gate
+    if args.gate_token:
+        g = [r for r in fold_gate.grant_records() if r.get("token") == args.gate_token]
+        if not g:
+            sys.exit("REFUSED: --gate-token is not a granted line of the access-log chain")
+        r = g[0]
+        fold_data.use_window(fold_gate.Window(r["hypothesis"], r["fold"], r["lo"], r["hi"], r["token"],
+                                              r.get("prereg_sha", ""), r.get("family", ""),
+                                              r.get("prereg_commit", "")))
+    cutoff = fold_data.reader_cutoff()
+    args.end = args.end or cutoff
+    if args.end > cutoff:
+        sys.exit(f"REFUSED: --end {args.end} is beyond the data cutoff {cutoff} "
+                 f"(research reads end at the dev fold unless a fold_gate grant is bound)")
+    print(f"[walkforward] data root {fold_data.reader_root()}  end {args.end}", file=sys.stderr)
 
     membership = load_membership()
     spy_bars = bars_of("SPY")

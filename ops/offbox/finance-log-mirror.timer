@@ -1,0 +1,8 @@
+# STAGED, NOT INSTALLED.
+[Unit]
+Description=Hourly off-box mirror of finance chain logs
+[Timer]
+OnCalendar=hourly
+Persistent=true
+[Install]
+WantedBy=timers.target

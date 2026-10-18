@@ -51,8 +51,11 @@ def main():
         if p.get(k) != v:
             fails.append(f"param {k}={p.get(k)!r} != {v!r}")
     info["rebalances"] = len(rebs)
-    if len(rebs) < 129:
-        fails.append(f"only {len(rebs)} rebalances (< 129)")
+    dev_only = bool(rebs) and max(r["date"] for r in rebs) <= "2019-12-31"
+    min_rebs = 45 if dev_only else 129       # dev-period weekly run (2016-01..2019-12) since 2026-10-18
+    info["dev_only"] = dev_only
+    if len(rebs) < min_rebs:
+        fails.append(f"only {len(rebs)} rebalances (< {min_rebs})")
     dates = [r["date"] for r in rebs]
     if dates != sorted(set(dates)):
         fails.append("rebalance dates not strictly increasing")

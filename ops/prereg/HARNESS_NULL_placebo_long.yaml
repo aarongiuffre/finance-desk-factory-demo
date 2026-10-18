@@ -1,0 +1,24 @@
+# PRE-REGISTRATION - harness null (calibration, DEV fold only; NOT a hypothesis test).
+# Written 2026-10-18 for the v2 harness (Verifier 3a).  Not yet run.
+hypothesis: HARNESS_NULL_placebo_long
+family: HARNESS_NULL
+kind: calibration
+fold: dev
+window: {lo: "2015-01-01", hi: "2019-12-31"}
+events: random point-in-time S&P members on random dev trading days (edge_harness.placebo_events),
+        685 per draw, seeds 1000..1019
+execution:
+  hold_trading_days: 63
+  direction: long
+  same_day_ok: false
+  min_price: 5.0
+  costs:                         # edge_plan.md section 6 cost model (per side)
+    fee_bps: 15
+    half_spread_bps: {large: 5, mid: 15, small: 40}
+    slip_bps: 10
+    large_adv: 50000000          # ADV20 >= $50M -> large
+    mid_adv: 5000000             # ADV20 >= $5M  -> mid
+    floor_roundtrip_bps: 0
+    borrow_bps_annual: 0           # short borrow fee (0 for longs)
+  delisting: {perf_base: -0.30, other_base: 0.0}
+criterion: mean net abnormal vs EW |mean| < 1%, |t| > 2 in <= 20% of draws, NO draw passes the pass bar

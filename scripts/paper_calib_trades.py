@@ -51,7 +51,7 @@ import urllib.request
 import uuid
 from zoneinfo import ZoneInfo
 
-ROOT = os.environ.get("EDGE_ROOT", "/data/finance")
+ROOT = "/data/finance"          # operational (live desk); no env override
 PAPER_BASE = "https://paper-api.alpaca.markets"
 DATA_BASE = "https://data.alpaca.markets"
 KEY_FILE = os.path.expanduser("~/.alpaca_key")

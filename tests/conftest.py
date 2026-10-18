@@ -66,3 +66,15 @@ def _reset_sec_cooldown():
     ep = sys.modules.get("edgar_pull")
     if ep is not None and hasattr(ep, "_COOLDOWN_UNTIL"):
         ep._COOLDOWN_UNTIL = 0.0
+
+
+@pytest.fixture(autouse=True)
+def _isolated_finance_root(tmp_path_factory):
+    """Every test runs with the research root swapped to an EMPTY temp dir
+    (finpaths.set_test_root), so no test can read or append the real access
+    log, variants chain, anchors or fold copies.  Fixtures that need data
+    build it under their own temp root (tests/_gate_env.py)."""
+    import finpaths
+    finpaths.set_test_root(str(tmp_path_factory.mktemp("finroot_isolated")))
+    yield
+    finpaths.clear_test_root()

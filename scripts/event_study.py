@@ -42,6 +42,7 @@ Usage: python3 scripts/event_study.py
 Prints pool sizes and per-class results; no network, no caches required.
 """
 import json
+import os
 import re
 import datetime
 import statistics
@@ -51,7 +52,9 @@ import sys
 sys.path.insert(0, "/data/finance/scripts")
 from walkforward import bars_of, split_factor_after   # noqa: E402
 
-LEDGER = "/data/finance/logs/confluence-history.jsonl"
+def _ledger():
+    import fold_data      # research reader -> dev fold copy (scripts/fold_data.py)
+    return os.path.join(fold_data.reader_root(), "logs", "confluence-history.jsonl")
 HORIZONS = (5, 20, 63)
 K = 20
 
@@ -112,7 +115,7 @@ def fwd(t, d, h):
 
 def load_and_detect():
     days, per_t = [], {}
-    with open(LEDGER) as fh:
+    with open(_ledger()) as fh:
         for line in fh:
             row = json.loads(line)
             d = row["date"]

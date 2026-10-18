@@ -1,0 +1,8 @@
+# STAGED, NOT INSTALLED.  Install: cp to ~/.config/systemd/user/, set DEST, then
+#   systemctl --user daemon-reload && systemctl --user enable --now finance-log-mirror.timer
+[Unit]
+Description=Mirror finance gate/variants chain logs off-box (append-only snapshots)
+[Service]
+Type=oneshot
+Environment=DEST=aaron@MIRROR-HOST:/srv/finance-mirror
+ExecStart=/data/finance/ops/offbox/mirror_logs_offbox.sh ${DEST} --apply

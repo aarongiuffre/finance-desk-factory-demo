@@ -23,7 +23,17 @@ import sys
 import urllib.request
 
 ROOT = "/data/finance"
-FACTS = os.path.join(ROOT, "facts")
+FACTS = os.path.join(ROOT, "facts")   # live path; readers below resolve via _data_root()
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+
+def _data_root():
+    """Research main scripts read the dev fold copy; the operational live desk
+    (fold_data.OPERATIONAL) reads live data.  See scripts/fold_data.py."""
+    import fold_data
+    return fold_data.reader_root()
+
 QUOTE_URL = "http://127.0.0.1:8092/quote?symbols="
 WATCH = os.path.join(ROOT, "watchlist.txt")
 
@@ -43,9 +53,9 @@ def watchlist():
 
 
 def load(t):
-    p = os.path.join(FACTS, f"{t}.json")
+    p = os.path.join(_data_root(), "facts", f"{t}.json")
     if not os.path.isfile(p):
-        p = os.path.join(FACTS, "dead", f"{t}.json")
+        p = os.path.join(_data_root(), "facts", "dead", f"{t}.json")
     if not os.path.isfile(p):
         return None
     try:
@@ -355,7 +365,7 @@ def load_shares():
     """Auto-derived diluted shares (facts/shares.json, scripts/shares_from_filings.py).
     Manual --shares overrides still win; the table is a fallback so numbers stop
     silently drifting between manual checks."""
-    p = os.path.join(FACTS, "shares.json")
+    p = os.path.join(_data_root(), "facts", "shares.json")
     if not os.path.isfile(p):
         return {}
     try:

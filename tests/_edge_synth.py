@@ -5,7 +5,8 @@ build(root, ...) writes under root:
   universe/sp500_ticker_start_end.csv
   raw/ff/*.zip         Ken French daily 5-factor + momentum files (percent units)
   logs/                empty
-Returns dict(cal, tickers).
+  folds/dev (+ folds/validation if hi > 2019-12-31) via fold_data.build
+Returns dict(cal, tickers).  holidays = weekday dates with no bar for any ticker.
 Planted effects: effects = {ticker: [(event_date, daily_drift, days)]} adds a drift
 to the close-to-close and open path for `days` trading days AFTER event_date;
 jumps = {ticker: [(date, ret)]} applies an INTRADAY jump on `date` (open -> close).
@@ -19,11 +20,12 @@ import random
 import zipfile
 
 
-def bdays(lo, hi):
+def bdays(lo, hi, holidays=()):
     d, out = datetime.date.fromisoformat(lo), []
     end = datetime.date.fromisoformat(hi)
+    hol = set(holidays)
     while d <= end:
-        if d.weekday() < 5:
+        if d.weekday() < 5 and d.isoformat() not in hol:
             out.append(d.isoformat())
         d += datetime.timedelta(days=1)
     return out
@@ -46,12 +48,12 @@ def _write_ff(root, cal, seed):
 
 
 def build(root, n=40, lo="2014-01-02", hi="2019-12-31", seed=1, effects=None, jumps=None,
-          delist=None, price0=100.0, vol=2e6):
+          delist=None, price0=100.0, vol=2e6, holidays=(), folds=True):
     """delist = {ticker: (last_date, final_close)}: series stops at last_date,
     closing at final_close (linear glide over the last 40 days)."""
     effects, jumps, delist = effects or {}, jumps or {}, delist or {}
     rng = random.Random(seed)
-    cal = bdays(lo, hi)
+    cal = bdays(lo, hi, holidays)
     pos = {d: i for i, d in enumerate(cal)}
     os.makedirs(os.path.join(root, "raw", "price"), exist_ok=True)
     os.makedirs(os.path.join(root, "universe"), exist_ok=True)
@@ -87,4 +89,9 @@ def build(root, n=40, lo="2014-01-02", hi="2019-12-31", seed=1, effects=None, ju
         w.writeheader()
         w.writerows(mem_rows)
     _write_ff(root, cal, seed + 99)
+    if folds:                         # research code reads the fold copies, never the live layout
+        import fold_data
+        fold_data.build("dev", apply=True, src_root=root)
+        if hi > fold_data.CUTOFF["dev"]:
+            fold_data.build("validation", apply=True, src_root=root)
     return {"cal": cal, "tickers": tickers[1:]}

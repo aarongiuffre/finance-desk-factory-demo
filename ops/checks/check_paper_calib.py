@@ -23,7 +23,7 @@ import math
 import os
 import sys
 
-ROOT = os.environ.get("EDGE_ROOT", "/data/finance")
+ROOT = "/data/finance"          # operational check; no env override
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import paper_calib_trades as P  # noqa: E402
 

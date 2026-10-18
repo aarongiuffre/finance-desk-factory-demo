@@ -30,6 +30,15 @@ ROOT = "/data/finance"
 PDIR = os.path.join(ROOT, "raw", "price")
 WATCH = os.path.join(ROOT, "watchlist.txt")
 BENCH = "SPY"
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+
+def _data_root():
+    """Research main scripts read the dev fold copy; the operational live desk
+    (fold_data.OPERATIONAL) reads live data.  See scripts/fold_data.py."""
+    import fold_data
+    return fold_data.reader_root()
 
 
 def watchlist():
@@ -57,8 +66,9 @@ def _translate_eodhd(d):
 
 
 def load_bars(t):
-    for p in (os.path.join(PDIR, f"{t}.json"),
-              os.path.join(PDIR, "dead", f"{t}.json")):
+    pdir = os.path.join(_data_root(), "raw", "price")
+    for p in (os.path.join(pdir, f"{t}.json"),
+              os.path.join(pdir, "dead", f"{t}.json")):
         if not os.path.isfile(p):
             continue
         try:

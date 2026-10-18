@@ -1,0 +1,15 @@
+# Hypothesis-family registry (fold_gate v2).  ONE holdout read per FAMILY, ever;
+# validation reads are counted per family (max 3, each a strict descendant commit).
+# Renaming a hypothesis does not reset anything: the family is the key.
+# Adding/changing a family is a committed AND pushed change (fold_gate refuses gated
+# reads while this file differs from origin/main), so it is visible to Aaron on GitHub.
+families:
+  H4_inventory:
+    retired: true                # failed its pre-registered PIT calibration 2026-10-18
+    hypotheses: [H4_inventory_calibration_pit]
+  HARNESS_NULL:
+    kind: calibration            # dev-only by rule (kind != hypothesis)
+    hypotheses: [HARNESS_NULL_placebo_long, HARNESS_NULL_placebo_short]
+  DIAG_lang_shift:
+    kind: diagnostic             # dev-only
+    hypotheses: [lang_shift]

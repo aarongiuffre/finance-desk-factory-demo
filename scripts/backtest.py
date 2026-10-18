@@ -262,8 +262,10 @@ def recon_flag_events(t):
 
 def build_history(force=False):
     live_rows = {}
-    if os.path.isfile(os.path.join(LOGS, "confluence-history.jsonl")):
-        for line in open(os.path.join(LOGS, "confluence-history.jsonl")):
+    import fold_data      # research reader -> dev fold copy (scripts/fold_data.py)
+    _led = os.path.join(fold_data.reader_root(), "logs", "confluence-history.jsonl")
+    if os.path.isfile(_led):
+        for line in open(_led):
             day = json.loads(line)
             live_rows.setdefault(day["bar_date"], []).extend(day["rows"])
 

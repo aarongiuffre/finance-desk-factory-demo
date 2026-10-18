@@ -23,14 +23,14 @@ ROOT = "/data/finance"
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import ta as ta_mod  # noqa: E402
 
-HIST = os.path.join(ROOT, "logs", "confluence-history.jsonl")
 RECON_CUTOVER = "2023-01-01"
 EVENT_VERDICTS = None  # anything not quiet/tape-supporting is an event
 
 
 def load_ledger():
     by_day = {}
-    for l in open(HIST):
+    import fold_data      # research reader -> dev fold copy (scripts/fold_data.py)
+    for l in open(os.path.join(fold_data.reader_root(), "logs", "confluence-history.jsonl")):
         if l.strip():
             e = json.loads(l)
             by_day[e["bar_date"]] = e

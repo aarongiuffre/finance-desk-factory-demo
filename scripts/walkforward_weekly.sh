@@ -6,10 +6,16 @@
 # Output: logs/walkforward-weekly-<YYYYMMDD>.jsonl + .log, then the sanity
 # check scripts/check_walkforward.py runs on the fresh ledger (non-zero exit
 # => unit fails => OnFailure alert in alerts/outbox.jsonl).
+#
+# 2026-10-18 (Verifier finding 4): research reads end at the dev fold
+# (2019-12-31) unless a fold_gate grant exists, so this weekly job is now a
+# DEV-PERIOD reproducibility run (2016-01-01..2019-12-31; same config).  A
+# weekly report that reads 2020+ prices would be an ungated validation/
+# holdout read - re-enabling one needs Aaron's decision (gate grant per run).
 set -euo pipefail
 cd /data/finance
 D=$(date +%Y%m%d)
-END=$(date +%F)
+END=2019-12-31          # dev fold end (scripts/fold_data.py CUTOFF["dev"])
 TAG="weekly-$D"
 LOG="logs/walkforward-$TAG.log"
 LIMIT_ARGS=()

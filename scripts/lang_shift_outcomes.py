@@ -31,27 +31,30 @@ import os
 import statistics
 import sys
 
-ROOT = os.environ.get("EDGE_ROOT", "/data/finance")
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import edge_harness as H  # noqa: E402
+import finpaths  # noqa: E402
+import fold_data  # noqa: E402
 import fold_gate  # noqa: E402
 
-SIG = os.path.join(ROOT, "universe", "lang_shift_signals.jsonl")
-OUT = os.path.join(ROOT, "universe", "lang_shift_outcomes.json")
+PREREG = "ops/prereg/DIAG_lang_shift.yaml"     # execution settings (hold is set per horizon)
 HORIZONS = (21, 63, 126)
 
 
-def score(sig_path, window, horizons=HORIZONS, root=None, gate_log=None, store=None, universe_fn=None,
-          cost=None):
-    """-> {group@+h: {n, med_ret, med_bench_ew, excess, hit}} using only rows inside window."""
+def score(window, horizons=HORIZONS, prereg=PREREG, store=None, universe_fn=None):
+    """-> {group@+h: {n, med_ret, med_bench_ew, excess, hit}} using only rows inside window.
+    Signals and prices come from the window's fold copy; each horizon x group is
+    one harness call and is logged as a diagnostic trial."""
+    root = fold_data.research_root(window)
+    sig_path = os.path.join(root, "universe", "lang_shift_signals.jsonl")
+    _, spec, _ = H.load_prereg(prereg)
     rows = [s for s in fold_gate.iter_jsonl_in_window(sig_path, window, "filing_date") if s.get("md_dist")]
-    store = store or H.PriceStore(window.hi, root=root)
+    store = store or H.PriceStore(window)
     res = {"n_signal_rows_in_window": len(rows)}
     for h in horizons:
         for grp, pick in (("top-decile", True), ("baseline", False)):
             ev = [{"ticker": s["ticker"], "ts": s["filing_date"]} for s in rows if bool(s.get("md_top_decile")) == pick]
-            trades, info, _, _ = H.run_events(ev, window, hold=h, cost=cost, universe_fn=universe_fn,
-                                              store=store, gate_log=gate_log, root=root)
+            trades, info, _, _ = H.run_events(ev, window, {**spec, "hold": h}, universe_fn=universe_fn, store=store)
             if not trades:
                 continue
             ex = [t["gross"] - t["bench_ew"] for t in trades]
@@ -69,15 +72,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--lo", default="2015-01-01")
     ap.add_argument("--hi", default="2019-12-31")
-    ap.add_argument("--out", default=OUT)
+    ap.add_argument("--out", default=None)
     a = ap.parse_args()
     w = fold_gate.request("lang_shift", "dev", purpose="lang_shift_outcomes (dev only)",
                           kind="diagnostic", lo=a.lo, hi=a.hi)
-    res = {"window": [w.lo, w.hi], "benchmark": "per-event EW PIT S&P universe (harness)",
-           "result": score(SIG, w)}
-    json.dump(res, open(a.out, "w"), indent=1)
+    res = {"window": [w.lo, w.hi], "benchmark": "per-event EW PIT S&P universe (harness)", "result": score(w)}
+    out = a.out or finpaths.p("universe", "lang_shift_outcomes.json")
+    json.dump(res, open(out, "w"), indent=1)
     print(json.dumps(res, indent=1))
-    print(f"-> {a.out}")
+    print(f"-> {out}")
 
 
 if __name__ == "__main__":

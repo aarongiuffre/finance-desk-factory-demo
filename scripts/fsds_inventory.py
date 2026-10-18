@@ -37,11 +37,14 @@ import sys
 import zipfile
 from collections import Counter, defaultdict
 
-ROOT = os.environ.get("EDGE_ROOT", "/data/finance")
-FSDS = os.path.join(ROOT, "raw", "dera_fsds")
-MEMB = os.path.join(ROOT, "universe", "sp500_ticker_start_end.csv")
-CIKMAP = os.path.join(ROOT, "universe", "sp_pit_cik_map.json")
-CACHE = os.path.join(ROOT, "logs", "edge", "fsds_inv_cache.json")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fold_data  # noqa: E402
+# research reader: data root = the dev fold copy (fold_data.reader_root), never the live tree
+DROOT = fold_data.reader_root()
+FSDS = os.path.join(DROOT, "raw", "dera_fsds")
+MEMB = os.path.join(DROOT, "universe", "sp500_ticker_start_end.csv")
+CIKMAP = os.path.join(DROOT, "universe", "sp_pit_cik_map.json")
+CACHE = os.path.join(DROOT, "logs", "edge", "fsds_inv_cache.json")
 KEEP_FORMS = {"10-K", "10-Q", "20-F", "6-K", "40-F"}          # edgar_screen.KEEP_FORMS
 INV_TAGS = {"InventoryNet"}                                      # edgar_screen.ALIASES inventory
 REV_TAGS = {"RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues",
@@ -97,7 +100,7 @@ def build_cikmap(lo, hi, qs):
     out = {}
     for t in mem:
         for p in (f"facts/{t}.json", f"facts/dead/{t}.json"):
-            fp = os.path.join(ROOT, p)
+            fp = os.path.join(DROOT, p)
             if os.path.exists(fp):
                 try:
                     c = json.load(open(fp)).get("cik")

@@ -24,3 +24,9 @@ backups/
 # scratch experiments (14G embed bake-off) + local alert outbox/state (finance-health)
 scratch/
 alerts/
+
+# fold-period research data copies (scripts/fold_data.py build)
+folds/
+
+# encrypted full-period archives + moved originals (ops/offbox/encrypt_full_period.sh)
+/offbox/
