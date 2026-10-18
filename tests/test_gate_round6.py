@@ -475,12 +475,76 @@ def test_M3_non_ed25519_key_refused(env, root_equiv, tmp_path):
     assert not ok and "ssh-ed25519" in why
 
 
-def test_M3_signed_go_with_committed_fingerprint_accepted_and_grants(env, root_equiv):
+LEAVE = "leave_root_equivalent_groups.sh"
+
+
+def test_M3prime_self_committed_fingerprint_grants_dev_only(env, monkeypatch):
+    """Verifier v7 M3' (PoC M3_self_authorization): slowglow's own key in allowed_signers and
+    its fingerprint committed in REGISTRY + prereg sign the dev go, the validation run go and
+    the holdout approval.  While root-equivalent: dev is granted, validation and holdout are
+    refused whatever the signature.  Control: the same setup passes once not root-equivalent
+    (so the refusal is what stops it), and those grants cannot be read while root-equivalent."""
+    monkeypatch.setattr(G, "_TEST_ROOT_EQUIV", ("docker", "wheel"))
     _slice_env(env)
     _pin_fpr(env, _key_fpr(env.key + ".pub"))
-    _ready(env, max_trials=2)
-    w = _dev(env)
-    assert w.token and len(_dev_grants()) == 1
+    fz = _ready(env, max_trials=3)
+    assert _dev(env).token and len(_dev_grants()) == 1
+    env.go("H9", "validation", fz)
+    with pytest.raises(G.GateRefused, match=LEAVE) as e:
+        G.request("H9", "validation")
+    assert "docker, wheel" in str(e.value) and "root-equivalent" in str(e.value)
+    env.go("H9", "holdout", fz)
+    env.approval("FAM9", "H9")
+    with pytest.raises(G.GateRefused, match=LEAVE):
+        G.request("H9", "holdout")
+    last = chainlog.read_strict(finpaths.gate_log())[-2:]
+    assert [r["fold"] for r in last] == ["validation", "holdout"] and not any(r["granted"] for r in last)
+    assert all(LEAVE in r["reason"] for r in last)
+    monkeypatch.setattr(G, "_TEST_ROOT_EQUIV", None)              # control
+    w = G.request("H9", "validation")
+    h = G.request("H9", "holdout")
+    assert G.verify(w) and G.verify(h)
+    monkeypatch.setattr(G, "_TEST_ROOT_EQUIV", ("docker",))       # no gated READ while root-equivalent
+    assert not G.verify(w) and not G.verify(h) and G.find_grant(h) is None
+
+
+@pytest.fixture
+def mocked_groups(monkeypatch):
+    """The production detector (os.getgroups + grp), with mocked membership."""
+    import grp
+    import pwd
+    monkeypatch.setattr(G, "root_equivalent_groups", G.detect_root_equivalent_groups)
+
+    def set_groups(names):
+        gs = [("slowglow", 1000)] + [(n, {"docker": 961, "wheel": 998}[n]) for n in names]
+        objs = {gid: type("Gr", (), {"gr_name": n, "gr_gid": gid, "gr_mem": []})() for n, gid in gs}
+        monkeypatch.setattr(os, "getgroups", lambda: list(objs))
+        monkeypatch.setattr(os, "getegid", lambda: 1000)
+        monkeypatch.setattr(grp, "getgrgid", lambda g: objs[g])
+        monkeypatch.setattr(grp, "getgrall", lambda: list(objs.values()))
+        monkeypatch.setattr(pwd, "getpwuid", lambda u: type("P", (), {"pw_name": "slowglow"})())
+    return set_groups
+
+
+@pytest.mark.parametrize("member,other", [("docker", "wheel"), ("wheel", "docker")])
+def test_M3prime_docker_only_or_wheel_only_refuses_validation_and_holdout(env, mocked_groups, member, other):
+    mocked_groups([member])
+    assert G.root_equivalent_groups() == (member,)
+    for fold in ("validation", "holdout"):
+        with pytest.raises(G.GateRefused, match=LEAVE) as e:
+            G.request("H9", fold)
+        assert f"is in {member} (root-equivalent)" in str(e.value) and other not in str(e.value)
+    with pytest.raises(G.GateRefused) as e:                      # dev: not this rule (no freeze yet)
+        _dev(env)
+    assert LEAVE not in str(e.value)
+
+
+def test_M3prime_not_root_equivalent_falls_through_to_the_normal_rules(env, mocked_groups):
+    mocked_groups([])
+    assert G.root_equivalent_groups() == ()
+    with pytest.raises(G.GateRefused) as e:
+        G.request("H9", "validation")
+    assert LEAVE not in str(e.value)
 
 
 def test_detect_root_equivalent_groups_at_runtime(monkeypatch):
@@ -582,3 +646,4 @@ def test_S3_launcher_uses_an_absolute_git_dir(env, tmp_path):
     sub = os.path.join(env.root, "scripts")
     out = git(sub, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.decode().strip()
     assert os.path.isabs(out) and os.path.samefile(out, os.path.join(env.root, ".git"))
+

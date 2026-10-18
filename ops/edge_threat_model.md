@@ -1,4 +1,4 @@
-# Edge validation: threat model (round 2, updated rounds 4, 5 and 6, 2026-10-18)
+# Edge validation: threat model (round 2, updated rounds 4, 5, 6 and 7, 2026-10-18)
 
 **Premise.** Code running as `slowglow` cannot stop `slowglow`. Worse, slowglow is in
 `docker` (root-equivalent) and `wheel`. So every in-process or on-box check is at most
@@ -127,9 +127,8 @@ Supersedes the round-4 details above where they differ (worktree, chain seeding)
 - **Root-equivalent (M3).** While slowglow is in docker or wheel (os.getgroups + grp at
   run time), a root-owned go file is refused and a signed one counts only if it verifies
   against the ssh-ed25519 key whose SHA256 fingerprint is committed in BOTH
-  REGISTRY.yaml `gate.signer_fpr` and the prereg `gate_signer_fpr`. Residual: those
-  commits are made on cachyos too; they bind only once pushed and witnessed before the
-  run (step 2 makes main append-only). No fingerprint is committed yet (Aaron step).
+  REGISTRY.yaml `gate.signer_fpr` and the prereg `gate_signer_fpr`. Round 7 (M3'):
+  that is enough for **dev only** - see below.
 - **S1** the code archive is an allowlist (the H1 import closure, tested by AST);
   **S2** the chains snapshot mounted into the sandbox holds only grant/trial fields;
   **S3** absolute git dir; **S6** expiries compared as aware datetimes;
@@ -142,6 +141,34 @@ Supersedes the round-4 details above where they differ (worktree, chain seeding)
   have run: until then the pre-split snapshots of fastpool/ROOT/cachyos and their
   backuppool replicas hold the plaintext (`split_research_dataset.sh --list-snapshots`).
 
+## Round 7 (Verifier v7): no gated read while root-equivalent (M3')
+The committed fingerprint is committed by slowglow itself. A root-equivalent slowglow
+process can install its own key in /etc/finance-gate/allowed_signers (root via docker),
+commit and push its fingerprint (append-only main blocks rewrites, not new commits), and
+sign the dev go, the validation run go and the holdout approval. So while
+`root_equivalent_groups()` is non-empty (docker or wheel, detected at run time):
+- **every validation and holdout grant is refused, whatever the signature**, with an error
+  naming `ops/staged_sudo/leave_root_equivalent_groups.sh`;
+- `find_grant` / `verify` reject every gated window, so a grant made earlier cannot be
+  read either;
+- dev stays on the committed-fingerprint rule (it reads dev data only).
+
+**`leave_root_equivalent_groups.sh --apply` (step 5) is a hard prerequisite for any
+validation or holdout read on this server.** Without it the only route to a gated
+result is the off-box evaluation below.
+
+### Design note: off-server validation / holdout evaluation (not built)
+If Engineering keeps slowglow in docker/wheel (GLM, Media and Hermes tooling depend on
+it), gated evaluations must run OFF the server, on a machine with no root-equivalent agent
+access (a fresh VM or Aaron's own machine): Aaron's key decrypts the
+encrypt_full_period.sh archive there (manifest + custody statement already bind it), and
+the frozen code archive runs after its git tree hash and the freeze sha are checked
+against the witnessed remote main. sandbox_host record's parser validates the run's
+variants output, and the records join the same chains and witness. Still needed: an
+off-box runner (decrypt to tmpfs, verify, run, wipe), a pinned venv for that machine, a
+result bundle signed by Aaron there that cachyos verifies before appending, and an
+"off-box grant" record kind that is never a read grant on cachyos.
+
 ## Aaron's steps, and what each one closes
 | # | Step | Closes |
 |---|---|---|
@@ -149,7 +176,7 @@ Supersedes the round-4 details above where they differ (worktree, chain seeding)
 | 2 | `bash ops/offbox/github_protect.sh --apply` with Aaron's gh login, plus a non-admin push credential on cachyos | Witness tags and main become append-only, even against root on cachyos (F1, F2, F3, F12 durable; F5 durable) |
 | 3 | `sudo bash ops/staged_sudo/install_gate_key.sh aaron.pub --apply` | F6 and F6b, against non-root |
 | 4 | `sudo bash ops/staged_sudo/split_research_dataset.sh --patch-replicate --apply`, then `sudo bash ops/staged_sudo/split_research_dataset.sh --apply` (own dataset, no snapshots, not replicated; resumable); then `bash ops/offbox/encrypt_full_period.sh --recipient-key aaron_pub.asc --recipient-fpr <FPR> --apply`; off-box `--decrypt-test` and the signed, archive-bound custody statement (the only decrypt check); then `--remove-originals [--apply]` (deletion, no plaintext copy kept); then, as a separate explicit step, `sudo bash ops/staged_sudo/destroy_research_snapshots.sh` (dry run lists them) and `--apply --i-understand-backups` (or knowingly retain them: then the holdout stays unlocked) | **F7, F11 and every in-process bypass** for the research copies in scope: no plaintext validation/holdout research copy remains in the live tree. Live `raw/price` 2020+, `facts/`, `universe/` stay readable (operational); pre-split snapshots hold the old plaintext until destroyed |
-| 5 | `sudo bash ops/staged_sudo/leave_root_equivalent_groups.sh --apply` | Makes steps 3 and 6 real (without it, root defeats them) |
+| 5 | `sudo bash ops/staged_sudo/leave_root_equivalent_groups.sh --apply` | **Hard prerequisite for any validation/holdout read on this server (v7 M3'): until it runs the gate refuses every gated grant and read.** Also makes steps 3 and 6 real (without it, root defeats them). Alternative if Engineering keeps docker/wheel: off-box evaluation (design note above) |
 | 6 | Optional: `sudo bash ops/staged_sudo/install_finance_gate_user.sh --apply` | F3 and F12 truncation/reset between gated grants, against non-root |
 
 Only steps 2 and 4 hold against root on cachyos. Steps 3, 5 and 6 hold only against

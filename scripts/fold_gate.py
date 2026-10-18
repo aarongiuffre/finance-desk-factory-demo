@@ -95,6 +95,13 @@ Verifier v6 (2026-10-18):
       in BOTH REGISTRY.yaml (gate.signer_fpr) and the hypothesis prereg (gate_signer_fpr).
       Lifted by ops/staged_sudo/leave_root_equivalent_groups.sh.
 
+Verifier v7 (2026-10-18):
+  M3' that fingerprint is committed by slowglow itself, so while root-equivalent it proves
+      nothing for gated data: EVERY validation and holdout grant is refused, and find_grant
+      / verify reject any gated window (so no earlier grant can be read either), whatever
+      the signature.  Dev keeps the committed-fingerprint rule.  leave_root_equivalent_groups.sh
+      is a hard prerequisite for any gated read (or evaluate off-box, see the threat model).
+
 CLI:
   python3 scripts/fold_gate.py status
   python3 scripts/fold_gate.py verify-chain
@@ -213,6 +220,19 @@ def root_equivalent_groups():
     if finpaths.is_test():
         return tuple(_TEST_ROOT_EQUIV or ())
     return detect_root_equivalent_groups()
+
+
+def gated_root_equivalent_refusal(fold):
+    """Verifier v7 M3': while this user is root-equivalent NO validation / holdout grant (or
+    read) is possible, whatever the signature: a root process can install its own key, and
+    slowglow can commit and push its fingerprint, so no on-box signature proves Aaron.
+    Dev keeps the committed-fingerprint rule (it reads dev data only).  -> reason or None."""
+    req = root_equivalent_groups()
+    if not req:
+        return None
+    return (f"{fold} refused: {getpass.getuser()} is in {', '.join(req)} (root-equivalent). Every validation "
+            f"and holdout grant is refused until ops/staged_sudo/leave_root_equivalent_groups.sh --apply has "
+            f"run (or the evaluation runs off this server - ops/edge_threat_model.md, off-box evaluation)")
 
 
 def committed_signer_fpr(hypothesis):
@@ -993,6 +1013,10 @@ def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None, s
     lo, hi = lo or flo, hi or fhi
     if lo < flo or hi > fhi or lo > hi:
         refuse(f"requested {lo}..{hi} outside fold {fold} {flo}..{fhi}")
+    if gated:
+        why = gated_root_equivalent_refusal(fold)
+        if why:
+            refuse(why)
     extra = {}
     if sandboxed and (fold != "dev" or kind != "hypothesis" or not isinstance(launch, dict)):
         refuse("sandboxed grants are dev hypothesis grants with a launch record")
@@ -1103,6 +1127,8 @@ def find_grant(window, recs=None):
         recs = recs if recs is not None else _read_log()
     except GateRefused:
         return None
+    if window.fold in GATED and gated_root_equivalent_refusal(window.fold):
+        return None                         # v7 M3': no gated read while root-equivalent, even with an old grant
     for r in recs:
         if "sandbox_run" in r:              # host-copied sandbox output is never a grant (Verifier v5 F2)
             continue
