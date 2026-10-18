@@ -259,3 +259,29 @@ earnings-quality layer below $10. Facts dir is gitignored (like facts/).
   real backup); an off-machine remote is still owed.
 - Screen/facts questions: see the **finance-desk skill** (screen layer, TTM
   chains, confluence, walkforward v6 doctrine).
+
+## EODHD final pull and cancellation (2026-10-18)
+
+Aaron plans to cancel EODHD (EOD Historical All-World, $19.99/mo) after a one-time
+final pull. Do not change the subscription from the box.
+
+- **Final pull**: `scripts/eodhd_final_pull.py` puts every US common stock on
+  NYSE/NASDAQ/NYSE MKT/AMEX/BATS that traded on any of 19 year-start bulk snapshots
+  (2009-01-02 .. 2026-01-02, plus 2026-10-16) and was not already local into
+  `raw/price/h1_universe/` (2008-01-01 .. 2026-10-16, live and delisted). It is H1's
+  price universe, chosen without reading any insider rows. Known gap: names that
+  listed and delisted between two snapshots. Requests are logged in
+  `raw/price/h1_universe/_meta/requests.log` with their API-unit cost.
+  This tier is NOT yet in the harness PriceStore tiers or in fold_data.PRICE_DIRS.
+  The H1 prereg must add it, then rebuild folds/dev.
+- **S&P exit renames** (`survivorship_fill.py renames`): ARNC, BHGE, PEAK, RE, SE and
+  WYND are mapped by company identity. `scripts/sp_identity.py` checks CIK or name,
+  with reviewed overrides in `ops/data/sp_identity_overrides.json`.
+- **MANIFEST**: `raw/price/EODHD_MANIFEST.json` holds the sha256 of every EODHD file,
+  verified by `ops/checks/check_edge_downloads.py`.
+- **What breaks after cancellation** (free tier: 20 calls/day, 1-year history):
+  `nasdaq-watch-filings.timer` (EODHD live-list diff and dead-tier pull for new
+  delistings), `split_pull.py`, `eod_fill.py`, `nasdaq_price_eod.py`,
+  `survivorship_fill.py` and `eodhd_final_pull.py`. New delistings after the cancel
+  date get no dead-tier prices. Yahoo live prices and the Alpaca paper tools are
+  unaffected.

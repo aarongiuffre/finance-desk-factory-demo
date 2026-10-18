@@ -9,6 +9,12 @@ order, i.e. the one the backtester will actually load) covering its membership w
 or is in the recorded missing list; the recorded summary in _meta/coverage.json
 matches; every sp_exits file declares an EODHD code + name and carries no bars
 after the file's own last date; EODHD requests (requests.log) <= 300.
+
+v2 (2026-10-18, Verifier finding 2): COMPANY IDENTITY.  Every sp_exits file must be
+the same company as the S&P member it is filed under (scripts/sp_identity.py):
+CIK match (local EDGAR / facts) or distinctive-name match; a name/CIK MISMATCH fails
+unless ops/data/sp_identity_overrides.json lists that exact EODHD code with evidence.
+Files that cannot be verified either way are counted and printed as WARN.
 """
 import csv
 import datetime
@@ -16,7 +22,10 @@ import json
 import os
 import sys
 
-ROOT = os.environ.get("EDGE_ROOT", "/data/finance")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "scripts"))
+import finpaths  # noqa: E402
+import sp_identity  # noqa: E402
+ROOT = finpaths.root()          # fixed /data/finance; no env override (tests swap the whole root under pytest)
 TIERS = ("raw/price/sp_exits", "raw/price", "raw/price/dead")   # harness PriceStore order
 META = os.path.join(ROOT, "raw", "price", "sp_exits", "_meta")
 D = datetime.date.fromisoformat
@@ -67,15 +76,25 @@ def main():
         bad.append(f"EODHD requests {nreq} (summary {s['eodhd_requests_logged']}, cap 300)")
     d = os.path.join(ROOT, "raw", "price", "sp_exits")
     n_files = 0
-    for f in os.listdir(d):
+    idc, unver = {}, []
+    for f in sorted(os.listdir(d)):
         if f.endswith(".json"):
             n_files += 1
             doc = json.load(open(os.path.join(d, f)))
+            v, why = sp_identity.checked(ROOT, f[:-5], doc)
+            idc[v] = idc.get(v, 0) + 1
+            if v == "mismatch":
+                bad.append(f"sp_exits/{f}: identity mismatch ({why})")
+            elif v == "unverified":
+                unver.append(f[:-5])
             # eodhd_name is only known for delisted-list codes; live codes carry the code only
             if not doc.get("eodhd_code") or not str(doc.get("source", "")).startswith("eodhd"):
                 bad.append(f"sp_exits/{f}: missing eodhd provenance")
     print(f"S&P exits since 2015: {len(exits)} tickers; covered {ok} ({tiers}); missing {len(missing)}: {' '.join(missing)}")
     print(f"sp_exits files {n_files}; EODHD requests logged {nreq} (cap 300)")
+    print(f"identity: {idc}")
+    if unver:
+        print(f"WARN identity unverified (no local CIK/name on one side): {len(unver)}: {' '.join(unver[:20])}{' ...' if len(unver) > 20 else ''}")
     for b in bad:
         print("FAIL", b)
     print("RESULT:", "PASS" if not bad else f"FAIL ({len(bad)})")

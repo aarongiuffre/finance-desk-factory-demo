@@ -17,7 +17,14 @@ A candidate is ACCEPTED only if its bars cover the name's S&P window
 window end - 7d, and >= 90% of SPY trading days in the window present.
 This rejects re-used tickers (e.g. SE = Sea Ltd since 2017, not Spectra).
 
+Renames (2026-10-18, Verifier finding 2): the membership file keys a slot by one
+ticker across corporate renames, so 7 exits had no same-ticker EODHD history.
+RENAMES maps them to successor/predecessor EODHD codes; a candidate must pass the
+same window-coverage rule AND sp_identity (CIK or name match, or a reviewed override).
+Their eod responses were fetched once into _meta/probe/ (14 requests, logged).
+
 Usage:
+  python3 scripts/survivorship_fill.py renames         # fill the 7 from _meta/probe (no network)
   python3 scripts/survivorship_fill.py status          # before/after coverage, no network
   python3 scripts/survivorship_fill.py fetch [--budget 290] [--limit N]
 Coverage record: raw/price/sp_exits/_meta/coverage.json
@@ -207,6 +214,69 @@ def cmd_fetch(budget, limit, gaps=False):
     cmd_status()
 
 
+RENAMES = {   # member ticker -> EODHD candidates in preference order
+    "ARNC": ["ARNC_old", "HWM"],      # Arconic Inc (CIK 4281, ex-Alcoa Inc) -> Howmet; EODHD has no pre-2016-11 history
+    "BHGE": ["BKR"],                  # Baker Hughes a GE co (CIK 1701605) -> Baker Hughes Co; BKR.US carries BHI before 2017-07
+    "COV": ["COV"],                   # Covidien plc; EODHD history ends 2012-06-15 (vendor gap)
+    "PEAK": ["DOC", "HCP_old"],       # HCP -> Healthpeak (PEAK) -> DOC (CIK 765880)
+    "RE": ["EG"],                     # Everest Re Group -> Everest Group (CIK 1095073)
+    "SE": ["SE1"],                    # Spectra Energy (CIK 1373835); SE.US is Sea Ltd (re-use)
+    "WYND": ["WYN", "TNL"],           # Wyndham Worldwide (WYN until 2018-05-31) -> WYND -> Travel + Leisure
+}
+
+
+def cmd_renames():
+    import sp_identity
+    dl = json.load(open(DELISTED))
+    names = {x["Code"]: x.get("Name") for x in dl}
+    names.update({x["Code"]: x.get("Name") for x in json.load(open(os.path.join(ROOT, "raw", "price", "_eod_list.json")))})
+    days = spy_days()
+    cov = load_cov()
+    by_t = {}
+    for r in exits():
+        by_t.setdefault(r["ticker"], []).append(r)
+    for t, cands in RENAMES.items():
+        rows = by_t[t]
+        ent = {"window": window(rows[0]), "status": "missing", "tried": [], "via": "renames"}
+        best = None
+        for code in cands:
+            pp = os.path.join(META, "probe", f"{code}.json")
+            if not os.path.exists(pp):
+                ent["tried"].append({"code": code, "error": "not probed"})
+                continue
+            bars = json.load(open(pp))
+            doc = {"eodhd_code": f"{code}.US", "eodhd_name": names.get(code)}
+            idv, idwhy = sp_identity.checked(ROOT, t, doc)
+            oks = [covers(bars, r, days) for r in rows]
+            ok = all(o[0] for o in oks) and idv != "mismatch"
+            ent["tried"].append({"code": code, "name": names.get(code), "bars": len(bars), "check": oks[0][1],
+                                 "identity": idv, "identity_why": idwhy, "ok": ok})
+            # partial: right company, bars inside the window, but not full coverage
+            if ok or (best is None and idv in ("cik", "name") and bars and any(
+                    w[0] <= b["date"] <= w[1] for b in bars[:1] + bars[-1:] for w in [window(r) for r in rows])):
+                best = (code, bars, idv, ok)
+            if ok:
+                break
+        if best:
+            code, bars, idv, ok = best
+            splits = derive_split_calendar(bars)
+            out = {"ticker": t, "source": "eodhd_eod", "eodhd_code": f"{code}.US", "eodhd_name": names.get(code),
+                   "identity": idv, "via": "renames",
+                   "adjusted": "eodhd adjusted_close (div+split); c=raw/prod(future splits); o=RAW open",
+                   "fetched": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+                   "splits": splits, "bars": convert(bars, splits)}
+            tmp = os.path.join(TIER, f"{t}.json.tmp")
+            json.dump(out, open(tmp, "w"), separators=(",", ":"))
+            os.replace(tmp, os.path.join(TIER, f"{t}.json"))
+            ent.update(status="ok" if ok else "partial", code=f"{code}.US", last_bar=bars[-1]["date"])
+        cov["names"][t] = ent
+        print(f"{t:5s} {ent['status']:8s} {[(x['code'], x.get('identity'), x.get('check', x.get('error'))) for x in ent['tried']]}")
+    tmp = COVERAGE + ".tmp"
+    json.dump(cov, open(tmp, "w"), indent=1)
+    os.replace(tmp, COVERAGE)
+    cmd_status()
+
+
 def cmd_status():
     ex = exits()
     tick = sorted({r["ticker"] for r in ex})
@@ -243,9 +313,12 @@ def main():
     f.add_argument("--limit", type=int)
     f.add_argument("--gaps", action="store_true", help="re-target names whose existing file fails coverage")
     sub.add_parser("status")
+    sub.add_parser("renames")
     a = ap.parse_args()
     if a.cmd == "fetch":
         cmd_fetch(a.budget, a.limit, a.gaps)
+    elif a.cmd == "renames":
+        cmd_renames()
     else:
         cmd_status()
 

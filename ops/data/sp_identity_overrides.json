@@ -1,0 +1,11 @@
+{
+ "_doc": "Reviewed identity decisions for raw/price/sp_exits files whose EODHD name does not share a token with the S&P member name (sp_identity.verdict == mismatch). Each entry: accepted code + evidence. Reviewed 2026-10-18 by Finance Bot; anything not listed here that mismatches FAILS check_survivorship.",
+ "CBS":  {"code": "CBS.US",     "evidence": "CBS Corp renamed ViacomCBS (2019-12) then Paramount; same NYSE listing, EODHD shows current name"},
+ "CTL":  {"code": "CTL.US",     "evidence": "CenturyLink renamed Lumen Technologies 2020-09; same CIK 18926 listing"},
+ "ESV":  {"code": "ESV.US",     "evidence": "Ensco plc renamed Valaris plc 2019-07 after Rowan merger; same listing"},
+ "GAS":  {"code": "GAS.US",     "evidence": "AGL Resources (GAS) acquired by Southern Co 2016-07, filer renamed Southern Co Gas; GAS.US bars are AGL Resources"},
+ "GGP":  {"code": "GGP.US",     "evidence": "General Growth Properties acquired by Brookfield Property 2018-08; filer renamed Brookfield Property REIT; GGP.US bars are GGP"},
+ "KORS": {"code": "KORS.US",    "evidence": "Michael Kors Holdings renamed Capri Holdings 2018-12; same listing"},
+ "MYL":  {"code": "MYL.US",     "evidence": "Mylan N.V. combined with Upjohn as Viatris 2020-11; EODHD shows current name"},
+ "MNK":  {"code": "MNK_old.US", "evidence": "EODHD name label is wrong (Muniholdings NY Insured Fund III). Bars 2013-06-24..2020-10-12 match Mallinckrodt NYSE life (spun from Covidien 2013-06, Ch.11 2020-10); closes 117.72 on 2015-06-30, 46.43 on 2017-07-26, 0.75 on 2020-10-09 are Mallinckrodt's levels, not a muni CEF's (~$12-15)"}
+}
