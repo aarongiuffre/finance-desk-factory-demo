@@ -32,9 +32,23 @@ and never inside the sandbox.  git runs against the pinned git dir only.
                          ends with a 'sandbox_recorded' marker; a re-run is a no-op, a failure
                          appends nothing and removes the copy.
   targets RUN            (smoke) real paths that exist outside and must be ENOENT inside.
+
+Verifier v6 (2026-10-18):
+  M1  per run_id at most ONE start, ONE end and ONE done; at most as many run_ids as the
+      prereg has variants (prereg `variants:`), so <= 3 x variants records; every number
+      finite (NaN / Infinity / 1e999 refuse); the sandbox's own dsr / N / passed are moved
+      under sandbox_reported (nothing reads them).  Gated DSR never uses a sandbox SR
+      (edge_harness.trial_srs host_only).
+  S2  RUN/in/chains.json holds only the fields the inside code reads (grant matching, trial
+      counting, dev-fold SRs) - no other hypothesis's validation/holdout results.
+  S4  record holds a per-run lock for its whole run, and the "already recorded?" test is
+      re-run under the chain flock (chainlog check=), so two concurrent record calls append
+      once.
 """
 import argparse
 import datetime
+import fcntl
+import math
 import dataclasses
 import hashlib
 import json
@@ -71,6 +85,11 @@ FORBIDDEN = {"granted", "nonce", "outer_token", "seq", "prev", "h", "lo", "hi", 
              "reason", "remote_main", "token_of"}
 FORBIDDEN_PREFIX = ("approval", "sandbox_", "go_", "freeze", "trial_of")
 RUN_ID = re.compile(r"[A-Za-z0-9_.:\-]{1,128}")
+SANDBOX_REPORTED = ("dsr", "N", "passed")                     # kept, but only under sandbox_reported
+# S2: the snapshot mounted into the sandbox - only what the inside code reads
+SNAP_GATE_KEYS = ("seq", "granted", "token", "fold", "hypothesis", "family", "lo", "hi", "prereg_sha",
+                  "prereg_commit", "kind", "freeze_sha", "go_sha", "sandbox_launch", "sandbox_run")
+SNAP_VAR_KEYS = ("seq", "event", "run_id", "token", "hypothesis", "fold", "kind", "sandbox_run", "trial_of")
 
 
 class HostError(RuntimeError):
@@ -175,8 +194,7 @@ def grant(run, hypothesis=H1):
         "event": "sandbox_trial", "trial_of": rid, "token": w.token, "hypothesis": hypothesis, "fold": "dev",
         "freeze_sha": g["freeze_sha"], "go_sha": g.get("go_sha", ""), "code_commit": pins["commit"],
         "code_tree": pins["tree"], "ts": _now()})
-    snap = {"holdout_access": chainlog.read_strict(finpaths.gate_log()),
-            "variants": chainlog.read_strict(finpaths.variants_log())}
+    snap = slim_snapshot(chainlog.read_strict(finpaths.gate_log()), chainlog.read_strict(finpaths.variants_log()))
     _xwrite(os.path.join(run, "in", "window.json"), dataclasses.asdict(w))
     _xwrite(os.path.join(run, "in", "chains.json"), snap)
     host = os.path.join(run, "host")
@@ -184,6 +202,22 @@ def grant(run, hypothesis=H1):
     _xwrite(os.path.join(host, "grant.json"), {"token": w.token, "run": rid, "hypothesis": hypothesis,
                                                 "seq": g["seq"]})
     return w
+
+
+def slim_snapshot(gate, var):
+    """S2: grant + trial-count fields only; an SR only for dev-fold done records (finite)."""
+    g = [{k: r[k] for k in SNAP_GATE_KEYS if k in r} for r in gate]
+    v = []
+    for r in var:
+        x = {k: r[k] for k in SNAP_VAR_KEYS if k in r}
+        if r.get("event") == "done" and r.get("fold") == "dev" and _finite(r.get("sr_alpha")):
+            x["sr_alpha"] = r["sr_alpha"]
+        v.append(x)
+    return {"holdout_access": g, "variants": v}
+
+
+def _finite(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
 # ----------------------------------------------------------------------------- hashes / post-check
@@ -272,9 +306,27 @@ def _scan(base):
     return sorted(files)
 
 
+def _no_const(c):
+    raise HostError(f"non-finite number {c} refused")
+
+
+def _check_finite(i, v, depth=0):
+    if depth > 64:
+        raise HostError(f"record {i}: nested deeper than 64")
+    if isinstance(v, float) and not math.isfinite(v):
+        raise HostError(f"record {i}: non-finite number refused")
+    if isinstance(v, dict):
+        for x in v.values():
+            _check_finite(i, x, depth + 1)
+    elif isinstance(v, list):
+        for x in v:
+            _check_finite(i, x, depth + 1)
+
+
 def _clean(i, r, hypothesis):
     if not isinstance(r, dict):
         raise HostError(f"record {i} is not an object")
+    _check_finite(i, r)
     out = {}
     for k, v in r.items():
         if k in FORBIDDEN or k.startswith(FORBIDDEN_PREFIX):
@@ -290,7 +342,44 @@ def _clean(i, r, hypothesis):
         raise HostError(f"record {i}: bad run_id")
     if out.get("hypothesis", hypothesis) != hypothesis:
         raise HostError(f"record {i}: hypothesis {out.get('hypothesis')!r} is not the granted one")
+    if out["event"] == "done" and out.get("sr_alpha") is not None and not _finite(out.get("sr_alpha")):
+        raise HostError(f"record {i}: sr_alpha must be a finite number or null")
+    rep = {k: out.pop(k) for k in SANDBOX_REPORTED if k in out}
+    if rep:
+        out["sandbox_reported"] = rep
     return out
+
+
+def variant_budget(hypothesis):
+    """Number of variants the committed prereg allows (its `variants:` mapping or list)."""
+    st = fold_gate.prereg_status(hypothesis)
+    if not st["ok"]:
+        raise HostError(f"prereg: {st['reason']}")
+    ok, why, blob = fold_gate._head_blob(st["path"])
+    if not ok:
+        raise HostError(why)
+    try:
+        v = fold_gate._yaml(blob).get("variants")
+    except ValueError as e:
+        raise HostError(str(e)) from None
+    if not isinstance(v, (dict, list)) or not v:
+        raise HostError(f"{st['path']} names no variants - the sandbox may record nothing")
+    return len(v)
+
+
+def _per_run(recs, budget):
+    """M1: <= 1 start/end/done per run_id, <= budget run_ids."""
+    seen, runs = set(), []
+    for i, r in enumerate(recs):
+        k = (r["run_id"], r["event"])
+        if k in seen:
+            raise HostError(f"record {i}: a second {r['event']!r} for run_id {r['run_id']!r} (one per run)")
+        seen.add(k)
+        if r["run_id"] not in runs:
+            runs.append(r["run_id"])
+            if len(runs) > budget:
+                raise HostError(f"record {i}: more run_ids ({len(runs)}) than the prereg has variants ({budget})")
+    return recs
 
 
 def _parse_records(run, hypothesis):
@@ -312,16 +401,19 @@ def _parse_records(run, hypothesis):
     lines = raw.split(b"\n")[:-1] if raw else []
     if len(lines) > RECORD_MAX_COUNT:
         raise HostError(f"sandbox variants: {len(lines)} records (> {RECORD_MAX_COUNT})")
+    budget = variant_budget(hypothesis)
+    if len(lines) > 3 * budget:
+        raise HostError(f"sandbox variants: {len(lines)} records (> 3 x {budget} variants: one start/end/done each)")
     out = []
     for i, ln in enumerate(lines):
         if len(ln) > RECORD_MAX_BYTES:
             raise HostError(f"record {i} is {len(ln)} bytes (> {RECORD_MAX_BYTES})")
         try:
-            r = json.loads(ln)
+            r = json.loads(ln, parse_constant=_no_const)
         except ValueError:
             raise HostError(f"record {i} does not parse") from None
         out.append(_clean(i, r, hypothesis))
-    return out
+    return _per_run(out, variant_budget(hypothesis))
 
 
 def _copy_out(src, dst):
@@ -356,9 +448,25 @@ def _host_grant(run, rid):
     raise HostError(f"no host grant in the real chain for run {rid}")
 
 
+class _AlreadyRecorded(HostError):
+    pass
+
+
 def record(run, check=True):
     _not_inside()
     run, rid = _run(run)
+    os.makedirs(finpaths.runs_dir(), exist_ok=True)
+    lf = os.open(os.path.join(finpaths.runs_dir(), f".sandbox-{rid}.lock"),
+                 os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        fcntl.flock(lf, fcntl.LOCK_EX)                 # S4: one record per run at a time
+        return _record(run, rid, check)
+    finally:
+        fcntl.flock(lf, fcntl.LOCK_UN)
+        os.close(lf)
+
+
+def _record(run, rid, check):
     g = _host_grant(run, rid)
     real = finpaths.variants_log()
     mine = [r for r in chainlog.read_strict(real) if r.get("sandbox_run") == rid]
@@ -394,8 +502,18 @@ def record(run, check=True):
     batch.append({"event": "sandbox_recorded", "sandbox_run": rid, "token": g["token"], "records": len(recs),
                   "copied_to": os.path.relpath(dst, finpaths.root()), "out_files": nfiles, "out_sha256": digest,
                   "ts": _now()})
+    def _not_yet(cur):                                 # S4: re-checked under the chain flock
+        for r in cur:
+            if r.get("sandbox_run") == rid and r.get("event") == "sandbox_recorded":
+                raise _AlreadyRecorded(f"run {rid} was recorded concurrently (seq {r['seq']})")
     try:
-        stored = chainlog.append_many(real, batch)
+        stored = chainlog.append_many(real, batch, check=_not_yet)
+    except _AlreadyRecorded:
+        if created:
+            shutil.rmtree(dst, ignore_errors=True)
+        done = [r for r in chainlog.read_strict(real) if r.get("sandbox_run") == rid
+                and r.get("event") == "sandbox_recorded"]
+        return {"run": rid, "noop": True, "recorded_seq": done[0]["seq"], "raced": True}
     except BaseException:
         if created:
             shutil.rmtree(dst, ignore_errors=True)

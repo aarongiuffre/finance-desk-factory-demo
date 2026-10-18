@@ -541,12 +541,36 @@ def trial_count(var_recs, gate_recs):
     return len(runs) + len(orphan), len(runs), len(orphan)
 
 
-def trial_srs(var_recs):
-    return [v["sr_alpha"] for v in var_recs if v.get("event") == "done" and v.get("sr_alpha") is not None]
+def _finite(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+
+
+def trial_srs(var_recs, host_only=False):
+    """Trial Sharpe ratios for the DSR variance (Verifier v6 M1): ONE score per run (the first
+    `done` of each (sandbox run, run_id)), finite numbers only.  host_only (validation /
+    holdout): scores the sandbox reported are never used - a sandbox run's records are
+    untrusted input (sandbox_run set by the host), and the host cannot recompute them without
+    re-running the sandboxed code; those runs still count in N (trial_count), only their
+    self-reported SR is left out of the variance."""
+    seen, out = set(), []
+    for v in var_recs:
+        if v.get("event") != "done" or not v.get("run_id") or not _finite(v.get("sr_alpha")):
+            continue
+        if host_only and "sandbox_run" in v:
+            continue
+        key = (v.get("sandbox_run"), v["run_id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(float(v["sr_alpha"]))
+    return out
 
 
 def deflated_sharpe_n(sr, n, skew, kurt, srs, N):
     """DSR with an explicit trial count N (>= len(srs)); variance from the observed trial SRs."""
+    if not all(_finite(x) for x in (sr, skew, kurt)):
+        return 0.0, float("inf"), max(1, int(N))
+    srs = [float(x) for x in srs if _finite(x)]
     N = max(1, int(N))
     if N == 1:
         return psr(sr, n, skew, kurt, 0.0), 0.0, 1
@@ -1039,8 +1063,8 @@ def _run_body(name, kind, events, window, prereg, robustness, universe_fn, varia
     var = read_variants()
     gate = fold_gate.grant_records()
     N, n_runs, n_orphan = trial_count(var, gate)
-    srs = trial_srs(var) + ([f["sr_alpha"]] if "sr_alpha" in f else [])
-    if f.get("n", 0) > 2:
+    srs = trial_srs(var, host_only=window.fold in fold_gate.GATED) + ([f["sr_alpha"]] if _finite(f.get("sr_alpha")) else [])
+    if f.get("n", 0) > 2 and _finite(f.get("sr_alpha")):
         dsr, sr0, N = deflated_sharpe_n(f["sr_alpha"], f["n"], f["alpha_skew"], f["alpha_kurt"], srs, N)
     else:
         dsr, sr0 = 0.0, 0.0

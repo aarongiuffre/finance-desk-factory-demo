@@ -41,8 +41,9 @@
 #            appeared after archiving) and every file still matches its sha
 #        --apply then DELETES the plaintext (no copy kept on the box): plain unlink on ZFS/btrfs
 #        (copy-on-write: shred cannot reach old blocks), shred -u elsewhere.  Then empty dirs are
-#        removed.  On the research datasets (no snapshots) nothing else holds it; Aaron may then
-#        `zfs destroy -r fastpool/finance-research` (split_research_dataset.sh notes).
+#        removed.  On the research datasets (no snapshots) nothing else holds it, BUT the
+#        pre-split snapshots do: the holdout is not locked until
+#        ops/staged_sudo/destroy_research_snapshots.sh --apply --i-understand-backups has run.
 #   --revert [--apply]   on a machine with the private key: decrypt + extract, then sha256sum -c
 #                        against the manifest.
 #
@@ -83,7 +84,9 @@ PATTERNS=('raw/research_zips/dera_insider/202[0-6]q*.zip' 'raw/research_zips/der
           'raw/price/h1_universe' 'folds/validation')
 DATASET_PATHS=('raw/research_zips' 'raw/price/h1_universe' 'folds/validation')
 T=$(mktemp -d); PARTIAL=()
-cleanup() { rc=$?; if [ "$rc" -ne 0 ] && [ ${#PARTIAL[@]} -gt 0 ]; then rm -f -- "${PARTIAL[@]}"; echo "partial output deleted" >&2; fi; rm -rf "$T"; exit "$rc"; }
+cleanup() { rc=$?; if [ "$rc" -ne 0 ] && [ ${#PARTIAL[@]} -gt 0 ]; then rm -f -- "${PARTIAL[@]}"; echo "partial output deleted" >&2; fi
+  if [ -d "$T/gnupg" ]; then gpgconf --homedir "$T/gnupg" --kill all >/dev/null 2>&1 || true; fi   # v6 S10: no agent left behind
+  rm -rf "$T"; exit "$rc"; }
 trap cleanup EXIT
 die() { echo "REFUSED: $*" >&2; exit 3; }
 

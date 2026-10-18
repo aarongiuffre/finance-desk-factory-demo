@@ -76,7 +76,8 @@ RUN=$BASE/$(date +%Y%m%dT%H%M%S)-$MODE-$$
 mkdir "$RUN"
 mkdir "$RUN/in" "$RUN/logs" "$RUN/out" "$RUN/host"
 CODE=$RUN/code
-GITDIR=$(realpath "$(git -C "$REPO" rev-parse --git-common-dir)")
+GITDIR=$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)   # v6 S3: absolute, any cwd
+[ -d "$GITDIR" ] || { echo "h1_sandbox: no git dir for $REPO" >&2; exit 1; }
 
 if [ "$MODE" = real ]; then
   SHA=$(GIT_TERMINAL_PROMPT=0 git ls-remote "$REMOTE_URL" refs/heads/main | cut -f1)

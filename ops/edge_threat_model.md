@@ -1,4 +1,4 @@
-# Edge validation: threat model (round 2, updated rounds 4 and 5, 2026-10-18)
+# Edge validation: threat model (round 2, updated rounds 4, 5 and 6, 2026-10-18)
 
 **Premise.** Code running as `slowglow` cannot stop `slowglow`. Worse, slowglow is in
 `docker` (root-equivalent) and `wheel`. So every in-process or on-box check is at most
@@ -109,13 +109,46 @@ Supersedes the round-4 details above where they differ (worktree, chain seeding)
   be re-downloaded from the internet by any agent with network access; the snapshots
   taken before the split hold the plaintext until Aaron destroys them.
 
+## Round 6 (Verifier v6): record limits, the cap under the lock, root-equivalent signer
+- **Record (M1).** Per sandbox run: at most one start, one end and one done per run_id,
+  at most as many run_ids as the prereg has `variants:`, every number finite (NaN,
+  Infinity and overflowing literals refused). The sandbox's own `dsr`/`N`/`passed` are
+  kept only under `sandbox_reported`. `trial_srs` counts one score per run, finite only.
+  **Gated DSR (validation/holdout) uses host scores only:** the host cannot recompute a
+  sandboxed SR without re-running the sandboxed code, so sandbox-reported SRs are left
+  out of the variance (honest limitation: they are not verified, only excluded); those
+  runs still count in N.
+- **Cap under the lock (M2).** `chainlog.append(..., check=)` re-runs every
+  chain-dependent decision (dev cap, go/approval nonces, validation count, holdout once)
+  on the chain as it is under the append flock; a raced request is refused and logged.
+  S5: the dev cap counts grants per hypothesis + code freeze, whichever go file.
+  S4: `sandbox_host record` holds a per-run lock and re-checks "already recorded" under
+  the chain flock.
+- **Root-equivalent (M3).** While slowglow is in docker or wheel (os.getgroups + grp at
+  run time), a root-owned go file is refused and a signed one counts only if it verifies
+  against the ssh-ed25519 key whose SHA256 fingerprint is committed in BOTH
+  REGISTRY.yaml `gate.signer_fpr` and the prereg `gate_signer_fpr`. Residual: those
+  commits are made on cachyos too; they bind only once pushed and witnessed before the
+  run (step 2 makes main append-only). No fingerprint is committed yet (Aaron step).
+- **S1** the code archive is an allowlist (the H1 import closure, tested by AST);
+  **S2** the chains snapshot mounted into the sandbox holds only grant/trial fields;
+  **S3** absolute git dir; **S6** expiries compared as aware datetimes;
+  **S11** install_gate_key.sh refuses any key slowglow holds (~/.ssh, its ssh-agent) and
+  aaron_sign_dev_go.sh refuses to run on cachyos.
+- **Research data (C-E2).** The split is resumable (state file; copy, verify incl.
+  owner/mode, swap, remove), refuses while files are open, and keeps the replicate patch
+  as its own step. **The holdout is NOT locked until** encrypt_full_period.sh
+  --remove-originals AND `destroy_research_snapshots.sh --apply --i-understand-backups`
+  have run: until then the pre-split snapshots of fastpool/ROOT/cachyos and their
+  backuppool replicas hold the plaintext (`split_research_dataset.sh --list-snapshots`).
+
 ## Aaron's steps, and what each one closes
 | # | Step | Closes |
 |---|---|---|
 | 1 | Push the current commits, then `bash ops/offbox/witness_init.sh --apply` | Starts the remote witness, so F1, F2, F3 and F12 fail closed at the next grant |
 | 2 | `bash ops/offbox/github_protect.sh --apply` with Aaron's gh login, plus a non-admin push credential on cachyos | Witness tags and main become append-only, even against root on cachyos (F1, F2, F3, F12 durable; F5 durable) |
 | 3 | `sudo bash ops/staged_sudo/install_gate_key.sh aaron.pub --apply` | F6 and F6b, against non-root |
-| 4 | `sudo bash ops/staged_sudo/split_research_dataset.sh --apply` (own dataset, no snapshots, not replicated); then `bash ops/offbox/encrypt_full_period.sh --recipient-key aaron_pub.asc --recipient-fpr <FPR> --apply`; off-box `--decrypt-test` and the signed, archive-bound custody statement (the only decrypt check); then `--remove-originals [--apply]` (deletion, no plaintext copy kept); then, as a separate explicit step, destroy or knowingly retain the pre-split ZFS snapshots / backuppool replicas | **F7, F11 and every in-process bypass** for the research copies in scope: no plaintext validation/holdout research copy remains in the live tree. Live `raw/price` 2020+, `facts/`, `universe/` stay readable (operational); pre-split snapshots hold the old plaintext until destroyed |
+| 4 | `sudo bash ops/staged_sudo/split_research_dataset.sh --patch-replicate --apply`, then `sudo bash ops/staged_sudo/split_research_dataset.sh --apply` (own dataset, no snapshots, not replicated; resumable); then `bash ops/offbox/encrypt_full_period.sh --recipient-key aaron_pub.asc --recipient-fpr <FPR> --apply`; off-box `--decrypt-test` and the signed, archive-bound custody statement (the only decrypt check); then `--remove-originals [--apply]` (deletion, no plaintext copy kept); then, as a separate explicit step, `sudo bash ops/staged_sudo/destroy_research_snapshots.sh` (dry run lists them) and `--apply --i-understand-backups` (or knowingly retain them: then the holdout stays unlocked) | **F7, F11 and every in-process bypass** for the research copies in scope: no plaintext validation/holdout research copy remains in the live tree. Live `raw/price` 2020+, `facts/`, `universe/` stay readable (operational); pre-split snapshots hold the old plaintext until destroyed |
 | 5 | `sudo bash ops/staged_sudo/leave_root_equivalent_groups.sh --apply` | Makes steps 3 and 6 real (without it, root defeats them) |
 | 6 | Optional: `sudo bash ops/staged_sudo/install_finance_gate_user.sh --apply` | F3 and F12 truncation/reset between gated grants, against non-root |
 

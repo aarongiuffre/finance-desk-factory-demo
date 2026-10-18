@@ -41,7 +41,7 @@ ST=/home/slowglow/.local/state/finance-chain; MODE=dry
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 HELPER_SRC=$HERE/finance_gate_migrate.py
 HELPER_SHA=6ce74569b7362aa1d87148bc87aece43858b61d0a6577caba0e3334bfb3ae2fa
-CHAINLOG_SHA=b0ead552f1c1f5558e4903996dccace25e4475d06a36308bd27ed8ffcd3f5981
+CHAINLOG_SHA=74cf5e63986ad0f27fed39bdc6c16fe14b58f867dfb90b2caff606bb4be067a9
 FINPATHS_SHA=f221c33cbad97aae718c2dd6657ab378cb8fc32e6fa15424a1d01c21231f3e21
 for a in "$@"; do case "$a" in --apply) [ "$MODE" = revert ] && MODE=revert-apply || MODE=apply;;
   --revert) [ "$MODE" = apply ] && MODE=revert-apply || MODE=revert;;

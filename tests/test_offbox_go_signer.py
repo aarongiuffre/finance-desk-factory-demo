@@ -31,10 +31,22 @@ def env(tmp_path):
     return e
 
 
-def run(env, *a, check=True):
+def _unguarded(env):
+    """A copy without the two `# S11-guard` lines (these tests run on cachyos, where the real
+    script refuses - test_refuses_on_cachyos checks that)."""
+    p = os.path.join(os.path.dirname(env.root), "aaron_sign_dev_go.unguarded.sh")
+    src = SIGNER.read_text().splitlines(keepends=True)
+    kept = [ln for ln in src if not ln.rstrip().endswith("# S11-guard")]
+    assert len(src) - len(kept) == 2
+    open(p, "w").write("".join(kept))
+    return p
+
+
+def run(env, *a, check=True, guarded=False):
     pe = {**os.environ, "PATH": f"/usr/bin:{os.environ['PATH']}",
           "GIT_CONFIG_GLOBAL": "/dev/null"}
-    r = subprocess.run(["bash", str(SIGNER), *a], cwd=env.root, capture_output=True, text=True, timeout=120, env=pe)
+    script = str(SIGNER) if guarded else _unguarded(env)
+    r = subprocess.run(["bash", script, *a], cwd=env.root, capture_output=True, text=True, timeout=120, env=pe)
     if check and r.returncode != 0:
         raise AssertionError((a, r.stdout, r.stderr))
     return r
@@ -65,7 +77,7 @@ def test_signed_dev_go_is_accepted_by_the_gate_and_tamper_refused(env):
     assert f["go_max_trials"] == 2 and f["go_kind"] == "signed"
     ok, why, _ = G.check_go("H9", "dev", "0" * 64, st["sha"], [])
     assert not ok and "freeze" in why
-    used = [{"granted": True, "fold": "dev", "hypothesis": "H9", "go_sha": f["go_sha"]}] * 2
+    used = [{"granted": True, "fold": "dev", "hypothesis": "H9", "go_sha": f["go_sha"], "freeze_sha": env.fz}] * 2
     ok, why, _ = G.check_go("H9", "dev", env.fz, st["sha"], used)
     assert not ok and "used up" in why
     d = json.loads(open(p).read())
@@ -102,3 +114,13 @@ def test_refusals(env):
     env.push()
     r = run(env, "H9", "--max-trials", "2", check=False)
     assert r.returncode == 3 and "frozen scripts/h9_events.py" in r.stderr
+
+
+def test_refuses_on_cachyos(env):
+    """Verifier v6 S11: the real script never runs on the desk box (hostname cachyos* or a
+    /data/finance checkout present) - Aaron's key must not be there."""
+    import socket
+    if not (socket.gethostname().startswith("cachyos") or os.path.exists("/data/finance/.git")):
+        pytest.skip("not on the desk box")
+    r = run(env, "H9", "--max-trials", "1", check=False, guarded=True)
+    assert r.returncode == 3 and "REFUSED" in r.stderr

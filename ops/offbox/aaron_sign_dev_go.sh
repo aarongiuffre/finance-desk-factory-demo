@@ -25,6 +25,9 @@
 # REVERT: delete the files from logs/approvals/go/ (a used-up or superseded go does nothing).
 # Needs: git, python3 with PyYAML, ssh-keygen (only with --sign).
 set -euo pipefail
+# Verifier v6 S11: never on cachyos (the desk box) - Aaron's key must not be there
+case "$(hostname 2>/dev/null)" in cachyos*) echo "REFUSED: run this on Aaron's own machine, not on $(hostname)" >&2; exit 3;; esac # S11-guard
+[ -e /data/finance/.git ] && { echo "REFUSED: /data/finance exists here - this looks like the desk box, not Aaron's machine" >&2; exit 3; } # S11-guard
 HYP=${1:?hypothesis}; shift
 FOLD=dev; MAX=""; WANT=""; DAYS=""; KEY="$HOME/.ssh/id_ed25519"; SIGN=0
 while [ $# -gt 0 ]; do case "$1" in

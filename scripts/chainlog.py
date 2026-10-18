@@ -17,6 +17,14 @@ read_strict() checks every anchor: the log must contain the anchored prefix
 (count records, record count-1 has hash h).  Truncation or rewriting below an
 anchor => ChainError.  A non-empty log with a missing anchor => ChainError.
 
+Check under the lock (Verifier v6 M2/S4): append(..., check=fn) / append_many(..., check=fn)
+call fn(current records) AFTER taking the chain's flock and re-reading the chain, BEFORE
+writing.  fn raises to abort (nothing is written) - so a decision that depends on the
+chain (a trial cap, a single-use nonce, "already recorded") and the append are atomic
+against every other process using this module.  finance-gate mode: the append itself runs
+in the helper (other uid), so the check + helper call are serialised by a slowglow-side
+lock (<state dir>/<log>.serial.lock) that every slowglow writer takes.
+
 HONEST LIMIT: an agent running as the same Unix user can rewrite the log AND
 both anchors consistently.  On-box this is tamper-EVIDENT against careless or
 partial edits and against every Verifier attack; tamper-PROOF only together
@@ -127,18 +135,42 @@ def _via_helper(path, rec):
     return json.loads(r.stdout)
 
 
-def append(path, rec, state=None):
+def _serial_lock(path):
+    """finance-gate mode: slowglow-side lock serialising check + helper append."""
+    d = finpaths.state_dir()
+    os.makedirs(d, exist_ok=True)
+    fd = os.open(os.path.join(d, os.path.basename(path) + ".serial.lock"),
+                 os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
+
+
+def _unlock_fd(fd):
+    fcntl.flock(fd, fcntl.LOCK_UN)
+    os.close(fd)
+
+
+def append(path, rec, state=None, check=None):
     """Append rec (dict) to the chain under an exclusive lock; returns the stored record.
-    state: explicit second-anchor dir (H1 sandbox run dirs; never the gate-user path)."""
+    state: explicit second-anchor dir (H1 sandbox run dirs; never the gate-user path).
+    check: fn(current records) run under the lock before writing; raise to abort."""
     if (state is None and finpaths.gate_user_mode() and path.startswith(finpaths.GATE_STATE + os.sep)
             and os.path.basename(os.path.dirname(os.path.dirname(path))) == "finance-gate"
             and not os.access(os.path.dirname(path), os.W_OK)):
-        return _via_helper(path, rec)
+        fd = _serial_lock(path)
+        try:
+            if check is not None:
+                check(read_strict(path))
+            return _via_helper(path, rec)
+        finally:
+            _unlock_fd(fd)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     lock = open(path + ".lock", "a")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX)
         recs = read_strict(path, state)
+        if check is not None:
+            check(recs)
         r = {k: v for k, v in rec.items() if k not in ("seq", "prev", "h")}
         r["seq"] = len(recs)
         r["prev"] = recs[-1]["h"] if recs else GENESIS
@@ -154,7 +186,7 @@ def append(path, rec, state=None):
         lock.close()
 
 
-def append_many(path, recs):
+def append_many(path, recs, check=None):
     """Append several records under ONE lock with ONE write + fsync (all or nothing for a
     crash-free run: every record is built and the chain re-read before anything is written).
     finance-gate mode: one helper call per record (the caller makes its batch resumable)."""
@@ -163,12 +195,20 @@ def append_many(path, recs):
         return []
     if (finpaths.gate_user_mode() and path.startswith(finpaths.GATE_STATE + os.sep)
             and not os.access(os.path.dirname(path), os.W_OK)):
-        return [_via_helper(path, r) for r in recs]
+        fd = _serial_lock(path)
+        try:
+            if check is not None:
+                check(read_strict(path))
+            return [_via_helper(path, r) for r in recs]
+        finally:
+            _unlock_fd(fd)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     lock = open(path + ".lock", "a")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX)
         cur = read_strict(path)
+        if check is not None:
+            check(cur)
         out, buf = [], b""
         for rec in recs:
             r = {k: v for k, v in rec.items() if k not in ("seq", "prev", "h")}

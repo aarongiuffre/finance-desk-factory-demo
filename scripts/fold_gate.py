@@ -81,18 +81,36 @@ Fold boundaries:
   validation 2020-01-01 .. 2024-03-31
   holdout    2024-04-01 .. 2026-09-30
 
+Verifier v6 (2026-10-18):
+  M2  every chain-dependent decision of a grant (standing dev go trial cap, go and
+      approval nonces, family validation/holdout counts) is re-checked UNDER the chain
+      flock against the chain as it is at the moment of the append (chainlog check=):
+      parallel grants cannot both take the last trial.  S5: the dev cap counts dev
+      grants per (hypothesis, freeze sha), so a re-signed go for the same freeze does
+      not reset the budget.  S6: expiries are compared as timezone-aware datetimes.
+  M3  while this process's user is in a root-equivalent group (ROOT_EQUIV_GROUPS:
+      docker, wheel - detected at run time with os.getgroups + grp), "root-owned" means
+      nothing: root-owned go files are refused, and a signature is accepted only from an
+      ssh-ed25519 key in allowed_signers whose SHA256 fingerprint equals the one committed
+      in BOTH REGISTRY.yaml (gate.signer_fpr) and the hypothesis prereg (gate_signer_fpr).
+      Lifted by ops/staged_sudo/leave_root_equivalent_groups.sh.
+
 CLI:
   python3 scripts/fold_gate.py status
   python3 scripts/fold_gate.py verify-chain
   python3 scripts/fold_gate.py check-prereg H1_x
   python3 scripts/fold_gate.py migrate        # one-time v1 -> chained log
 """
+import base64
 import dataclasses
 import datetime
 import getpass
+import grp
 import hashlib
 import json
+import math
 import os
+import pwd
 import re
 import subprocess
 import sys
@@ -131,6 +149,8 @@ FREEZE_EXEMPT = ("scripts/h1_guard.py", "scripts/h1_run.py")     # gate infra, p
 GO_NAMESPACE = "finance-go"
 GO_DIR = os.path.join("logs", "approvals", "go")                 # gitignored; Aaron copies signed go files here
 GO_ROOT_DIR = "/etc/finance-gate/go"                             # alternative: root-owned go files (no signature)
+ROOT_EQUIV_GROUPS = ("docker", "wheel")      # what ops/staged_sudo/leave_root_equivalent_groups.sh removes
+_TEST_ROOT_EQUIV = None                      # tests: None = not root-equivalent; a tuple = these groups
 
 
 class GateRefused(Exception):
@@ -154,6 +174,72 @@ class Window:
 
 def _now():
     return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _expired(expires, now=None):
+    """True unless `expires` is a timezone-aware ISO timestamp later than now (S6: datetimes,
+    not strings - an offset other than the box's no longer shifts the expiry)."""
+    try:
+        e = datetime.datetime.fromisoformat(expires)
+        n = datetime.datetime.fromisoformat(now) if now else datetime.datetime.now().astimezone()
+    except (TypeError, ValueError):
+        return True
+    if e.tzinfo is None or n.tzinfo is None:
+        return True
+    return n >= e
+
+
+def detect_root_equivalent_groups():
+    """Root-equivalent groups of this process's user, at run time: the process's own groups
+    (os.getgroups) plus every group whose member list names the user (grp), so a membership
+    added since login is seen too."""
+    names = set()
+    for gid in set(os.getgroups()) | {os.getegid()}:
+        try:
+            names.add(grp.getgrgid(gid).gr_name)
+        except KeyError:
+            pass
+    try:
+        user = pwd.getpwuid(os.geteuid()).pw_name
+    except KeyError:
+        user = None
+    for g in grp.getgrall():
+        if user and user in g.gr_mem:
+            names.add(g.gr_name)
+    return tuple(sorted(n for n in names if n in ROOT_EQUIV_GROUPS))
+
+
+def root_equivalent_groups():
+    if finpaths.is_test():
+        return tuple(_TEST_ROOT_EQUIV or ())
+    return detect_root_equivalent_groups()
+
+
+def committed_signer_fpr(hypothesis):
+    """(ok, reason, fpr): the SHA256 key fingerprint committed in REGISTRY.yaml gate.signer_fpr
+    AND in the hypothesis prereg gate_signer_fpr; both must be present and equal."""
+    doc, why = load_registry_doc()
+    if doc is None:
+        return False, why, None
+    a = (doc.get("gate") or {}).get("signer_fpr") if isinstance(doc.get("gate"), dict) else None
+    if not hypothesis:
+        return False, "no hypothesis to read the committed signer fingerprint from", None
+    ok, why, blob = _head_blob(prereg_path(hypothesis))
+    if not ok:
+        return False, why, None
+    try:
+        b = _yaml(blob).get("gate_signer_fpr")
+    except ValueError as e:
+        return False, str(e), None
+    if not (isinstance(a, str) and a.startswith("SHA256:")):
+        return False, f"{REGISTRY} has no gate.signer_fpr (Aaron's ed25519 key fingerprint, SHA256:...)", None
+    if b != a:
+        return False, f"prereg gate_signer_fpr {b!r} != {REGISTRY} gate.signer_fpr", None
+    return True, "ok", a
+
+
+def ssh_fpr(keytype, b64):
+    return "SHA256:" + base64.b64encode(hashlib.sha256(base64.b64decode(b64)).digest()).decode().rstrip("=")
 
 
 def _root():
@@ -256,11 +342,15 @@ def _read_log():
         raise GateRefused(f"access log integrity check failed - gate closed: {e}") from None
 
 
-def _append(rec):
+class Raced(GateRefused):
+    """A chain-dependent check failed when re-run under the chain lock (Verifier v6 M2)."""
+
+
+def _append(rec, check=None):
     if finpaths.in_sandbox():
         raise GateRefused("the sandbox never writes the access log (Verifier v5 F2)")
     try:
-        return chainlog.append(finpaths.gate_log(), rec)
+        return chainlog.append(finpaths.gate_log(), rec, check=check)
     except chainlog.ChainError as e:
         raise GateRefused(f"access log integrity check failed - gate closed: {e}") from None
 
@@ -677,6 +767,11 @@ def _read_small(p, limit=65536):
 def load_go(hypothesis, fold):
     """(ok, reason, doc, raw bytes, kind 'root'|'signed')."""
     signed, sig, ro = go_files(hypothesis, fold)
+    req = root_equivalent_groups()
+    if os.path.lexists(ro) and req:
+        return False, (f"root-owned go file {ro} refused: {getpass.getuser()} is in {', '.join(req)} "
+                       f"(root-equivalent) - only an ed25519-signed go file counts until "
+                       f"leave_root_equivalent_groups.sh is applied"), None, b"", ""
     if os.path.lexists(ro):
         data, st = _read_small(ro)
         if not finpaths.is_test():
@@ -687,7 +782,7 @@ def load_go(hypothesis, fold):
     elif os.path.lexists(signed) and os.path.lexists(sig):
         data, _ = _read_small(signed)
         sg, _ = _read_small(sig)
-        ok, why = verify_signature(data, sg, GO_NAMESPACE)
+        ok, why = verify_signature(data, sg, GO_NAMESPACE, hypothesis=hypothesis)
         if not ok:
             return False, f"go file {os.path.basename(signed)}: {why}", None, b"", ""
         kind = "signed"
@@ -719,18 +814,16 @@ def check_go(hypothesis, fold, freeze, prereg_sha, recs, now=None):
             return False, f"go file {k}={doc.get(k)!r}, need {v!r}", None
     if doc.get("freeze_sha") != freeze:
         return False, f"go file names freeze {str(doc.get('freeze_sha'))[:12]}, the code freeze is {freeze[:12]}", None
-    now = now or _now()
-    if not isinstance(doc.get("expires"), str) or now > doc["expires"]:
-        return False, "go file expired", None
-    live = [r for r in recs if "sandbox_run" not in r]
+    if _expired(doc.get("expires"), now):
+        return False, "go file expired (or its expiry is not a timezone-aware ISO time)", None
     if fold == "dev":
         m = doc.get("max_dev_trials")
         if not isinstance(m, int) or isinstance(m, bool) or m < 1:
             return False, "standing dev go needs max_dev_trials >= 1", None
-        used = sum(1 for r in live if r.get("granted") and r.get("fold") == "dev"
-                   and r.get("hypothesis") == hypothesis and r.get("go_sha") == go_sha)
+        used = dev_trials_used(hypothesis, freeze, recs)
         if used >= m:
-            return False, f"standing dev go used up: {used}/{m} dev trials granted under it", None
+            return False, (f"standing dev go used up: {used}/{m} dev trials granted under freeze "
+                           f"{freeze[:12]} (counted per hypothesis + freeze, any go file)"), None
         return True, "ok", {"go_sha": go_sha, "go_kind": kind, "go_trial": used + 1, "go_max_trials": m}
     if doc.get("prereg_sha256") != prereg_sha:
         return False, "go file names a different prereg sha", None
@@ -740,6 +833,36 @@ def check_go(hypothesis, fold, freeze, prereg_sha, recs, now=None):
     if any(r.get("go_nonce") == nonce for r in recs):
         return False, "go nonce already used (replay)", None
     return True, "ok", {"go_sha": go_sha, "go_kind": kind, "go_nonce": nonce}
+
+
+def dev_trials_used(hypothesis, freeze, recs):
+    """S5: dev grants of this hypothesis under this code freeze (whatever go file they used)."""
+    return sum(1 for r in recs if r.get("granted") and r.get("fold") == "dev" and "sandbox_run" not in r
+               and r.get("hypothesis") == hypothesis and r.get("freeze_sha") == freeze)
+
+
+def _state_refusal(hypothesis, fold, fam, prereg_commit, extra, cur):
+    """M2: every decision that depends on the chain, re-run on the chain as it is under the
+    append lock.  -> reason or None."""
+    m = extra.get("go_max_trials")
+    if fold == "dev" and m is not None and extra.get("freeze_sha"):
+        used = dev_trials_used(hypothesis, extra["freeze_sha"], cur)
+        if used >= m:
+            return f"standing dev go used up: {used}/{m} dev trials granted under freeze {extra['freeze_sha'][:12]} (raced)"
+    if extra.get("go_nonce") and any(r.get("go_nonce") == extra["go_nonce"] for r in cur):
+        return "go nonce already used (replay, raced)"
+    if fold == "validation":
+        prior = _family_grants(cur, fam, "validation")
+        if len(prior) >= MAX_VALIDATION_READS:
+            return f"family {fam!r} used all {MAX_VALIDATION_READS} validation reads (raced)"
+        if prior and prior[-1].get("prereg_commit", "") == prereg_commit:
+            return "validation already read for this prereg commit (raced)"
+    if fold == "holdout":
+        if _family_grants(cur, fam, "holdout"):
+            return f"holdout already read once for family {fam!r} (raced)"
+        if extra.get("approval_nonce") and any(r.get("approval_nonce") == extra["approval_nonce"] for r in cur):
+            return "approval nonce already used (replay, raced)"
+    return None
 
 
 def _authorize(hypothesis, fold, st, recs, remote_sha):
@@ -781,11 +904,39 @@ def _approval_files(family):
     return base, base + ".sig"
 
 
-def verify_signature(data, sig, namespace=SIGN_NAMESPACE):
-    """ssh-keygen -Y verify against the root-owned pinned key file. -> (ok, reason)."""
+def _signer_line(signers, want_fpr):
+    """M3: the allowed_signers line of SIGNER_ID whose key is ssh-ed25519 with fingerprint want_fpr."""
+    for ln in signers.decode("utf-8", "replace").splitlines():
+        f = ln.split()
+        if not f or f[0].startswith("#") or f[0] != SIGNER_ID:
+            continue
+        for i, x in enumerate(f[1:-1], 1):
+            if x == "ssh-ed25519":
+                try:
+                    if ssh_fpr(x, f[i + 1]) == want_fpr:
+                        return (ln + "\n").encode()
+                except (ValueError, IndexError):
+                    pass
+    return None
+
+
+def verify_signature(data, sig, namespace=SIGN_NAMESPACE, hypothesis=None):
+    """ssh-keygen -Y verify against the root-owned pinned key file. -> (ok, reason).
+    While root-equivalent (M3): only the ssh-ed25519 key whose fingerprint is committed in the
+    registry and the prereg is accepted."""
     ok, why, signers = pinned_signers()
     if not ok:
         return False, why
+    req = root_equivalent_groups()
+    if req:
+        ok, why, fpr = committed_signer_fpr(hypothesis)
+        if not ok:
+            return False, f"{getpass.getuser()} is in {', '.join(req)} (root-equivalent): {why}"
+        line = _signer_line(signers, fpr)
+        if line is None:
+            return False, (f"allowed_signers has no ssh-ed25519 key for {SIGNER_ID} with the committed "
+                           f"fingerprint {fpr} (root-equivalent user: the pin file alone is not trusted)")
+        signers = line
     with tempfile.TemporaryDirectory() as td:
         a, s = os.path.join(td, "allowed"), os.path.join(td, "x.sig")
         open(a, "wb").write(signers)
@@ -796,7 +947,7 @@ def verify_signature(data, sig, namespace=SIGN_NAMESPACE):
 
 
 def check_approval(data, sig, family, hypothesis, st, now=None):
-    ok, why = verify_signature(data, sig)
+    ok, why = verify_signature(data, sig, hypothesis=hypothesis)
     if not ok:
         return False, why
     try:
@@ -808,9 +959,8 @@ def check_approval(data, sig, family, hypothesis, st, now=None):
     for k, v in want.items():
         if a.get(k) != v:
             return False, f"approval {k}={a.get(k)!r} does not match {v!r}"
-    now = now or _now()
-    if not a.get("expires") or now > a["expires"]:
-        return False, "approval expired"
+    if _expired(a.get("expires"), now):
+        return False, "approval expired (or its expiry is not a timezone-aware ISO time)"
     if not a.get("nonce"):
         return False, "approval has no nonce"
     return True, "ok"
@@ -921,10 +1071,24 @@ def request(hypothesis, fold, purpose="", kind="hypothesis", lo=None, hi=None, s
                 "freeze_sha": new_freeze["freeze_sha"], "ts": rec["ts"]})
         except chainlog.ChainError as e:
             refuse(f"variants log integrity check failed - gate closed: {e}")
+    base = dict(rec)
     rec.update(granted=True, reason="ok", lo=lo, hi=hi, token=tok, **extra)
     rec.setdefault("prereg_sha", "")
     rec.setdefault("family", "")
-    _append(rec)
+    seen = [r["h"] for r in recs]
+
+    def _recheck(cur):                       # under the chain flock (M2)
+        if [r["h"] for r in cur[:len(seen)]] != seen:
+            raise Raced("access log changed under the grant (not an extension) - refused")
+        why = _state_refusal(hypothesis, fold, rec.get("family", ""), rec.get("prereg_commit", ""), extra, cur)
+        if why:
+            raise Raced(why)
+    try:
+        _append(rec, check=_recheck)
+    except Raced as e:
+        rec.clear()
+        rec.update(base)
+        refuse(str(e))
     if gated or sandboxed:
         push_witness(rec["remote_main"])
     return Window(hypothesis, fold, lo, hi, tok, rec["prereg_sha"], rec["family"], rec.get("prereg_commit", ""))
@@ -950,7 +1114,8 @@ def find_grant(window, recs=None):
                 first = _family_grants(recs, r.get("family"), "holdout")
                 if not first or first[0] is not r:
                     return None
-                ok, _ = verify_signature(r.get("approval", "").encode(), r.get("approval_sig", "").encode())
+                ok, _ = verify_signature(r.get("approval", "").encode(), r.get("approval_sig", "").encode(),
+                                         hypothesis=r.get("hypothesis"))
                 if not ok:
                     return None
             if window.fold in GATED:

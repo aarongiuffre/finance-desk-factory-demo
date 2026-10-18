@@ -64,7 +64,37 @@ def stub(tmp_path):
     sh("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "aaron-test", "-f", str(k))
     p = open(str(k) + ".pub").read().split()
     pin.write_text(f'aaron namespaces="finance-custody" {p[0]} {p[1]}\n')
-    return {"root": root, "script": script, "real": real, "gh": gh, "fpr": fpr, "pub": pub, "key": k, "tmp": tmp_path}
+    yield {"root": root, "script": script, "real": real, "gh": gh, "fpr": fpr, "pub": pub, "key": k, "tmp": tmp_path}
+    kill_gpg_agents(tmp_path)          # Verifier v6 S10: no gpg-agent / scdaemon outlives the test
+
+
+def kill_gpg_agents(base):
+    """gpgconf --kill all for every GNUPGHOME the test used (the throwaway key's homedir, the
+    empty one the script gets, any other gnupg dir under the test's tmp)."""
+    homes = {Path(base) / "aaron_gnupg", Path(base) / "nohome"}
+    homes |= {p.parent for p in Path(base).rglob("pubring.kbx")} | {p.parent for p in Path(base).rglob("S.gpg-agent")}
+    for h in homes:
+        if h.is_dir():
+            subprocess.run(["gpgconf", "--homedir", str(h), "--kill", "all"], capture_output=True, timeout=30)
+
+
+def gpg_daemons_under(base):
+    """(pid, cmdline) of gpg-agent / scdaemon / keyboxd / dirmngr whose --homedir is under base."""
+    base = os.path.realpath(base) + os.sep
+    out = []
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            argv = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\0")
+        except OSError:
+            continue
+        a = [x.decode("utf-8", "replace") for x in argv if x]
+        if not a or os.path.basename(a[0]) not in ("gpg-agent", "scdaemon", "keyboxd", "dirmngr"):
+            continue
+        for i, x in enumerate(a):
+            h = a[i + 1] if x == "--homedir" and i + 1 < len(a) else (x.split("=", 1)[1] if x.startswith("--homedir=") else None)
+            if h and (os.path.realpath(h) + os.sep).startswith(base):
+                out.append((int(pid), " ".join(a)))
+    return out
 
 
 def run(st, *a, check=True):
@@ -211,3 +241,19 @@ def test_recipient_key_relative_path_resolved_before_cd(stub):
     r = sh("bash", str(stub["script"]), "--recipient-key", stub["pub"].name, "--recipient-fpr", stub["fpr"], "--apply",
            cwd=str(stub["tmp"]), env={**os.environ, "GNUPGHOME": str(stub["tmp"] / "nohome")})
     assert "wrote offbox/full_period_" in r.stdout
+
+
+def test_fixture_teardown_leaves_no_gpg_agent(tmp_path):
+    """S10: start an agent the way the tests do (key generation), tear down as the fixture does,
+    and require that nothing is left running under the test's tmp dir."""
+    gh = tmp_path / "aaron_gnupg"
+    gh.mkdir(mode=0o700)
+    sh("gpg", "--homedir", str(gh), "--batch", "--pinentry-mode", "loopback", "--passphrase", "",
+       "--quick-gen-key", "teardown-test <t@t>", "ed25519", "cert", "never")
+    kill_gpg_agents(tmp_path)
+    import time
+    for _ in range(50):
+        if not gpg_daemons_under(tmp_path):
+            break
+        time.sleep(0.1)
+    assert gpg_daemons_under(tmp_path) == []

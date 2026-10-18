@@ -78,7 +78,8 @@ class Env:
 
     def prereg(self, h="H9", family="FAM9", extra=None, spec=None, commit=True, push=True, body=None):
         p = os.path.join(self.root, "ops", "prereg", f"{h}.yaml")
-        doc = {"hypothesis": h, "family": family, "execution": spec or SPEC, **(extra or {})}
+        doc = {"hypothesis": h, "family": family, "execution": spec or SPEC,
+               "variants": {"v1": "test variant 1", "v2": "test variant 2"}, **(extra or {})}
         open(p, "w").write(body if body is not None else yaml.safe_dump(doc, sort_keys=True))
         if commit:
             c = self.commit(f"prereg {h}", os.path.relpath(p, self.root))

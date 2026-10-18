@@ -341,8 +341,8 @@ def test_codetree_hash_equals_git_write_tree_and_excludes_dated_paths(env, tmp_p
 
 
 def test_codetree_refuses_symlinks_in_the_selection(env, tmp_path):
-    os.symlink("/data/finance/universe", os.path.join(env.root, "scripts", "u"))
-    env.commit("link", "scripts/u")
+    os.symlink("/data/finance/universe", os.path.join(env.root, "scripts", "h1_u.py"))   # a selected name (S1 allowlist)
+    env.commit("link", "scripts/h1_u.py")
     with pytest.raises(codetree.CodeTreeError, match="symlink"):
         codetree.git_entries(os.path.join(env.root, ".git"), "HEAD")
 

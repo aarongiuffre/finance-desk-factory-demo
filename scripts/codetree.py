@@ -8,8 +8,10 @@ straight from the object store.  Now RUN/code is `git archive <sha> -- <selected
 extracted fresh, no .git is mounted, and the tree hash of the selection is written to
 RUN/in/code.json by the host and re-checked inside (finpaths.archive_pin) and after exit.
 
-  SELECTION   tracked paths under INCLUDE, minus EXCLUDE (prefix match), regular files
-              only (a symlink or submodule in the selection refuses the export).
+  SELECTION   (Verifier v6 S1: an ALLOWLIST of the H1 path, not all of scripts/ + tests/)
+              the exact files in ALLOW, every per-hypothesis scripts/h<N>_*.py and scripts/insider_*.py, and
+              ops/prereg/ (preregs, registry, amendments); *.md and EXCLUDE never; regular
+              files only (a symlink or submodule in the selection refuses the export).
   TREE HASH   the git tree object id of exactly the selected entries (sha1, the same
               id `git write-tree` gives for an index holding them), computed either from
               the commit's ls-tree (host, git) or from the extracted files (anywhere, no git).
@@ -30,8 +32,19 @@ import subprocess
 import sys
 import tarfile
 
-INCLUDE = ("scripts/", "ops/", "tests/", "pytest.ini",
-           "requirements-embed.txt", "requirements-test.txt", "requirements-pageindex.txt")
+import re  # noqa: E402
+
+# The H1 path only (import closure of h1_run / sandbox_host / sandbox_smoke / the inside tests,
+# computed from the AST; a test re-checks the closure).  Everything else in the repo - incl.
+# scripts with post-2019 corporate-event literals (deep_fill.py) and tests with real split
+# dates (test_split_detection.py) - never enters the sandbox.
+ALLOW = ("scripts/chainlog.py", "scripts/codetree.py", "scripts/edge_harness.py", "scripts/finpaths.py",
+         "scripts/fold_data.py", "scripts/fold_gate.py", "scripts/witness.py", "scripts/sandbox_host.py",
+         "scripts/sandbox_smoke.py", "scripts/h1_guard.py", "scripts/h1_run.py",
+         "tests/conftest.py", "tests/_edge_synth.py", "tests/_gate_env.py", "tests/test_zz_sandbox_inside.py",
+         "ops/gate/h1_sandbox.sh", "pytest.ini")
+ALLOW_RE = re.compile(r"scripts/(h[0-9]+|insider)_[A-Za-z0-9_]+\.py")
+INCLUDE = ALLOW + ("ops/prereg/",)               # recorded in the pin
 # Everything below holds (or lists) post-2019 data and never enters the sandbox.
 # universe/: dead roster + DJIA components with 2020-26 dates; ops/data/: EODHD manifest +
 # identity overrides (the slice pin is re-admitted below); ops/cleanup_staged/: dated raw dir
@@ -51,9 +64,9 @@ def selected(path):
         return True
     if path.endswith(".md"):                       # notes/plans/docs: not code, may quote dates
         return False
-    if not any(path == i or (i.endswith("/") and path.startswith(i)) for i in INCLUDE):
+    if any(path.startswith(e) for e in EXCLUDE):
         return False
-    return not any(path.startswith(e) for e in EXCLUDE)
+    return path in ALLOW or bool(ALLOW_RE.fullmatch(path)) or path.startswith(PREREG_PREFIX)
 
 
 def blob_sha(data):
