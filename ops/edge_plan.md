@@ -21,7 +21,7 @@ useful, decision-grade result.
 - **lang_shift (mean-pooled bge cosine):** top-decile +63d excess of -0.04% / -0.07%, so it hit its kill criterion. But:
   - The benchmark was broken (verified, section 3).
   - It was never the published Lazy Prices signal.
-- **event_study INV-build:** the only measured effect: -2.34% median, -2.86% mean at 63d (n=1,973). It is era-concentrated and survivor-universe (section 3).
+- **event_study INV-build (H4 RETIRED 2026-10-18: failed its pre-registered PIT calibration, see the H4 section):** the only measured effect: -2.34% median, -2.86% mean at 63d (n=1,973). It is era-concentrated and survivor-universe (section 3).
 - **Paper:** $105,093 equity on 2026-10-16 after one rebalance. One calibration round trip (SPY, -1.4 / +2.0 bps). The cost assumptions are unmeasured.
 - **Common causes:**
   - rules designed on today's data;
@@ -62,7 +62,15 @@ useful, decision-grade result.
 - **Risks.** A momentum re-skin with about 0 net alpha after UMD. Price history starts later for NASDAQ names, so S&P only.
 - **Embeddings:** no.
 
-### H4 - Inventory build ahead of sales (Hermes H1, re-specified)
+### H4 - Inventory build ahead of sales (Hermes H1, re-specified) - **RETIRED 2026-10-18**
+> **RETIRED (2026-10-18, Aaron via VP Bot).** Its pre-registered calibration
+> (`ops/prereg/H4_inventory_calibration_pit.yaml`, commit 5ca5522) FAILED on the dev fold
+> 2015-2019 against the per-date EW point-in-time S&P universe: mean gross 63d abnormal -0.28%,
+> month-clustered t +0.59 (the rule needed mean < 0 AND t <= -2), 465 trades (see
+> `logs/edge/calibration_summary.json`, `ops/checks/check_edge_calibration.py`). Under the
+> pre-registration there is no re-specification and no re-run: H4 is dropped as a signal and as
+> an overlay. The text below is kept as history only.
+
 - **Literature (Hermes missed this).** This IS a published anomaly:
   - Bernard & Noel (1991), on inventory disclosures predicting sales and earnings.
   - Abarbanell & Bushee (1997, 1998): the inventory signal = %change(inventory) - %change(sales), the same construction as the desk's flag.
