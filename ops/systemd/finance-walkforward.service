@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly walk-forward backtest (scripts/walkforward.py, bug6-full config, end=today; CPU only)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/data/finance
+ExecStart=/bin/bash /data/finance/scripts/walkforward_weekly.sh
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=3h

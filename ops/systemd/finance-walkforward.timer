@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly walk-forward backtest: Saturday 05:30 ET
+
+[Timer]
+OnCalendar=Sat *-*-* 05:30:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
