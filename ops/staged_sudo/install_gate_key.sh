@@ -28,7 +28,12 @@ LINE="aaron namespaces=\"finance-holdout,finance-custody\" $T $K"
 echo "$F <- $LINE"; ssh-keygen -l -f "$PUB"
 [ "$MODE" = apply ] || { echo "DRY RUN (add --apply; needs root)"; exit 0; }
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 2; }
+# Verifier v4: never follow a planted link; temp name from mktemp inside the root-owned dir
+[ -L "$D" ] && { echo "$D is a symlink - refusing" >&2; exit 3; }
+if [ -e "$D" ] && [ "$(stat -c %u "$D")" != 0 ]; then echo "$D exists and is not root-owned - inspect it first" >&2; exit 3; fi
 install -d -o root -g root -m 0755 "$D"
-[ -f "$F" ] && cp -p "$F" "$F.prev.$(date +%Y%m%d%H%M%S)"
-printf '%s\n' "$LINE" > "$F.tmp"; chown root:root "$F.tmp"; chmod 0644 "$F.tmp"; mv "$F.tmp" "$F"
+[ -L "$F" ] && { echo "$F is a symlink - refusing" >&2; exit 3; }
+if [ -f "$F" ]; then cp --no-dereference -p "$F" "$F.prev.$(date +%Y%m%d%H%M%S)"; fi
+TMPF=$(mktemp "$D/.allowed_signers.XXXXXX")
+printf '%s\n' "$LINE" > "$TMPF"; chown root:root "$TMPF"; chmod 0644 "$TMPF"; mv -T "$TMPF" "$F"
 stat -c '%U:%G %a %n' "$D" "$F"

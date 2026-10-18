@@ -24,6 +24,14 @@ reached through, so a fake root cannot be paired with real data via symlinks
 same-user process are off-box (ops/edge_threat_model.md).
 
 HOME is taken from the passwd database (pwd.getpwuid), never from $HOME (O2).
+
+H1 SANDBOX (Verifier v4, 2026-10-18): inside ops/gate/h1_sandbox.sh (bubblewrap, tmpfs
+over /data/finance) the chained logs, their anchors and the runs dir live in the
+per-run directory named by $FINANCE_H1_SANDBOX_RUN (its logs/ and out/ are the only
+writable mounts).  That redirect is honoured ONLY when the real /data/finance/logs is
+NOT visible, i.e. inside the mount namespace; outside it the variable is ignored.  The
+sandbox's records reach the real chains only through the wrapper's outside `record`
+step (scripts/sandbox_host.py).
 """
 import os
 import pwd
@@ -99,8 +107,29 @@ GATE_ENABLED = "/etc/finance-gate/gate-user.enabled"
 GATE_HELPER = "/usr/local/libexec/finance-gate-append"
 
 
+SANDBOX_ENV = "FINANCE_H1_SANDBOX_RUN"
+
+
+def sandbox_run():
+    """The per-run dir when running INSIDE ops/gate/h1_sandbox.sh, else None.
+    Needs: no test root, $FINANCE_H1_SANDBOX_RUN an absolute dir with logs/, and the
+    real data root's logs/ and raw/ NOT visible (tmpfs over /data/finance)."""
+    if _TEST_ROOT is not None:
+        return None
+    d = os.environ.get(SANDBOX_ENV, "")
+    if not d or not os.path.isabs(d) or not os.path.isdir(os.path.join(d, "logs")):
+        return None
+    if any(os.path.lexists(os.path.join(REAL_ROOT, x)) for x in ("logs", "raw", "scripts")):
+        return None
+    return os.path.realpath(d)
+
+
+def in_sandbox():
+    return sandbox_run() is not None
+
+
 def gate_user_mode():
-    if is_test() or not os.path.exists(GATE_ENABLED):
+    if is_test() or in_sandbox() or not os.path.exists(GATE_ENABLED):
         return False
     st = os.stat(GATE_ENABLED)
     return st.st_uid == 0 and not st.st_mode & 0o022
@@ -110,12 +139,18 @@ def state_dir():
     """Second anchor location (outside the repo/log dir)."""
     if is_test():
         return os.path.join(_TEST_ROOT, ".state", "finance-chain")
+    sb = sandbox_run()
+    if sb:
+        return os.path.join(sb, "logs", ".state")
     if gate_user_mode():
         return os.path.join(GATE_STATE, "state")
     return os.path.join(home(), ".local", "state", "finance-chain")
 
 
 def _chain_dir():
+    sb = sandbox_run()
+    if sb:
+        return os.path.join(sb, "logs")
     return os.path.join(GATE_STATE, "logs") if gate_user_mode() else p("logs")
 
 
@@ -128,4 +163,5 @@ def variants_log():
 
 
 def runs_dir():
-    return p("logs", "edge")
+    sb = sandbox_run()
+    return os.path.join(sb, "out") if sb else p("logs", "edge")

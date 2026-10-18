@@ -30,7 +30,12 @@ SLICE = "raw/price/h1_universe"
 H1_FOLDER_ALLOW = {"scripts/fold_data.py", "scripts/eodhd_final_pull.py", "ops/checks/check_edge_downloads.py",
                    "ops/offbox/encrypt_full_period.sh", "tests/test_dev_scope.py",
                    "tests/test_survivorship_identity.py", "scripts/h1_guard.py",
-                   "tests/test_h1_dev_round3.py"}
+                   "tests/test_h1_dev_round3.py",
+                   # H1 sandbox (Verifier v4): the launcher + its outside helper, and the tests that
+                   # prove the full folder is ENOENT inside
+                   "ops/gate/h1_sandbox.sh", "scripts/sandbox_host.py", "tests/test_h1_sandbox.py",
+                   "tests/test_zz_sandbox_inside.py",
+                   "tests/test_staged_encrypt.py"}                   # stub root for encrypt_full_period.sh
 
 
 @pytest.fixture
@@ -70,6 +75,17 @@ def _commit_pin(env):
     os.makedirs(os.path.join(env.root, "ops", "data"), exist_ok=True)
     open(os.path.join(env.root, "ops", "data", "h1_dev_slice.sha256"), "w").write(sha + "\n")
     env.commit("pin", "ops/data/h1_dev_slice.sha256")
+    _syn_prereg(env, sha)                    # Verifier v4 item 4: the prereg pins the slice sha too
+    return sha
+
+
+def _syn_prereg(env, sha=None):
+    """The SYN calibration prereg with data.price_slice_sha256 (PriceStore requires it for a slice)."""
+    env.syn_sha = sha or env.syn_sha
+    if getattr(env, "syn_done", None) == env.syn_sha:
+        return None                          # already committed with this sha
+    env.syn_done = env.syn_sha
+    return env.prereg(h="SYN", family="SYNF", spec=SPEC, extra={"data": {"price_slice_sha256": env.syn_sha}})
 
 
 def _w():
@@ -208,7 +224,7 @@ def test_live_opt_in_only_in_operational_mains():
 # ------------------------------------------------------------------ 4. run logs its data scope
 def test_run_logs_real_root_dates_and_slice_sha(env):
     info, _ = _setup(env)
-    env.prereg(h="SYN", family="SYNF", spec=SPEC)
+    _syn_prereg(env)
     w = _w()
     store = H.PriceStore(w, dirs=("raw/price",) + H.H1_DIRS)
     ev = [{"ticker": t, "ts": d} for t in ("ZZ1", "ZZ2", "T01") for d in info["cal"][300:1300:40]]

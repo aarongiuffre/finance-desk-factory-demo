@@ -2,14 +2,15 @@
 # STAGED — run by Aaron with sudo; NOT executed by any agent.
 #   sudo bash /data/finance/ops/staged_sudo/install_finance_health_system_onfailure.sh          # dry run (prints plan)
 #   sudo bash /data/finance/ops/staged_sudo/install_finance_health_system_onfailure.sh --apply  # install
-#   sudo bash /data/finance/ops/staged_sudo/install_finance_health_system_onfailure.sh --revert # remove
+#   sudo bash /data/finance/ops/staged_sudo/install_finance_health_system_onfailure.sh --revert          # dry run of the removal
+#   sudo bash /data/finance/ops/staged_sudo/install_finance_health_system_onfailure.sh --revert --apply  # remove (Verifier v4: revert is dry by default)
 # What it does: wires OnFailure= on the SYSTEM units finance-quote, finance-refresh,
 # finance-facts and zfs-replicate to a system template that runs the same
 # checker as slowglow (alerts -> /data/finance/alerts/outbox.jsonl, nothing
 # leaves the machine).  Only drop-ins + one new template are added; no
 # existing unit file is edited and nothing is restarted (daemon-reload only).
 set -euo pipefail
-MODE="${1:-}"
+MODE="${1:-}"; APPLY2="${2:-}"
 UNITS=(finance-quote.service finance-refresh.service finance-facts.service zfs-replicate.service)
 TPL=/etc/systemd/system/finance-health-onfailure@.service
 DROP=10-finance-health-onfailure.conf
@@ -40,6 +41,8 @@ OnFailure=finance-health-onfailure@%n.service
 EOT
 
 if [[ "$MODE" == "--revert" ]]; then
+  echo "would remove:"; echo "  $TPL"; for u in "${UNITS[@]}"; do echo "  /etc/systemd/system/$u.d/$DROP"; done; echo "  then systemctl daemon-reload"
+  [[ "$APPLY2" == "--apply" ]] || { echo "DRY RUN (add --apply after --revert)"; exit 0; }
   [[ $EUID -eq 0 ]] || { echo "run with sudo"; exit 1; }
   for u in "${UNITS[@]}"; do rm -fv "/etc/systemd/system/$u.d/$DROP"; rmdir --ignore-fail-on-non-empty "/etc/systemd/system/$u.d" 2>/dev/null || true; done
   rm -fv "$TPL"; systemctl daemon-reload; echo reverted; exit 0

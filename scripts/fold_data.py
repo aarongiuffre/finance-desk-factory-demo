@@ -590,8 +590,9 @@ def slice_pin(fold, rel):
     return _PIN_CACHE[key]
 
 
-def checked_slice(root, fold, rel):
-    """(files map, manifest sha) for a slice, only if the manifest sha equals the HEAD pin.
+def checked_slice(root, fold, rel, expected=None):
+    """(files map, manifest sha) for a slice, only if the manifest sha equals the HEAD pin
+    AND, when given, `expected` (the committed prereg's data.price_slice_sha256).
     Cheap on repeat calls: re-hashed only when the manifest file's stat changes, so a
     manifest swapped mid-run is caught at the next load."""
     mp = os.path.join(root, rel, SLICE_MANIFEST)
@@ -614,6 +615,9 @@ def checked_slice(root, fold, rel):
     pin = slice_pin(fold, rel)
     if hit[1] != pin:
         raise FoldDataError(f"slice {rel} manifest sha {hit[1][:16]} != pin {pin[:16]} at HEAD - refusing")
+    if expected is not None and hit[1] != expected:
+        raise FoldDataError(f"slice {rel} manifest sha {hit[1][:16]} != prereg price_slice_sha256 "
+                            f"{str(expected)[:16]} - refusing")
     return hit
 
 

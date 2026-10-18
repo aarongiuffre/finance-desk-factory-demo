@@ -69,6 +69,7 @@ import getpass
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -86,7 +87,11 @@ APPROVALS_DIR = os.path.join("logs", "approvals")          # gitignored; Aaron c
 SIGN_NAMESPACE = "finance-holdout"
 SIGNER_ID = "aaron"
 GATE_CODE = ("scripts/fold_gate.py", "scripts/chainlog.py", "scripts/finpaths.py", "scripts/fold_data.py",
-             "scripts/witness.py")
+             "scripts/witness.py",
+             # H1 sandbox path (Verifier v4 item 4): the slice pin, the entrypoint, its accident
+             # guard, the sandbox launcher + its outside helper, and the harness itself
+             "ops/data/h1_dev_slice.sha256", "scripts/h1_guard.py", "scripts/h1_run.py",
+             "ops/gate/h1_sandbox.sh", "scripts/sandbox_host.py", "scripts/edge_harness.py")
 LOG_NAMES = ("holdout_access", "variants")                 # witness names of the two chains
 TEST_DATA_DIRS = ("logs", "raw", "folds", "universe", "facts", ".state")
 CODE_EXT = (".py", ".pyc", ".sh", ".so", ".pth", ".ipynb", ".pyx")
@@ -343,9 +348,64 @@ def origin_status(prereg_rel, prereg_commit, remote_sha=None):
     for rel in (prereg_rel, REGISTRY) + GATE_CODE:
         rc_o, ob = _git("show", f"{remote_sha}:{rel}")
         rc_h, hb = _git("show", f"HEAD:{rel}")
+        if rc_o != 0 and rc_h != 0 and rel in GATE_CODE[5:]:
+            continue                       # absent on BOTH sides (test repos): consistent, nothing to run
         if rc_o != 0 or rc_h != 0 or ob != hb:
             return False, f"{rel} at HEAD differs from the real remote's main (push and review first)"
     return True, "ok"
+
+
+def prereg_slice_sha(hypothesis):
+    """(sha or None, reason): data.price_slice_sha256 of the COMMITTED prereg (HEAD blob of
+    the code checkout, working copy identical).  Verifier v4 item 4: the slice a run reads
+    must be the one the prereg pinned, not only the one the HEAD pin file names."""
+    ok, why, blob = _head_blob(prereg_path(hypothesis))
+    if not ok:
+        return None, f"prereg for {hypothesis}: {why}"
+    try:
+        doc = _yaml(blob)
+    except ValueError as e:
+        return None, f"prereg for {hypothesis}: {e}"
+    v = str((doc.get("data") or {}).get("price_slice_sha256", "")).strip() if isinstance(doc.get("data"), dict) else ""
+    if not re.fullmatch(r"[0-9a-f]{64}", v):
+        return None, f"prereg for {hypothesis} does not pin data.price_slice_sha256"
+    return v, "ok"
+
+
+def sandbox_window_path():
+    sb = finpaths.sandbox_run()
+    return os.path.join(sb, "in", "window.json") if sb else None
+
+
+def sandbox_ready(hypothesis):
+    """INSIDE ops/gate/h1_sandbox.sh: (ok, reason, Window).  The gate check proper
+    (prereg commit on the real remote via ls-remote, slice == prereg == pin) ran OUTSIDE
+    before launch (scripts/sandbox_host.py preflight); the grant was made outside and
+    seeded into the sandbox chain.  Here: the sandbox is real, the committed prereg is
+    intact, the seeded window verifies, and the slice manifest == prereg sha == HEAD pin."""
+    if not finpaths.in_sandbox():
+        return False, "H1 runs only inside the OS sandbox: ops/gate/h1_sandbox.sh --real", None
+    st = prereg_status(hypothesis)
+    if not st["ok"]:
+        return False, st["reason"], None
+    try:
+        d = json.load(open(sandbox_window_path()))
+        w = Window(**{k: d[k] for k in ("hypothesis", "fold", "lo", "hi", "token", "prereg_sha",
+                                        "family", "prereg_commit")})
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        return False, f"no sandbox window ({e.__class__.__name__})", None
+    if w.hypothesis != hypothesis or w.fold != "dev" or not verify(w):
+        return False, "sandbox window does not verify (not the seeded dev grant)", None
+    want, why = prereg_slice_sha(hypothesis)
+    if want is None:
+        return False, why, None
+    import fold_data
+    try:
+        for rel in fold_data.SLICES:
+            _, sha = fold_data.checked_slice(fold_data.copy_root("dev"), "dev", rel, expected=want)
+    except fold_data.FoldDataError as e:
+        return False, str(e), None
+    return True, "ok", w
 
 
 def _family_grants(recs, family, fold):

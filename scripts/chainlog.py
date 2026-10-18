@@ -46,10 +46,11 @@ def rec_hash(rec):
     return hashlib.sha256(_canon(rec)).hexdigest()
 
 
-def anchor_paths(path):
+def anchor_paths(path, state=None):
+    """state: explicit second-anchor dir (the H1 sandbox run dirs, read from OUTSIDE)."""
     name = os.path.basename(path)
     return [os.path.join(os.path.dirname(path), ".anchors", name + ".anchor"),
-            os.path.join(finpaths.state_dir(), name + ".anchor")]
+            os.path.join(state or finpaths.state_dir(), name + ".anchor")]
 
 
 def _parse(path):
@@ -80,8 +81,8 @@ def _parse(path):
     return out
 
 
-def _check_anchors(path, recs):
-    for ap in anchor_paths(path):
+def _check_anchors(path, recs, state=None):
+    for ap in anchor_paths(path, state):
         if not os.path.exists(ap):
             if recs:
                 raise ChainError(f"{path}: anchor {ap} missing for a non-empty log")
@@ -97,15 +98,15 @@ def _check_anchors(path, recs):
             raise ChainError(f"{path}: record {cnt - 1} differs from anchor {ap} (rewritten history)")
 
 
-def read_strict(path):
+def read_strict(path, state=None):
     recs = _parse(path)
-    _check_anchors(path, recs)
+    _check_anchors(path, recs, state)
     return recs
 
 
-def _write_anchor(path, recs):
+def _write_anchor(path, recs, state=None):
     head = {"count": len(recs), "h": recs[-1]["h"] if recs else GENESIS, "log": os.path.basename(path)}
-    for ap in anchor_paths(path):
+    for ap in anchor_paths(path, state):
         os.makedirs(os.path.dirname(ap), exist_ok=True)
         tmp = ap + ".tmp"
         with open(tmp, "w") as fh:
@@ -126,9 +127,10 @@ def _via_helper(path, rec):
     return json.loads(r.stdout)
 
 
-def append(path, rec):
-    """Append rec (dict) to the chain under an exclusive lock; returns the stored record."""
-    if (finpaths.gate_user_mode() and path.startswith(finpaths.GATE_STATE + os.sep)
+def append(path, rec, state=None):
+    """Append rec (dict) to the chain under an exclusive lock; returns the stored record.
+    state: explicit second-anchor dir (H1 sandbox run dirs; never the gate-user path)."""
+    if (state is None and finpaths.gate_user_mode() and path.startswith(finpaths.GATE_STATE + os.sep)
             and os.path.basename(os.path.dirname(os.path.dirname(path))) == "finance-gate"
             and not os.access(os.path.dirname(path), os.W_OK)):
         return _via_helper(path, rec)
@@ -136,7 +138,7 @@ def append(path, rec):
     lock = open(path + ".lock", "a")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        recs = read_strict(path)
+        recs = read_strict(path, state)
         r = {k: v for k, v in rec.items() if k not in ("seq", "prev", "h")}
         r["seq"] = len(recs)
         r["prev"] = recs[-1]["h"] if recs else GENESIS
@@ -145,11 +147,33 @@ def append(path, rec):
             fh.write(json.dumps(r, sort_keys=True, ensure_ascii=True).encode() + b"\n")
             fh.flush()
             os.fsync(fh.fileno())
-        _write_anchor(path, recs + [r])
+        _write_anchor(path, recs + [r], state)
         return r
     finally:
         fcntl.flock(lock, fcntl.LOCK_UN)
         lock.close()
+
+
+def seed(path, recs, state):
+    """Write a NEW chain file that is a verbatim copy of an intact chain (recs from
+    read_strict) plus both anchors, the second under the explicit dir `state`.
+    Used by the H1 sandbox wrapper to give the sandbox a snapshot of the real chains
+    (so trial counts inside are complete).  Refuses an existing file."""
+    if os.path.lexists(path):
+        raise ChainError(f"{path} exists - seed() only creates new chains")
+    prev = GENESIS
+    for n, r in enumerate(recs):
+        if r.get("seq") != n or r.get("prev") != prev or r.get("h") != rec_hash(r):
+            raise ChainError(f"seed: record {n} is not an intact chain record")
+        prev = r["h"]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "xb") as fh:
+        for r in recs:
+            fh.write(json.dumps(r, sort_keys=True, ensure_ascii=True).encode() + b"\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    _write_anchor(path, recs, state)
+    return len(recs)
 
 
 def migrate_v1(path):

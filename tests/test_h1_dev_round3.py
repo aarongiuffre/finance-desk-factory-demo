@@ -57,7 +57,17 @@ def _commit_pin(env):
     os.makedirs(os.path.join(env.root, "ops", "data"), exist_ok=True)
     open(os.path.join(env.root, PIN), "w").write(sha + "\n")
     env.commit("pin", PIN)
+    _syn_prereg(env, sha)                    # Verifier v4 item 4: the prereg pins the slice sha too
     return sha
+
+
+def _syn_prereg(env, sha=None):
+    """The SYN calibration prereg with data.price_slice_sha256 (PriceStore requires it for a slice)."""
+    env.syn_sha = sha or env.syn_sha
+    if getattr(env, "syn_done", None) == env.syn_sha:
+        return None                          # already committed with this sha
+    env.syn_done = env.syn_sha
+    return env.prereg(h="SYN", family="SYNF", spec=SPEC, extra={"data": {"price_slice_sha256": env.syn_sha}})
 
 
 def _w():
@@ -74,6 +84,19 @@ def test_first_party_modules_come_from_this_checkout():
 HARD = re.compile(r"""sys\.path\.(insert|append)\([^)]*(/data/finance|\bROOT\b)""")
 
 
+# Verifier v4 note (1): the ONE allowed hard-coded insert - fast_index's pageindex mirror
+# (a vendored third-party tree, not first-party scripts), matched by exact file + line.
+EXEMPT_INSERTS = {("scripts/fast_index.py", "sys.path.insert(0, MIRROR)")}
+
+
+def test_hardcoded_insert_exemption_is_exactly_one_line():
+    hits = [(f, ln) for f, ln in EXEMPT_INSERTS
+            if any(x.strip() == ln for x in (REPO / f).read_text().splitlines())]
+    assert len(hits) == 1 and sum(x.strip() == "sys.path.insert(0, MIRROR)"
+                                  for x in (REPO / "scripts" / "fast_index.py").read_text().splitlines()) == 1
+    assert HARD.search("sys.path." + "insert(0, os.path.join(ROOT, 'pageindex-mirror'))")   # other pageindex lines hit
+
+
 def test_no_hardcoded_scripts_path_inserts():
     hits = []
     for base in ("scripts", "ops", "tests"):
@@ -81,8 +104,9 @@ def test_no_hardcoded_scripts_path_inserts():
             if "__pycache__" in p.parts:
                 continue
             for i, ln in enumerate(p.read_text(errors="ignore").splitlines(), 1):
-                if HARD.search(ln) and "pageindex" not in ln and "MIRROR" not in ln:
-                    hits.append(f"{p.relative_to(REPO)}:{i}")
+                rel = str(p.relative_to(REPO))
+                if HARD.search(ln) and (rel, ln.strip()) not in EXEMPT_INSERTS:
+                    hits.append(f"{rel}:{i}")
     assert hits == [], hits
 
 
@@ -195,7 +219,11 @@ def test_h1_sources_pass_the_ast_rules_and_entrypoint_installs_the_guard_first()
     assert h1_guard.scan(str(REPO)) == []
     body = ast.parse((REPO / "scripts" / "h1_run.py").read_text()).body
     stmts = [b for b in body if not (isinstance(b, ast.Expr) and isinstance(b.value, ast.Constant))]
-    assert ast.unparse(stmts[0]) == "import h1_guard" and ast.unparse(stmts[1]) == "h1_guard.install()"
+    src = [ast.unparse(b) for b in stmts]
+    # Verifier v4 blocker: numpy + edge_harness (C extensions) load BEFORE the accident guard
+    i = src.index("h1_guard.install()")
+    assert src[:i] == ["import numpy", "import edge_harness", "import fold_gate", "import h1_guard"], src[:i]
+    assert all(not x.startswith(("import ", "from ")) for x in src[i + 1:]), src
 
 
 # ------------------------------------------------------------------ 3c. audit hook
@@ -266,6 +294,28 @@ def test_audit_hook_defaults_refuse_the_real_full_folder():
     assert out.stdout.strip() == "['refused', 'refused', 'refused']", (out.stdout, out.stderr)
 
 
+def test_guard_lets_numpy_run_after_preload_and_refuses_dlopen_outside_python(tmp_path):
+    """Verifier v4 blocker: `import numpy` failed under the hook.  h1_run imports numpy and
+    edge_harness first; dlopen is allowed only under the Python install (accident guard)."""
+    root = _synthetic_root(tmp_path)
+    so = tmp_path / "libx.so"
+    so.write_bytes(b"")
+    code = ("import sys, os, json\nimport numpy, edge_harness, h1_guard\n"
+            "h1_guard.install(data_root=sys.argv[1], state_dir=os.path.join(sys.argv[1], '.state'))\n"
+            "import numpy as np\nr = {'np': float(np.arange(5).sum())}\n"
+            "import ctypes\n"
+            "try:\n    ctypes.CDLL(sys.argv[2]); r['dl_out'] = 'ok'\n"
+            "except PermissionError:\n    r['dl_out'] = 'refused'\n"
+            "except OSError:\n    r['dl_out'] = 'oserror'\n"
+            "import numpy.linalg\nr['linalg'] = float(numpy.linalg.det(np.eye(3)))\n"
+            "print(json.dumps(r))")
+    env = {**os.environ, "PYTHONPATH": str(REPO / "scripts")}
+    out = subprocess.run([sys.executable, "-c", code, str(root), str(so)], capture_output=True, text=True,
+                         env=env, timeout=120)
+    res = json.loads(out.stdout.strip().splitlines()[-1]), out.stderr
+    assert res[0] == {"np": 10.0, "dl_out": "refused", "linalg": 1.0}, res
+
+
 # ------------------------------------------------------------------ 4. slice pin at load
 def test_slice_pin_enforced_at_load(env):
     _setup(env)
@@ -304,7 +354,7 @@ def test_no_pin_or_no_git_fails_closed(env):
 # ------------------------------------------------------------------ 5. crash-safe end record
 def test_crash_still_logs_end_record_with_scope(env, monkeypatch):
     info = _setup(env)
-    env.prereg(h="SYN", family="SYNF", spec=SPEC)
+    _syn_prereg(env)
     w = _w()
     store = H.PriceStore(w, dirs=("raw/price",) + H.H1_DIRS)
     ev = [{"ticker": t, "ts": d} for t in ("ZZ1", "T01") for d in info["cal"][300:1300:60]]

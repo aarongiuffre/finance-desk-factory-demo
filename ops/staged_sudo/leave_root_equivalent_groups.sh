@@ -23,7 +23,17 @@ if [[ $MODE == revert* ]]; then
 fi
 echo "would remove $U from: ${G[*]}"
 echo "NOPASSWD rules mentioning $U/%wheel (edit with visudo, Aaron's call):"
-grep -rn "$U\|%wheel" /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -i nopasswd || echo "  none found"
+NP=$(grep -rn "$U\|%wheel" /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -i nopasswd || true)
+if [ -n "$NP" ]; then
+  echo "$NP"
+  if echo "$NP" | grep -q "^[^:]*:[0-9]*:[[:space:]]*$U[[:space:]]"; then
+    echo "  WARNING: a rule names $U DIRECTLY - $U stays root after leaving wheel until Aaron removes it (visudo)."
+  fi
+else echo "  none found"; fi
+# Verifier v4: also review (printed only, not changed) - sys and storage give device / disk access
+for g in sys storage disk; do id -nG "$U" | tr ' ' '\n' | grep -qx "$g" && echo "  REVIEW: $U is in '$g' (raw device/disk access) - Aaron/Engineering decide"; done
+echo "Takes effect only after EVERY $U process restarts, incl. the lingering systemd --user manager"
+echo "  (loginctl show-user $U -p Linger) and the Grok Bot service: reboot, or loginctl terminate-user $U."
 [ "$MODE" = apply ] || { echo "DRY RUN (add --apply; needs root)"; exit 0; }
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 2; }
 for g in "${G[@]}"; do gpasswd -d "$U" "$g" || true; done

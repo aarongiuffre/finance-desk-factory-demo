@@ -21,7 +21,12 @@ set -euo pipefail
 DEST=${1:?user@host:/path}; MODE=${2:-}
 if [ "$MODE" = "--revert" ]; then
   echo "would: systemctl --user disable --now finance-log-mirror.timer (remote snapshots kept)"
-  [ "${3:-}" = "--apply" ] && systemctl --user disable --now finance-log-mirror.timer || echo "DRY RUN (add --apply)"
+  if [ "${3:-}" = "--apply" ]; then
+    systemctl --user disable --now finance-log-mirror.timer || { echo "systemctl failed - timer state unchanged" >&2; exit 1; }
+    echo "timer disabled"
+  else
+    echo "DRY RUN (add --apply)"
+  fi
   exit 0
 fi
 if [ -f /etc/finance-gate/gate-user.enabled ]; then L=/var/lib/finance-gate/logs; A2=/var/lib/finance-gate/state
@@ -30,17 +35,19 @@ SRC=("$L/holdout_access.jsonl" "$L/variants.jsonl" "$L/.anchors" "$A2" /data/fin
 EXIST=(); for s in "${SRC[@]}"; do [ -e "$s" ] && EXIST+=("$s"); done
 STAMP=$(date +%Y%m%dT%H%M%S)
 HOST=${DEST%%:*}; RPATH=${DEST#*:}
+q() { printf '%q' "$1"; }                     # every remote path is shell-quoted (Verifier v4)
 if [ "$MODE" = "--compare" ]; then
   for f in holdout_access.jsonl variants.jsonl; do
-    for snap in $(ssh "$HOST" "ls -1 $RPATH" | sort); do
-      r=$(ssh "$HOST" "sha256sum < $RPATH/$snap/$f 2>/dev/null; wc -c < $RPATH/$snap/$f 2>/dev/null" | xargs)
+    ssh "$HOST" "ls -1 -- $(q "$RPATH")" | sort | while IFS= read -r snap; do
+      rp=$(q "$RPATH/$snap/$f")
+      r=$(ssh -n "$HOST" "sha256sum < $rp 2>/dev/null; wc -c < $rp 2>/dev/null" | xargs)
       [ -n "$r" ] || continue
       rs=$(echo "$r" | cut -d' ' -f1); rn=$(echo "$r" | awk '{print $NF}')
       ls_=$(head -c "$rn" "$L/$f" | sha256sum | cut -d' ' -f1)
-      [ "$rs" = "$ls_" ] && echo "ok   $snap/$f (${rn} bytes is a prefix)" || echo "DIVERGED $snap/$f  <-- local log was rewritten"
+      if [ "$rs" = "$ls_" ]; then echo "ok   $snap/$f (${rn} bytes is a prefix)"; else echo "DIVERGED $snap/$f  <-- local log was rewritten"; fi
     done
   done; exit 0
 fi
 N=-n; [ "$MODE" = "--apply" ] && N=""
 rsync -a $N -R --info=name1 "${EXIST[@]}" "$DEST/$STAMP/"
-[ -n "$N" ] && echo "DRY RUN (add --apply)" || echo "mirrored to $DEST/$STAMP/"
+if [ -n "$N" ]; then echo "DRY RUN (add --apply)"; else echo "mirrored to $DEST/$STAMP/"; fi

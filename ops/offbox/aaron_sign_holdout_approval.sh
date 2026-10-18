@@ -21,12 +21,26 @@ DAYS=7; KEY="$HOME/.ssh/id_ed25519"; SIGN=0
 while [ $# -gt 0 ]; do case "$1" in
   --days) DAYS=$2; shift 2;; --key) KEY=$2; shift 2;; --sign) SIGN=1; shift;;
   *) echo "unknown arg $1" >&2; exit 2;; esac; done
+# Verifier v4: --days bounded (an approval is a one-off, short-lived token)
+case "$DAYS" in ''|*[!0-9]*) echo "--days must be an integer 1..30" >&2; exit 2;; esac
+[ "$DAYS" -ge 1 ] && [ "$DAYS" -le 30 ] || { echo "--days must be 1..30" >&2; exit 2; }
 REL="ops/prereg/${HYP}.yaml"
 git fetch -q origin
 git cat-file -e "origin/main:${REL}" || { echo "no ${REL} on origin/main" >&2; exit 3; }
 SHA=$(git show "origin/main:${REL}" | sha256sum | cut -d' ' -f1)
 COMMIT=$(git log -1 --format=%H origin/main -- "${REL}")
-grep -q "^family: *${FAM} *$" <(git show "origin/main:${REL}") || { echo "${REL} does not declare family ${FAM}" >&2; exit 3; }
+# family read as YAML (quoted values and trailing comments are fine), regex fallback without PyYAML
+DECL=$(git show "origin/main:${REL}" | python3 -c '
+import re, sys
+t = sys.stdin.read()
+try:
+    import yaml
+    d = yaml.safe_load(t)
+    print(str(d.get("family", "")).strip() if isinstance(d, dict) else "")
+except ImportError:
+    m = re.search(r"""^family:\s*["\x27]?([^"\x27#\s]+)["\x27]?\s*(#.*)?$""", t, re.M)
+    print(m.group(1) if m else "")')
+[ "$DECL" = "$FAM" ] || { echo "${REL} declares family '${DECL}', not ${FAM}" >&2; exit 3; }
 NONCE=$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')
 ISSUED=$(date +%Y-%m-%dT%H:%M:%S%:z)
 EXPIRES=$(date -d "+${DAYS} days" +%Y-%m-%dT%H:%M:%S%:z 2>/dev/null || date -v+"${DAYS}"d +%Y-%m-%dT%H:%M:%S%z)

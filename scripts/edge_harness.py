@@ -242,7 +242,8 @@ class PriceStore:
         copy cutoff RAISES (it is not silently trimmed: such a frame means a wrong
         root or a bad copy)
       * a registered slice dir (fold_data.SLICES) must carry its manifest, the manifest
-        sha must equal the pin committed at HEAD (ops/data/h1_dev_slice.sha256),
+        sha must equal the pin committed at HEAD (ops/data/h1_dev_slice.sha256) AND the
+        committed prereg's data.price_slice_sha256 for window.hypothesis (Verifier v4),
         re-checked at every load (cached by the manifest's stat), and every file must
         match its sha there
       * tickers validated and files located via fold_data.price_file (shared with ta)"""
@@ -257,9 +258,15 @@ class PriceStore:
             if os.path.isabs(d) or ".." in d.replace("\\", "/").split("/"):
                 raise fold_gate.GateRefused(f"price dir {d!r} must be a relative tier inside the window root")
         self._slices = {}
+        self._slice_want = None
+        if any(d in fold_data.SLICES for d in self.dirs):
+            # Verifier v4 item 4: the slice must be the one the committed prereg pinned
+            self._slice_want, why = fold_gate.prereg_slice_sha(window.hypothesis)
+            if self._slice_want is None:
+                raise fold_data.FoldDataError(f"slice refused: {why}")
         for d in self.dirs:
             if d in fold_data.SLICES:
-                self._slices[d] = fold_data.checked_slice(self.root, window.fold, d)
+                self._slices[d] = fold_data.checked_slice(self.root, window.fold, d, expected=self._slice_want)
         self._c = {}
         self.low_trust = set()
 
@@ -292,7 +299,8 @@ class PriceStore:
             raise fold_data.FoldDataError(f"{p} resolves to {rp}, outside the window root {self.root}")
         tier = os.path.relpath(os.path.dirname(rp), rroot)
         if tier in self._slices:                  # pin re-checked at load (cheap: stat-keyed cache)
-            self._slices[tier] = fold_data.checked_slice(self.root, self.window.fold, tier)
+            self._slices[tier] = fold_data.checked_slice(self.root, self.window.fold, tier,
+                                                         expected=self._slice_want)
         blob = open(rp, "rb").read()
         if tier in self._slices:
             files, _ = self._slices[tier]

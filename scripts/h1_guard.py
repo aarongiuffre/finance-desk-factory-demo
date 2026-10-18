@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""h1_guard.py - structural guards for H1 code (Verifier H1-dev blocker 3, 2026-10-18).
+"""h1_guard.py - ACCIDENT GUARD + LINT for H1 code.  NOT A SECURITY BOUNDARY.
 
-1. install(): a sys.addaudithook, installed FIRST by the H1 entrypoint
-   (scripts/h1_run.py), that refuses - before the syscall happens - any open(),
-   os.open, os.listdir, os.scandir or glob whose realpath is outside:
-     read:  folds/dev (realpath), this checkout's scripts/ ops/ tests/, the Python install
-            (venv + stdlib + site-packages via sysconfig), zoneinfo, /proc/self,
-            /dev/null|urandom, the gate's pinned key, logs/approvals, the
-            gate/variants logs and the write dirs below
-     write: logs/edge/, logs/{variants,holdout_access}.jsonl[.lock], logs/.anchors/,
-            the second anchor dir (and /var/lib/finance-gate in finance-gate mode)
-   It refuses every subprocess except `git` (gate / slice pin / witness) and, in
-   finance-gate mode, the exact `sudo -n -u finance-gate <append helper>` call; and
-   it refuses ctypes, os.system, exec/spawn/fork, symlinks and hard links.  An audit
-   hook cannot be removed once installed.  Child processes are not covered (hence
-   the subprocess rule).
-2. scan(): AST rules for H1 source (scripts/h1_*.py, scripts/insider_*.py): an import
-   allowlist (no os, sys, glob, pathlib, shutil, subprocess, ctypes, importlib,
-   fold_data, finpaths), no open/eval/exec/compile/__import__/getattr/setattr/
-   delattr/vars/globals/locals, no private (_x) attribute access, no path-reading
-   attribute (read_text, iterdir, glob, listdir, open, use_live, REAL_ROOT, ...), and
-   no string constant - after folding "a" + "b" concatenations - naming a data path.
-Both are best effort against a deliberate same-uid adversary (ops/edge_threat_model.md);
-against accidents and honest mistakes they are structural.
+Verifier v4 (2026-10-18) showed that an in-process audit hook cannot contain code
+running in the same process (unrestricted git argv / -c alias, dir_fd-relative opens,
+sqlite3, monkeypatching the hook's own state, C extensions).  Per attack-the-premise
+we stopped patching it: the boundary is now the OS sandbox ops/gate/h1_sandbox.sh
+(bubblewrap: tmpfs over /data/finance, read-only folds/dev + a pristine worktree of the
+pushed commit, writable per-run log/out dirs only, no network).  Inside it the full
+period, the validation copy and the real logs do not exist (ENOENT) whatever the
+process does.  See ops/edge_threat_model.md.
+
+What remains here, for honest mistakes only:
+1. install(): a sys.addaudithook installed by scripts/h1_run.py AFTER numpy,
+   edge_harness and their C extensions are imported.  It refuses open/listdir/scandir/
+   glob outside folds/dev, this checkout's scripts/ ops/ tests/, the Python install,
+   the chain logs + anchors and the runs dir (the sandbox run dir when inside the
+   sandbox); subprocesses other than git; fork/exec/system/symlink/link; and
+   ctypes.dlopen of anything outside the Python install (Verifier v4 blocker: refusing
+   all dlopen broke `import numpy`).
+2. scan(): AST LINT for H1 source (scripts/h1_*.py, scripts/insider_*.py): an import
+   allowlist, no open/eval/exec/..., no private attribute access, no path-reading
+   attribute, no string constant naming a data path.  Known gaps (Verifier v4): banned
+   modules reachable through allowed ones (fold_gate.subprocess, edge_harness.fold_data)
+   and assignment to module attributes.  It is a style/accident check, not security.
 """
 import ast
 import os
@@ -57,23 +57,32 @@ def install(data_root=None, dev_root=None, repo_root=None, state_dir=None):
     """Install the audit hook (once per process).  Defaults come from finpaths."""
     if _INSTALLED:
         return _INSTALLED[0]
+    extra_read = set()
     if data_root is None:
         import finpaths
         data_root = finpaths.root()
         state_dir = state_dir or finpaths.state_dir()
+        logs, runs = os.path.dirname(finpaths.gate_log()), finpaths.runs_dir()
+        sb = finpaths.sandbox_run()
+        if sb:
+            extra_read.add(os.path.join(sb, "in"))
+    else:
+        logs = os.path.join(os.path.realpath(data_root), "logs")
+        runs = os.path.join(logs, "edge")
     data_root = os.path.realpath(data_root)
     dev_root = os.path.realpath(dev_root or os.path.join(data_root, "folds", "dev"))
     repo_root = os.path.realpath(repo_root or REPO)
-    logs = os.path.join(data_root, "logs")
+    logs, runs = os.path.realpath(logs), os.path.realpath(runs)
     chain = tuple(os.path.join(logs, n) for n in ("variants.jsonl", "holdout_access.jsonl"))
-    write_dirs = {os.path.join(logs, "edge"), os.path.join(logs, ".anchors"), "/var/lib/finance-gate"}
+    write_dirs = {runs, os.path.join(logs, ".anchors"), "/var/lib/finance-gate"}
     if state_dir:
         write_dirs.add(os.path.realpath(state_dir))
     # repo: CODE dirs only.  In the live checkout the repo IS the data root, so the repo
     # root itself must never be a read prefix (it would admit raw/, folds/validation, ...).
     code_dirs = {os.path.join(repo_root, d) for d in ("scripts", "ops", "tests")}
-    read_dirs = ({dev_root, os.path.join(logs, "approvals"), "/usr/share/zoneinfo", "/proc/self",
-                  "/sys/devices/system/cpu"} | code_dirs | _python_dirs() | write_dirs)
+    py_dirs = frozenset(_python_dirs())
+    read_dirs = ({dev_root, os.path.join(data_root, "logs", "approvals"), "/usr/share/zoneinfo", "/proc/self",
+                  "/sys/devices/system/cpu"} | code_dirs | py_dirs | write_dirs | extra_read)
     read_files = {"/dev/null", "/dev/urandom", "/etc/localtime", "/etc/finance-gate/allowed_signers"}
     cfg = {"read_dirs": frozenset(read_dirs), "write_dirs": frozenset(write_dirs),
            "chain": chain, "read_files": frozenset(read_files)}
@@ -92,7 +101,7 @@ def install(data_root=None, dev_root=None, repo_root=None, state_dir=None):
         return rp in cfg["read_files"] or _under(rp, cfg["read_dirs"])
 
     def refuse(what):
-        raise PermissionError(f"h1_guard: {what} refused (outside folds/dev, the repo and the H1 logs)")
+        raise PermissionError(f"h1_guard (accident guard): {what} refused (outside folds/dev, the code and the H1 logs)")
 
     def hook(event, args):
         if event == "open":
@@ -120,8 +129,13 @@ def install(data_root=None, dev_root=None, repo_root=None, state_dir=None):
             for a in args[:2]:
                 if isinstance(a, (str, bytes)) and not ok_path(fsdecode(a), True):
                     refuse(f"{event}({a!r})")
+        elif event == "ctypes.dlopen":
+            lib = args[0] if args else None
+            lib = fsdecode(lib) if isinstance(lib, (str, bytes)) else None
+            if not (lib and os.path.isabs(lib) and _under(realpath(lib), py_dirs)):
+                refuse(f"ctypes.dlopen({lib!r}) outside the Python install")
         elif event in ("os.symlink", "os.link", "os.system", "os.exec", "os.posix_spawn", "os.spawn",
-                       "os.fork", "os.forkpty", "ctypes.dlopen", "ctypes.dlsym", "ctypes.cdata"):
+                       "os.fork", "os.forkpty"):
             refuse(event)
         elif event == "subprocess.Popen":
             exe, argv = args[0], args[1]
