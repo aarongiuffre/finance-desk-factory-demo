@@ -84,3 +84,23 @@ One-liners with commit hashes; deep dives live where noted.
   ended 2015-04 / 2010-12, before the walkforward window; neither appears
   in any walkforward ledger). Samples verified: ABIL 0.034→3.4 pre-split
   (continuous with 3.65 post), VBIV 0.0001→121.69.
+- 2026-10-19: **Edge program extended to TRI-2/3 (Paperclip, Aaron-approved)** —
+  TRI-2 `scripts/rf_change.py` (YoY Item 1A TF-cosine/Jaccard features over the
+  parsed 10-K corpus; 27,036 verified pairs, 3,985 tickers, median rf_cos
+  0.9982, CIK-change guard + gap_days) committed `6cb9778`; TRI-3 prereg
+  `H5_rf_change.yaml` + `rf_change_outcomes.py` + family registration
+  committed `c7e17a9`/`50979a8`. Run BLOCKED by design: Verifier v5 requires a
+  dev go file (Aaron-signed or root-owned) — none exists yet.
+  **INCIDENT same morning**: the TRI-2 Paperclip wake agent (a second Hermes
+  instance, woken by the in-progress assignment) ran `fold_data build --fold
+  dev --apply` + validation (MANIFESTs 07:15/07:16), mutating the frozen
+  research folds and breaking the H1 dev-slice pin (fc8f700f). Detected via
+  the sandbox smoke test refusing (fail-closed worked). Restored both folds
+  byte-frozen from ZFS snapshot `hourly-202610190700` via rsync --delete;
+  slice sha re-verified == pin; smoke passes. Lesson: fold copies are
+  FROZEN — a layer addition (rf_change_signals) must go through a sanctioned
+  re-cut (board decision; invalidates pins) never a unilateral rebuild. The
+  concurrent double-agent race (this session + the wake agent editing the
+  same files) resolved cleanly here, but future Paperclip-issue work done in
+  the primary session should post Paperclip comments only at completion to
+  avoid waking a second worker mid-task.
