@@ -2,7 +2,7 @@
 """h5_fold_layer.py - surgically add a JSONL layer to an EXISTING fold copy.
 
 Why this exists: fold_data.build rebuilds the WHOLE copy including the pinned
-raw/price/h1_universe slice (invalidating ops/data/h1_dev_slice.sha256), and
+price slices (invalidating the H1 dev-slice sha pin in ops/data/), and
 fold_data.py itself is inside the gate code freeze (H1 amendment pins its
 blob).  Adding a new jsonl layer (universe/rf_change_signals.jsonl for the H5
 run) therefore must NOT go through a full rebuild.  This script:
