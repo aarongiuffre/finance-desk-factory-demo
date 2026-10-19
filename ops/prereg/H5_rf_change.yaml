@@ -24,6 +24,8 @@ signal:
   source: rf_cos from TRI-2 (TF cosine of Item 1A vs the ticker's prior 10-K,
           chunks with section matching ^item 1a, lowercase alphanumeric tokens)
   quality filter: rf_quality == "ok" (both sides >= 200 tokens)
+  gap filter: gap_days <= 400 (a pair spanning years is not a YoY comparison;
+              fixed BEFORE the first run — no results exist yet)
   cross-section: "calendar month of filing; months with < 10 qualifying filers use
                  the trailing 3-month window of filings instead (fixed rule, no peeking)"
   quintiles: rf_cos quintiles within the cross-section (rank-based); Q5 = most
