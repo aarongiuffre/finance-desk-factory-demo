@@ -8,6 +8,7 @@
 # /etc/finance-gate/go/.  validation/holdout: always (false refuses); dev: a STANDING go
 # naming the code freeze sha + max_dev_trials.  dev stays required until Aaron decides.
 gate:
+  signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"   # Aaron's ed25519 signing key, pinned 2026-10-19 via ops/staged_sudo/install_gate_key.sh
   require_go_file:
     dev: true
     validation: true

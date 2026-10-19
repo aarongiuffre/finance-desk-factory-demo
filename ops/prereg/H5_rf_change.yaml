@@ -8,6 +8,7 @@
 hypothesis: H5_rf_change
 family: H5_rf_change
 kind: hypothesis
+gate_signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"   # Aaron's signing key (must equal REGISTRY gate.signer_fpr)
 literature: "Cohen, Malloy & Nguyen (2020, JF) - non-changers beat changers; here
   the signal is restricted to Item 1A (risk factors), TF cosine of the YoY text."
 fold: dev

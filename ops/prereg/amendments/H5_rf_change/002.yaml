@@ -1,0 +1,8 @@
+amendment: 2
+code_freeze:
+  scripts/h5_rf_change.py: 9ef3a7e93ca51bef5b218152ce1df84ee037671d
+  scripts/h5_rf_change_outcomes.py: 2d99117907478f18f4aadad2f6525799ee89a8f5
+hypothesis: H5_rf_change
+prereg_sha256: ceac5e6a53039e87737092c7a9cf9d6219fd3aeaa77d272a654ba9ccfdc92d49
+reason: re-pin prereg after adding gate_signer_fpr (signer fingerprint wiring;
+  frozen code blobs unchanged, freeze_sha identical to amendment 001)
