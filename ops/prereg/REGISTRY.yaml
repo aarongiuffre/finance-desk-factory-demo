@@ -25,3 +25,6 @@ families:
   H1_insider:
     kind: hypothesis             # registered 2026-10-18; dev-only until Verifier + Aaron unlock
     hypotheses: [H1_opportunistic_insider_buys]
+  H5_rf_change:
+    kind: hypothesis             # registered 2026-10-19 (TRI-3, Aaron-approved in session); dev-only
+    hypotheses: [H5_rf_change]

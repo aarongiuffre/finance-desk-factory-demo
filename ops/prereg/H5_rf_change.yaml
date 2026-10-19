@@ -1,0 +1,81 @@
+# PRE-REGISTRATION - H5 rf_change: YoY Item 1A text-change vs next-month returns.
+# Written 2026-10-19 (TRI-3, Paperclip; approved by Aaron in session 2026-10-19).
+# Adapted from the Lazy Prices construction (Cohen, Malloy & Nguyen 2020, JF)
+# restricted to Item 1A risk factors.  NOT RUN.  Must be pushed and verified on
+# the real remote (git ls-remote) before the first dev grant (fold_gate).
+# This file authorizes DEV-fold runs only (2015-2019).  Validation / holdout
+# stay locked behind fold_gate + a signed go file (Verifier v5+).
+hypothesis: H5_rf_change
+family: H5_rf_change
+kind: hypothesis
+literature: "Cohen, Malloy & Nguyen (2020, JF) - non-changers beat changers; here
+  the signal is restricted to Item 1A (risk factors), TF cosine of the YoY text."
+fold: dev
+window: {lo: "2015-01-01", hi: "2019-12-31"}     # dev period only
+
+data:
+  signals: universe/rf_change_signals.jsonl       # TRI-2 features (fold copy, cut at cutoff)
+  prices: edge_harness PRICE_DIRS (PIT S&P members + exits)   # H3/H4-style universe
+  factors: raw/ff                                 # FF5 + UMD (TRI-4 controls)
+  rule: rows are filtered by filing_date inside the window (fold_gate.iter_jsonl_in_window);
+        no frame outside the window is loaded (fold_data research root)
+
+signal:
+  source: rf_cos from TRI-2 (TF cosine of Item 1A vs the ticker's prior 10-K,
+          chunks with section matching ^item 1a, lowercase alphanumeric tokens)
+  quality filter: rf_quality == "ok" (both sides >= 200 tokens)
+  cross-section: "calendar month of filing; months with < 10 qualifying filers use
+                 the trailing 3-month window of filings instead (fixed rule, no peeking)"
+  quintiles: rf_cos quintiles within the cross-section (rank-based); Q5 = most
+             similar (fewest changes), Q1 = most changed
+  PIT: ranking uses only filings with filing_date <= the month being ranked
+
+events:
+  event_time: 10-K filing_date -> next regular-session OPEN (same_day_ok false)
+  unit: one event per qualifying filing (event-driven, hold to horizon)
+
+variants:                                         # the WHOLE budget - no other variant may be run
+  primary_q5_21: long Q5 (most similar), hold 21 trading days
+  secondary_q5_63: "long Q5, hold 63 trading days (Lazy Prices: accrual over months)"
+  contrast_q1_21: long Q1 (most changed), hold 21 - direction check only, NOT a gate
+
+universe: PIT S&P members incl. exits (raw/price/sp_exits), price >= $5, ADV20 >= $1M
+weighting: equal weight per event (harness default), long-only
+
+execution:
+  hold_trading_days: 21                           # primary; secondary set per variant
+  direction: long
+  same_day_ok: false
+  min_price: 5.0
+  costs:                                          # edge_plan section 6, direction-aware
+    fee_bps: 15
+    half_spread_bps: {large: 5, mid: 15, small: 40}
+    slip_bps: 10
+    large_adv: 50000000
+    mid_adv: 5000000
+    floor_roundtrip_bps: 40                       # small/mid-cap floor
+    borrow_bps_annual: 0                          # long-only
+  delisting: {perf_base: -0.30, other_base: 0.0}
+
+benchmarks:
+  primary: per-event equal-weight point-in-time S&P universe over identical dates
+  secondary: SPY
+  factor_controls:                                 # TRI-4, reported alongside
+    - FF5+UMD alpha, Newey-West t (lag 6): the "not just factors" gate
+    - size buckets (S&P mcap terciles at entry, PIT): concentration check
+    - value split: "event names' P/E tercile (edgar_screen EPS-basis, PIT as-of
+      filing) - is Q5 just cheap stocks?  reported, not gated"
+
+criteria:                                         # pre-registered, dev fold, one shot
+  pass: "primary_q5_21 mean NET abnormal (bench EW) > 0 AND month-clustered t >= 2 AND the harness placebo passes"
+  factor_gate: FF5+UMD alpha NW t >= 2 (else "factor-replicated", not an edge)
+  kill: "primary fails => Item 1A stability is a READING tool, not a signal; no re-specification, no re-run (H4 doctrine)"
+  DSR: every run/grant counted in logs/variants.jsonl under family H5_rf_change
+
+reporting:
+  - headline: primary pass/fail with mean/t/n
+  - secondary_q5_63 and contrast_q1_21 reported with the same stats
+  - factor controls table (TRI-4)
+  - era split 2015-2017 / 2018-2019 (stability check)
+  - honest caveats: "post-publication sample (paper 2016), only ~5 annual
+    cross-sections in dev, section-extraction noise (chunk boundaries)"
