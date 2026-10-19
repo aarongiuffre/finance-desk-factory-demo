@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rf_change_outcomes.py - TRI-3: Item 1A text-stability quintiles vs returns.
+"""h5_rf_change_outcomes.py - TRI-3: Item 1A text-stability quintiles vs returns.
 
 Joins universe/rf_change_signals.jsonl (TRI-2 YoY Item 1A features) to forward
 returns on the shared harness, per the pre-registration

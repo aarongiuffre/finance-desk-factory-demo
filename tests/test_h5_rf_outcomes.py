@@ -9,7 +9,7 @@ import os
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location(
-    "rf_outcomes_mod", os.path.join(_HERE, "..", "scripts", "rf_change_outcomes.py"))
+    "rf_outcomes_mod", os.path.join(_HERE, "..", "scripts", "h5_rf_change_outcomes.py"))
 ro = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ro)
 

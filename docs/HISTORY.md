@@ -85,7 +85,7 @@ One-liners with commit hashes; deep dives live where noted.
   in any walkforward ledger). Samples verified: ABIL 0.034→3.4 pre-split
   (continuous with 3.65 post), VBIV 0.0001→121.69.
 - 2026-10-19: **Edge program extended to TRI-2/3 (Paperclip, Aaron-approved)** —
-  TRI-2 `scripts/rf_change.py` (YoY Item 1A TF-cosine/Jaccard features over the
+  TRI-2 `scripts/h5_rf_change.py` (YoY Item 1A TF-cosine/Jaccard features over the
   parsed 10-K corpus; 27,036 verified pairs, 3,985 tickers, median rf_cos
   0.9982, CIK-change guard + gap_days) committed `6cb9778`; TRI-3 prereg
   `H5_rf_change.yaml` + `rf_change_outcomes.py` + family registration
