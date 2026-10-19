@@ -1,0 +1,7 @@
+amendment: 1
+code_freeze:
+  scripts/rf_change.py: 9ef3a7e93ca51bef5b218152ce1df84ee037671d
+  scripts/rf_change_outcomes.py: 6dc5e4f4c0e357301a9adb9450d7d22e10550fd8
+hypothesis: H5_rf_change
+prereg_sha256: f6b09d4404bbd62c2a890b5bb57ac5cd241d1e3c9bf284b0de57e56c8f2a5b82
+reason: TRI-3 gated dev run freeze (rf_change feature + outcomes scoring)
