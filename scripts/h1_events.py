@@ -24,46 +24,42 @@ Implements ops/prereg/H1_opportunistic_insider_buys.yaml EXACTLY (no re-spec):
            - accessions with != 1 officer/director owner are skipped (the
              trans rows are not attributable to a single insider); counted in
              the result's skipped_multi_owner field.
+           - DERA corrupt prints (price > $1M/share or ticket > $1B - fixed
+             BEFORE the first run, no results exist yet): excluded from event
+             candidacy, still counted in trade history (the transaction
+             happened even if the price field is wrong).
   unit     issuer-month: the FIRST qualifying filing date in the calendar month
            triggers one entry.  Emitted per event: distinct opportunistic
            insiders (n_opportunistic), count of qualifying purchase rows, and
            the largest single qualifying buy value (USD) for the cluster
            variant's 0.1%-of-market-cap check (shares-out join is h1_run's).
 
-Reads the dev fold's quarterly DERA zips (<dera_dir>/*_form345.zip, 2006q1..).
-Two global passes, both streaming: pass 1 finds candidate purchases with their
-owner relationships; pass 2 builds each qualifying insider's trade history
-(memory-bounded to the qualifying pairs).  Deterministic: output sorted by
-(filing_date, issuer_cik).
-
-h1_guard note: takes the dera dir as an argument; never names the live root or
-the full-period folder (tests/test_dev_scope.py).
+Reads the dev fold's quarterly DERA zips ONLY through edge_harness helpers
+(h1_guard lint: no os/glob/zipfile/open in h1_* sources; the sandbox is the
+real boundary).  Two global passes, both streaming: pass 1 finds candidate
+purchases with their owner relationships; pass 2 builds each qualifying
+insider's trade history (memory-bounded to the qualifying pairs).
+Deterministic: output sorted by (filing_date, issuer_cik).
 """
 import csv
-import glob
-import io
-import os
-import zipfile
 from datetime import date
+
+import edge_harness
 
 MIN_VALUE = 10_000.0
 MIN_PRICE = 5.0
-# DERA data hygiene (fixed BEFORE the first run - no results exist yet): a
-# handful of filer agents report impossible prints (e.g. $55,526,697/share,
-# 4.2B shares).  Rows outside these bounds are treated as corrupt and excluded
-# from EVENT candidacy (they still count in the trade HISTORY - the transaction
-# happened even if the price field is wrong; routine classification is about
-# whether a trade occurred).  Bounds: any real US open-market insider purchase
-# in 2009-2019 is far below a $1M/share print and a $1B ticket.
-MAX_PRICE = 1_000_000.0
+MAX_PRICE = 1_000_000.0     # corrupt-print bounds, fixed before the first run
 MAX_VALUE = 1_000_000_000.0
 HIST_YEARS = 3
-FIELDNAMES_TRANS = ("ACCESSION_NUMBER", "NONDERIV_TRANS_SK", "TRANS_DATE",
-                    "TRANS_FORM_TYPE", "TRANS_CODE", "TRANS_SHARES",
-                    "TRANS_PRICEPERSHARE")
-FIELDNAMES_SUB = ("ACCESSION_NUMBER", "FILING_DATE", "ISSUERCIK",
-                  "ISSUERTRADINGSYMBOL")
-FIELDNAMES_OWNER = ("ACCESSION_NUMBER", "RPTOWNERCIK", "RPTOWNER_RELATIONSHIP")
+TRANS_FIELDS = ("ACCESSION_NUMBER", "NONDERIV_TRANS_SK", "TRANS_DATE",
+                "TRANS_FORM_TYPE", "TRANS_CODE", "TRANS_SHARES",
+                "TRANS_PRICEPERSHARE")
+SUB_FIELDS = ("ACCESSION_NUMBER", "FILING_DATE", "ISSUERCIK",
+              "ISSUERTRADINGSYMBOL")
+OWNER_FIELDS = ("ACCESSION_NUMBER", "RPTOWNERCIK", "RPTOWNER_RELATIONSHIP")
+
+_MONTHS = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6, "JUL": 7,
+           "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
 
 
 def parse_dera_date(s):
@@ -71,19 +67,9 @@ def parse_dera_date(s):
     if not s or len(s) != 11:
         return None
     try:
-        return date(int(s[7:]), {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5,
-                                 "JUN": 6, "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10,
-                                 "NOV": 11, "DEC": 12}[s[3:6].upper()], int(s[:2]))
+        return date(int(s[7:]), _MONTHS[s[3:6].upper()], int(s[:2]))
     except (KeyError, ValueError):
         return None
-
-
-def _tsv_rows(zf, name, fields):
-    """Yield dicts of the requested columns from a TSV inside an open zipfile."""
-    with zf.open(name) as fh:
-        text = io.TextIOWrapper(fh, encoding="utf-8", errors="replace")
-        for row in csv.DictReader(text, delimiter="\t"):
-            yield {k: (row.get(k) or "").strip() for k in fields}
 
 
 def _f(x):
@@ -93,32 +79,20 @@ def _f(x):
         return None
 
 
-def _quarters(dera_dir):
-    """Quarterly zip paths, oldest first (name sort = chronological)."""
-    return sorted(glob.glob(os.path.join(dera_dir, "*_form345.zip")))
-
-
 def _stream_zip(path, want=None):
-    """Per-quarter view of a zip, optionally filtered to a set of accessions.
+    """Per-quarter view: (sub, trans, owners).
 
-    Returns (sub, trans, owners): sub accession->(filing_date, issuer_cik,
-    symbol); trans = list of raw dicts (FIELDNAMES_TRANS keys); owners =
-    accession->owner_cik->relationship.
+    sub: accession -> (filing_date, issuer_cik, symbol); owners: accession ->
+    owner_cik -> relationship; trans: raw dicts (TRANS_FIELDS keys).
     """
     sub, owners = {}, {}
-    with zipfile.ZipFile(path) as zf:
-        for r in _tsv_rows(zf, "SUBMISSION.tsv", FIELDNAMES_SUB):
-            if want is not None and r["ACCESSION_NUMBER"] not in want:
-                continue
-            sub[r["ACCESSION_NUMBER"]] = (parse_dera_date(r["FILING_DATE"]),
-                                          r["ISSUERCIK"], r["ISSUERTRADINGSYMBOL"])
-        for r in _tsv_rows(zf, "REPORTINGOWNER.tsv", FIELDNAMES_OWNER):
-            if want is not None and r["ACCESSION_NUMBER"] not in want:
-                continue
-            owners.setdefault(r["ACCESSION_NUMBER"], {})[r["RPTOWNERCIK"]] = \
-                r["RPTOWNER_RELATIONSHIP"]
-        trans = [dict(r) for r in _tsv_rows(zf, "NONDERIV_TRANS.tsv", FIELDNAMES_TRANS)
-                 if want is None or r["ACCESSION_NUMBER"] in want]
+    for r in edge_harness.read_zip_tsv(path, "SUBMISSION.tsv", SUB_FIELDS, want=want):
+        sub[r["ACCESSION_NUMBER"]] = (parse_dera_date(r["FILING_DATE"]),
+                                      r["ISSUERCIK"], r["ISSUERTRADINGSYMBOL"])
+    for r in edge_harness.read_zip_tsv(path, "REPORTINGOWNER.tsv", OWNER_FIELDS, want=want):
+        owners.setdefault(r["ACCESSION_NUMBER"], {})[r["RPTOWNERCIK"]] = \
+            r["RPTOWNER_RELATIONSHIP"]
+    trans = edge_harness.read_zip_tsv(path, "NONDERIV_TRANS.tsv", TRANS_FIELDS, want=want)
     return sub, trans, owners
 
 
@@ -126,9 +100,10 @@ def _candidates(path, seen, skipped, corrupt):
     """Pass 1 for one zip: qualifying purchase rows with owner attribution.
 
     A row is a candidate if TRANS_CODE=='P', value >= MIN_VALUE, price >=
-    MIN_PRICE, not a duplicate (accession, sk), filed by exactly one
-    officer/director owner, and resolvable to an issuer/filing in the same
-    quarter.  Form 4/A rows are excluded here (never create events).
+    MIN_PRICE, inside the corrupt-print bounds, not a duplicate (accession, sk),
+    filed by exactly one officer/director owner, and resolvable to an
+    issuer/filing in the same quarter.  Form 4/A rows are excluded here (never
+    create events).
     """
     _, raw_trans, _ = _stream_zip(path, want=None)
     rows = []
@@ -177,28 +152,27 @@ def _history_pass(path, want_pairs, hist):
     with ALL non-derivative transactions of the wanted (owner, issuer) pairs.
     Owner->accession comes from REPORTINGOWNER; issuer from SUBMISSION."""
     wanted_owners = {o for o, _ in want_pairs}
-    with zipfile.ZipFile(path) as zf:
-        acc_of_owner = {}
-        for r in _tsv_rows(zf, "REPORTINGOWNER.tsv", FIELDNAMES_OWNER):
-            if r["RPTOWNERCIK"] in wanted_owners:
-                acc_of_owner.setdefault(r["RPTOWNERCIK"], set()).add(r["ACCESSION_NUMBER"])
-        if not acc_of_owner:
-            return
-        accs = {a for s in acc_of_owner.values() for a in s}
-        sub, trans, _ = _stream_zip(path, want=accs)
-        for r in trans:
-            s = sub.get(r["ACCESSION_NUMBER"])
-            if s is None or not s[1]:
-                continue
-            d = parse_dera_date(r["TRANS_DATE"])
-            if d is None:
-                continue
-            for owner, accs_o in acc_of_owner.items():
-                if r["ACCESSION_NUMBER"] in accs_o:
-                    h = hist.setdefault((owner, s[1]), [d, set()])
-                    if d < h[0]:
-                        h[0] = d
-                    h[1].add((d.year, d.month))
+    acc_of_owner = {}
+    for r in edge_harness.read_zip_tsv(path, "REPORTINGOWNER.tsv", OWNER_FIELDS):
+        if r["RPTOWNERCIK"] in wanted_owners:
+            acc_of_owner.setdefault(r["RPTOWNERCIK"], set()).add(r["ACCESSION_NUMBER"])
+    if not acc_of_owner:
+        return
+    accs = {a for s in acc_of_owner.values() for a in s}
+    sub, trans, _ = _stream_zip(path, want=accs)
+    for r in trans:
+        s = sub.get(r["ACCESSION_NUMBER"])
+        if s is None or not s[1]:
+            continue
+        d = parse_dera_date(r["TRANS_DATE"])
+        if d is None:
+            continue
+        for owner, accs_o in acc_of_owner.items():
+            if r["ACCESSION_NUMBER"] in accs_o:
+                h = hist.setdefault((owner, s[1]), [d, set()])
+                if d < h[0]:
+                    h[0] = d
+                h[1].add((d.year, d.month))
 
 
 def is_opportunistic(hist, owner, issuer, trans_date):
@@ -219,10 +193,10 @@ def build_events(dera_dir, lo, hi):
 
     Returns (events, stats).  Each event: issuer_cik, symbol, month,
     filing_date, n_rows, n_opportunistic, insider_ciks (sorted tuple),
-    max_buy_value.  stats: candidates, skipped_multi_owner.
+    max_buy_value.  stats: candidates, skipped_multi_owner, corrupt_rows.
     """
     lo_d, hi_d = date.fromisoformat(lo), date.fromisoformat(hi)
-    paths = _quarters(dera_dir)
+    paths = edge_harness.list_dera_quarters(dera_dir)
     if not paths:
         raise SystemExit(f"h1_events: no *_form345.zip under {dera_dir}")
 

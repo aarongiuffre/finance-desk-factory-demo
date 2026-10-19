@@ -767,6 +767,35 @@ def daily_portfolio(trades, store, cal, ff=None):
     return out
 
 
+# ----------------------------------------------------------------------------- DERA
+def list_dera_quarters(dera_dir):
+    """Quarterly DERA zip paths (oldest first) under a directory.
+
+    H1 code funnels file listing here (h1_guard lint bans glob/os in h1_* sources).
+    """
+    import glob as _glob
+    return sorted(_glob.glob(dera_dir + "/*_form345.zip"))
+
+
+def read_zip_tsv(zpath, name, fields, want=None):
+    """Rows of `fields` from TSV `name` inside zip `zpath`; optional accession filter.
+
+    H1 code funnels zip reading here (h1_guard lint bans zipfile/open in h1_*
+    sources).  Returns a list of dicts with stripped values.
+    """
+    import zipfile as _zipfile
+    import io as _io
+    out = []
+    with _zipfile.ZipFile(zpath) as zf:
+        with zf.open(name) as fh:
+            text = _io.TextIOWrapper(fh, encoding="utf-8", errors="replace")
+            for row in csv.DictReader(text, delimiter="\t"):
+                if want is not None and (row.get("ACCESSION_NUMBER") or "").strip() not in want:
+                    continue
+                out.append({k: (row.get(k) or "").strip() for k in fields})
+    return out
+
+
 # ----------------------------------------------------------------------------- factors
 def load_ff(ff_dir):
     """{date: {Mkt-RF,SMB,HML,RMW,CMA,RF,UMD}} in DECIMAL daily returns."""

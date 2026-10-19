@@ -2,11 +2,13 @@
 import importlib.util
 import io
 import os
+import sys
 import zipfile
 
 import pytest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_HERE, "..", "scripts"))   # for edge_harness import
 _spec = importlib.util.spec_from_file_location(
     "h1_events", os.path.join(_HERE, "..", "scripts", "h1_events.py"))
 HE = importlib.util.module_from_spec(_spec)
