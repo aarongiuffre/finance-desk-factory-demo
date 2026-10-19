@@ -41,6 +41,7 @@ Copies contain, per fold cutoff C:
   raw/ff/*.zip                         factor rows <= C
   logs/confluence-history.jsonl        ledger days <= C   (line prefix, never decoded past C)
   universe/lang_shift_signals.jsonl    filing_date <= C   (line prefix)
+  universe/rf_change_signals.jsonl     filing_date <= C   (line prefix)
   raw/dera_fsds/<q>.zip, raw/dera_insider/<q>_form345.zip   quarters ending <= C (hard links)
   MANIFEST.json                        cutoff, counts, per-file sha256 of the copy
 Build: python3 scripts/fold_data.py build --fold dev [--apply]     (dry-run by default)
@@ -65,7 +66,8 @@ import finpaths  # noqa: E402
 CUTOFF = {"dev": "2019-12-31", "validation": "2024-03-31"}
 PRICE_DIRS = ("raw/price", "raw/price/dead", "raw/price/sp_exits")
 FACT_DIRS = ("facts", "facts/dead")
-JSONL_LAYERS = (("logs/confluence-history.jsonl", "date"), ("universe/lang_shift_signals.jsonl", "filing_date"))
+JSONL_LAYERS = (("logs/confluence-history.jsonl", "date"), ("universe/lang_shift_signals.jsonl", "filing_date"),
+                ("universe/rf_change_signals.jsonl", "filing_date"))
 ZIP_LAYERS = ("raw/dera_fsds", "raw/dera_insider")
 MEMBERSHIP = "universe/sp500_ticker_start_end.csv"
 
