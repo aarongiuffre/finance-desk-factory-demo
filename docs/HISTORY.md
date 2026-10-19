@@ -104,3 +104,15 @@ One-liners with commit hashes; deep dives live where noted.
   same files) resolved cleanly here, but future Paperclip-issue work done in
   the primary session should post Paperclip comments only at completion to
   avoid waking a second worker mid-task.
+- 2026-10-19 evening — H5_rf_change (TRI-3) KILLED at its pre-registered dev
+  calibration, per the kill doctrine (no re-spec, no re-run). Gate chain
+  exercised end-to-end for the first time: Aaron's ed25519 signer pinned
+  (allowed_signers + REGISTRY gate.signer_fpr + prereq gate_signer_fpr,
+  amendment 002), standing dev go verified (freeze f48fc705, 3 trials),
+  Windows-native offbox signer added (aaron_sign_dev_go.py). Result: primary
+  q5_21 mean NET abnormal -1.05% over 1,222 events (criterion: > 0), gross
+  -0.08% (no gross edge either), hit rate 0.50; contrast Q1 (most-changed)
+  was WORSE (-1.64%), so the Lazy Prices direction is weakly present in the
+  cross-section but there is nothing to trade NET. Item 1A stability = a
+  reading tool, not a signal. Dev fold layer universe/rf_change_signals.jsonl
+  added surgically (h5_fold_layer.py) without touching pinned slices.
