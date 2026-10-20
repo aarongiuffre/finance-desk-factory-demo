@@ -1,0 +1,8 @@
+amendment: 3
+code_freeze:
+  scripts/h1_events.py: 210038dc85ffa3d11e72f3e3be06a36f62f7442f
+  scripts/h1_shares.py: af8b7c25ef8f0d16baddc5ab42791248b961fae7
+hypothesis: H1_opportunistic_insider_buys
+prereg_sha256: f1f713f99ea0bdbcdfbe0d96ad3c20f6d8e32254034876a20ceb12f504cfdc2a
+reason: 're-freeze h1_events after DERA symbol hygiene (trial-3 crash: safe_ticker
+  refused lowercase/dirty DERA symbols); prereg unchanged'
