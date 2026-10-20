@@ -69,6 +69,7 @@ def main():
                         if h1_shares.shares_at(series, e["issuer_cik"], e["filing_date"]) is not None)
 
     store = edge_harness.PriceStore(w, dirs=edge_harness.H1_DIRS)
+    edge_harness.with_spy_benchmark(store, w)      # prereg SPY benchmark (dev tiers)
     mem, ufn = edge_harness.universe_fn_for(store)
 
     out = {"hypothesis": HYPOTHESIS, "prereg": PREREG, "window": [w.lo, w.hi],

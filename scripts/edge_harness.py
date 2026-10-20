@@ -807,6 +807,22 @@ def universe_fn_for(store):
     return mem, (lambda d: members_at(mem, d))
 
 
+def with_spy_benchmark(store, window):
+    """Inject SPY (standard dev price tiers) into an H1-slice store's cache.
+
+    The H1 dev slice holds the TRADE universe only (no SPY), but the harness's
+    calendar()/evaluate() need store.get('SPY') for the prereg's SPY benchmark.
+    SPY comes from the standard tiers of the SAME dev copy - dev-cutoff
+    enforced there too, so this widens nothing past the dev window; it only
+    adds the benchmark index, not tradeable events.  H1 code funnels this here
+    (it cannot name a tier itself)."""
+    spy = PriceStore(window, dirs=PRICE_DIRS).get("SPY")
+    if spy is None:
+        raise fold_gate.GateRefused("SPY unavailable in the dev price tiers - benchmark refused")
+    store._c["SPY"] = spy
+    return store
+
+
 def read_zip_tsv(zpath, name, fields, want=None):
     """Rows of `fields` from TSV `name` inside zip `zpath`; optional accession filter.
 
