@@ -193,6 +193,35 @@ def test_corrupt_prints_excluded_from_events(tmp_path):
     assert stats["corrupt_rows"] == 2
 
 
+def test_symbol_hygiene(tmp_path):
+    d = tmp_path / "dera5"
+    d.mkdir()
+    # history for 222 (MAY 2009..2012)
+    subs = [_s(f"0009000-{yr}-00001", f"10-MAY-{yr}", "0009000", "AAAA")
+            for yr in ("2009", "2010", "2011", "2012")]
+    owners = [_o(f"0009000-{yr}-00001", "0000222", "Officer")
+              for yr in ("2009", "2010", "2011", "2012")]
+    trans = [_t(f"0009000-{yr}-00001", f"{yr[-3:]}1", f"10-MAY-{yr}", "4", "S", "1000", "20")
+             for yr in ("2009", "2010", "2011", "2012")]
+    _zip(d / "2012q2_form345.zip", subs, owners, trans)
+    # dirty symbols in 2013: lowercase (recoverable), quoted (recoverable),
+    # ambiguous '(NYSE:FBC)' (dropped); plus one sane buy (kept)
+    subs2 = [_s("0009000-13-00030", "18-APR-2013", "0009000", "aaaa"),
+             _s("0009000-13-00031", "18-APR-2013", "0009000", '"OMEX"'),
+             _s("0009000-13-00032", "18-APR-2013", "0009000", "(NYSE:FBC)"),
+             _s("0009000-13-00033", "18-APR-2013", "0009000", "AAAA")]
+    owners2 = [_o(f"0009000-13-0003{i}", "0000222", "Officer") for i in range(4)]
+    trans2 = [_t(f"0009000-13-0003{i}", f"00003{i}", "15-APR-2013", "4", "P", "5000", "20")
+              for i in range(4)]
+    _zip(d / "2013q1_form345.zip", subs2, owners2, trans2)
+    events, stats = HE.build_events(str(d), "2009-01-01", "2019-12-31")
+    # one issuer-month (all AAAA); 3 qualifying rows (lowercase + quoted
+    # normalized to AAAA/OMEX, the (NYSE:FBC) row dropped), 1 unresolvable
+    assert len(events) == 1 and events[0]["n_rows"] == 3
+    assert events[0]["symbol"] == "AAAA"       # first opportunistic row's symbol
+    assert stats["unresolvable_symbol"] == 1
+
+
 def test_is_opportunistic_unit():
     h = {("1", "X"): [__import__("datetime").date(2009, 3, 1),
                       {(2009, 5), (2010, 5), (2011, 5), (2012, 5)}]}

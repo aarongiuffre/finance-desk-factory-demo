@@ -50,6 +50,13 @@ MIN_VALUE = 10_000.0
 MIN_PRICE = 5.0
 MAX_PRICE = 1_000_000.0     # corrupt-print bounds, fixed before the first run
 MAX_VALUE = 1_000_000_000.0
+# Symbol hygiene (fixed BEFORE the first run - no results exist yet): DERA's
+# ISSUERTRADINGSYMBOL is dirty for a small share of filings (lowercase tickers,
+# junk wrappers like "OMEX" / (CALX) / AXDX]).  Normalize: strip whitespace and
+# wrapper chars, uppercase, require ^[A-Z0-9][A-Z0-9._-]{0,24}$ with no internal
+# punctuation; unresolvable symbols exclude the event (counted, honest).
+SYMBOL_RE_STR = r"^[A-Z0-9][A-Z0-9._-]{0,24}$"
+SYMBOL_STRIP = "()[]\"'?` \t"
 HIST_YEARS = 3
 TRANS_FIELDS = ("ACCESSION_NUMBER", "NONDERIV_TRANS_SK", "TRANS_DATE",
                 "TRANS_FORM_TYPE", "TRANS_CODE", "TRANS_SHARES",
@@ -79,6 +86,20 @@ def _f(x):
         return None
 
 
+def _symbol(raw):
+    """Normalized ticker from DERA's ISSUERTRADINGSYMBOL, or None (unresolvable).
+
+    Strips wrapper junk (see SYMBOL_STRIP), uppercases, requires the safe-ticker
+    shape with no internal punctuation (a comma/colon/space inside means an
+    ambiguous multi-class or exchange-annotated symbol - dropped, not guessed)."""
+    s = (raw or "").strip()
+    s = s.strip(SYMBOL_STRIP).upper()
+    import re as _re
+    if not s or not _re.fullmatch(SYMBOL_RE_STR, s):
+        return None
+    return s
+
+
 def _stream_zip(path, want=None):
     """Per-quarter view: (sub, trans, owners).
 
@@ -88,7 +109,7 @@ def _stream_zip(path, want=None):
     sub, owners = {}, {}
     for r in edge_harness.read_zip_tsv(path, "SUBMISSION.tsv", SUB_FIELDS, want=want):
         sub[r["ACCESSION_NUMBER"]] = (parse_dera_date(r["FILING_DATE"]),
-                                      r["ISSUERCIK"], r["ISSUERTRADINGSYMBOL"])
+                                      r["ISSUERCIK"], _symbol(r["ISSUERTRADINGSYMBOL"]))
     for r in edge_harness.read_zip_tsv(path, "REPORTINGOWNER.tsv", OWNER_FIELDS, want=want):
         owners.setdefault(r["ACCESSION_NUMBER"], {})[r["RPTOWNERCIK"]] = \
             r["RPTOWNER_RELATIONSHIP"]
@@ -96,7 +117,7 @@ def _stream_zip(path, want=None):
     return sub, trans, owners
 
 
-def _candidates(path, seen, skipped, corrupt):
+def _candidates(path, seen, skipped, corrupt, unresolvable):
     """Pass 1 for one zip: qualifying purchase rows with owner attribution.
 
     A row is a candidate if TRANS_CODE=='P', value >= MIN_VALUE, price >=
@@ -129,6 +150,9 @@ def _candidates(path, seen, skipped, corrupt):
     for r in rows:
         s = sub.get(r["ACCESSION_NUMBER"])
         if s is None or s[0] is None or not s[1]:
+            continue
+        if s[2] is None:
+            unresolvable[0] += 1      # dirty/unresolvable DERA symbol (see _symbol)
             continue
         od = [cik for cik, rel in owners.get(r["ACCESSION_NUMBER"], {}).items()
               if "officer" in rel.lower() or "director" in rel.lower()]
@@ -200,10 +224,10 @@ def build_events(dera_dir, lo, hi):
     if not paths:
         raise SystemExit(f"h1_events: no *_form345.zip under {dera_dir}")
 
-    seen, skipped, corrupt = set(), [0], [0]
+    seen, skipped, corrupt, unresolvable = set(), [0], [0], [0]
     purchases = []
     for p in paths:
-        purchases.extend(_candidates(p, seen, skipped, corrupt))
+        purchases.extend(_candidates(p, seen, skipped, corrupt, unresolvable))
     purchases = [c for c in purchases if lo_d <= c["filing_date"] <= hi_d]
 
     want_pairs = {(c["owner"], c["issuer"]) for c in purchases}
@@ -239,4 +263,4 @@ def build_events(dera_dir, lo, hi):
                "max_buy_price": g.get("max_buy_price")}
               for (issuer, _m), g in sorted(groups.items())]
     return events, {"candidates": len(purchases), "skipped_multi_owner": skipped[0],
-                    "corrupt_rows": corrupt[0]}
+                    "corrupt_rows": corrupt[0], "unresolvable_symbol": unresolvable[0]}
