@@ -68,7 +68,7 @@ PRICE_DIRS = ("raw/price", "raw/price/dead", "raw/price/sp_exits")
 FACT_DIRS = ("facts", "facts/dead")
 JSONL_LAYERS = (("logs/confluence-history.jsonl", "date"), ("universe/lang_shift_signals.jsonl", "filing_date"),
                 ("universe/rf_change_signals.jsonl", "filing_date"))
-ZIP_LAYERS = ("raw/dera_fsds", "raw/dera_insider")
+ZIP_LAYERS = (DERA_FSDS, DERA_INSIDER) = ("raw/dera_fsds", "raw/dera_insider")
 MEMBERSHIP = "universe/sp500_ticker_start_end.csv"
 
 # scripts that run the LIVE desk (systemd timers / paper trading).  They need

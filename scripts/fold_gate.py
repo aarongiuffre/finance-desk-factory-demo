@@ -608,6 +608,19 @@ def sandbox_window_path():
     return os.path.join(sb, "in", "window.json") if sb else None
 
 
+def write_sandbox_out(name, obj):
+    """Write a JSON summary to RUN/out/<name> inside the sandbox (h1_run's report
+    channel; h1_* sources cannot open/write files themselves - h1_guard lint).
+    Outside the sandbox this writes to the runs dir (diagnostics only)."""
+    sb = finpaths.sandbox_run()
+    d = os.path.join(sb, "out") if sb else finpaths.runs_dir()
+    os.makedirs(d, exist_ok=True)
+    p = os.path.join(d, name)
+    with open(p, "w") as fh:
+        json.dump(obj, fh, indent=1, default=float)
+    return p
+
+
 def code_archive_status():
     """(ok, reason): the running code is the pinned codetree archive (tree hash recomputed
     once per process and cached; finpaths.archive_pin)."""

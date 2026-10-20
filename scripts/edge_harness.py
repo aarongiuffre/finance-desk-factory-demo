@@ -768,13 +768,43 @@ def daily_portfolio(trades, store, cal, ff=None):
 
 
 # ----------------------------------------------------------------------------- DERA
-def list_dera_quarters(dera_dir):
+DERA_FSDS = fold_data.DERA_FSDS
+DERA_INSIDER = fold_data.DERA_INSIDER
+
+
+def data_zip_dir(window, name):
+    """Resolved zip-layer dir (fold_data.ZIP_LAYERS name) under the window root.
+
+    H1 code funnels data-dir resolution here: no path literals in h1_* sources
+    (h1_guard lint); the name must be a registered zip layer and must exist.
+    """
+    if name not in fold_data.ZIP_LAYERS:
+        raise fold_data.FoldDataError(f"{name!r} is not a registered zip layer")
+    d = os.path.join(fold_data.research_root(window), name)
+    if not os.path.isdir(d):
+        raise fold_data.FoldDataError(f"zip layer {name!r} missing under {fold_data.research_root(window)}")
+    return d
+
+
+def list_dera_quarters(dera_dir, pattern="*_form345.zip"):
     """Quarterly DERA zip paths (oldest first) under a directory.
 
     H1 code funnels file listing here (h1_guard lint bans glob/os in h1_* sources).
     """
     import glob as _glob
-    return sorted(_glob.glob(dera_dir + "/*_form345.zip"))
+    return sorted(_glob.glob(os.path.join(dera_dir, pattern)))
+
+
+def universe_fn_for(store):
+    """(membership, universe_fn) from the window copy's S&P membership file.
+
+    H1 entry universe per prereg: PIT S&P members + NASDAQ commons with prices
+    in the dev slice (entry is NOT restricted to members); the EW benchmark
+    universe is the point-in-time S&P membership (the membership data available
+    in the fold).  H1 code funnels this wiring here (no os.path in h1_* sources).
+    """
+    mem = load_membership(os.path.join(store.root, fold_data.MEMBERSHIP))
+    return mem, (lambda d: members_at(mem, d))
 
 
 def read_zip_tsv(zpath, name, fields, want=None):

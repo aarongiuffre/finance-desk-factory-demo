@@ -222,7 +222,11 @@ def build_events(dera_dir, lo, hi):
             "insiders": set(), "max_buy_value": 0.0})
         g["n_rows"] += 1
         g["insiders"].add(c["owner"])
-        g["max_buy_value"] = max(g["max_buy_value"], round(c["shares"] * c["price"], 2))
+        val = round(c["shares"] * c["price"], 2)
+        if val > g["max_buy_value"]:
+            g["max_buy_value"] = val
+            g["max_buy_shares"] = c["shares"]
+            g["max_buy_price"] = c["price"]
         if c["filing_date"] < g["filing_date"]:
             g["filing_date"] = c["filing_date"]
 
@@ -230,7 +234,9 @@ def build_events(dera_dir, lo, hi):
                "filing_date": g["filing_date"].isoformat(), "n_rows": g["n_rows"],
                "n_opportunistic": len(g["insiders"]),
                "insider_ciks": sorted(g["insiders"]),
-               "max_buy_value": g["max_buy_value"]}
+               "max_buy_value": g["max_buy_value"],
+               "max_buy_shares": g.get("max_buy_shares"),
+               "max_buy_price": g.get("max_buy_price")}
               for (issuer, _m), g in sorted(groups.items())]
     return events, {"candidates": len(purchases), "skipped_multi_owner": skipped[0],
                     "corrupt_rows": corrupt[0]}
