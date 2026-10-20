@@ -24,6 +24,7 @@ families:
     kind: diagnostic             # dev-only
     hypotheses: [lang_shift]
   H1_insider:
+    retired: true                # failed its pre-registered dev calibration 2026-10-20 (primary alpha_t -3.47, cluster +0.29; pass bar needs >= 3; trial under freeze c86609d6)
     kind: hypothesis             # registered 2026-10-18; dev-only until Verifier + Aaron unlock
     hypotheses: [H1_opportunistic_insider_buys]
   H5_rf_change:

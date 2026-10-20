@@ -116,3 +116,21 @@ One-liners with commit hashes; deep dives live where noted.
   cross-section but there is nothing to trade NET. Item 1A stability = a
   reading tool, not a signal. Dev fold layer universe/rf_change_signals.jsonl
   added surgically (h5_fold_layer.py) without touching pinned slices.
+- 2026-10-20 — H1_opportunistic_insider_buys KILLED at its pre-registered dev
+  calibration (first fully sandboxed gated run; trials 1-3 lost to gate
+  infrastructure bugs, all fixed and disclosed: witness push from the archive,
+  SPY missing from the H1 slice, DERA symbol hygiene; glue sim added).
+  Result: primary_cmp2012 alpha -7.0%/yr, NW t -3.47 (significantly
+  NEGATIVE), net abnormal -0.72%/event (gross +0.30% - a real but tiny gross
+  effect eaten by costs); cluster_or_0.1pct_mcap alpha +1.1%/yr, t +0.29,
+  era-concentrated, DSR ~0.0002. Both variants fail every prereg pass-bar
+  gate (alpha t >= 3, DSR >= 0.95, net excess vs SPY, era share, adverse
+  delisting, 2x costs). Dev window effectively 2014-2019: 45% of events had
+  no price in the H1 slice and 15% no benchmark (universe-coverage
+  limitation, disclosed; does not rescue the result - the factor alpha is
+  computed independently of the EW benchmark and is negative where tested).
+  Kill doctrine: H1 retired permanently, no re-test under a new name. The
+  edge program's four literature hypotheses (H1 insider buys, H2/H5 Lazy
+  Prices, H3 52w-high, H4 inventory) have now ALL failed pre-registered dev
+  calibration or remain unstarted-skeptical: no proven edge over index
+  holding in this stack's data and cost model.
