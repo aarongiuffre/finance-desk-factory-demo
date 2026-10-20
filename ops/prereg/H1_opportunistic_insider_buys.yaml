@@ -7,6 +7,7 @@
 hypothesis: H1_opportunistic_insider_buys
 family: H1_insider
 kind: hypothesis
+gate_signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"   # Aaron's signing key (must equal REGISTRY gate.signer_fpr)
 literature: Cohen, Malloy & Pomorski (2012, JF); Seyhun (1986); Lakonishok & Lee (2001)
 fold: dev
 window: {lo: "2009-01-01", hi: "2019-12-31"}     # dev period only (signals usable from 2009: 3-yr routine history)
