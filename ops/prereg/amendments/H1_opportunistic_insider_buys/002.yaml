@@ -1,0 +1,8 @@
+amendment: 2
+code_freeze:
+  scripts/h1_events.py: 1b130b3b88c55d0d9805dc4b728694ce2db0433b
+  scripts/h1_shares.py: af8b7c25ef8f0d16baddc5ab42791248b961fae7
+hypothesis: H1_opportunistic_insider_buys
+prereg_sha256: f1f713f99ea0bdbcdfbe0d96ad3c20f6d8e32254034876a20ceb12f504cfdc2a
+reason: re-pin prereg after adding gate_signer_fpr (signer wiring; frozen code blobs
+  unchanged, freeze_sha identical to amendment 001)
