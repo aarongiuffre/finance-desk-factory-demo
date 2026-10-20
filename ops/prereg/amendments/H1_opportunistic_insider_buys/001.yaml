@@ -1,0 +1,7 @@
+amendment: 1
+code_freeze:
+  scripts/h1_events.py: 1b130b3b88c55d0d9805dc4b728694ce2db0433b
+  scripts/h1_shares.py: af8b7c25ef8f0d16baddc5ab42791248b961fae7
+hypothesis: H1_opportunistic_insider_buys
+prereg_sha256: ac19092066a371fa88e7b8900da65cdaf9eb8519d2694cafc1d713dda11bc594
+reason: H1 gated dev run freeze (opportunistic event builder + PIT FSDS shares)
