@@ -34,12 +34,15 @@ HYPOTHESIS = "H1_opportunistic_insider_buys"
 PREREG = f"ops/prereg/{HYPOTHESIS}.yaml"
 
 
-def _variant_events(events_raw, series, cluster):
-    """({ticker, ts} event list, coverage stats) for one prereg variant."""
+def _variant_events(events_raw, series, cluster, shares_mod):
+    """({ticker, ts} event list, coverage stats) for one prereg variant.
+
+    shares_mod is passed in (the h1_* imports are lazy inside main() per the
+    Verifier import-order rule, so module globals are not available here)."""
     ev, n_multi, n_pct, n_no_shares = [], 0, 0, 0
     for e in events_raw:
         if cluster:
-            ok, why = h1_shares.cluster_qualifies(e, series)
+            ok, why = shares_mod.cluster_qualifies(e, series)
             if not ok:
                 if why == "no_shares":
                     n_no_shares += 1
@@ -77,7 +80,7 @@ def main():
                "issuers_with_shares": len(series),
                "events_with_shares": n_with_shares, "events_total": len(events_raw)}}
     for name, cluster in (("primary_cmp2012", False), ("cluster_or_0.1pct_mcap", True)):
-        ev, vstats = _variant_events(events_raw, series, cluster)
+        ev, vstats = _variant_events(events_raw, series, cluster, h1_shares)
         rep, run_dir, _trades = edge_harness.run(f"h1_{name}", "hypothesis", ev, w, PREREG,
                                       robustness=True, store=store, universe_fn=ufn,
                                       params={"variant": name, **vstats})
