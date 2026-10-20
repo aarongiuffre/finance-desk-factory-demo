@@ -119,7 +119,12 @@ def push(name, recs, commit):
     ref = f"{PREFIX}{name}/{count:08d}-{h}"
     if (count, h) in heads(name):            # this exact head is already witnessed (append-only: no-op)
         return count, h
-    r = subprocess.run(["git", "-C", finpaths.code_root(), "push", "-q", remote_url(), f"{commit}:{ref}"],
+    # Sandbox-host mode runs from the code ARCHIVE (RUN/code, deliberately no .git);
+    # push from the real repo then (it fetched the commit during preflight).
+    repo = finpaths.code_root() or finpaths.root()
+    if not os.path.exists(os.path.join(repo, ".git")):
+        repo = finpaths.root()
+    r = subprocess.run(["git", "-C", repo, "push", "-q", remote_url(), f"{commit}:{ref}"],
                        capture_output=True, text=True, timeout=120, env=GIT_ENV)
     if r.returncode != 0:
         raise WitnessError(f"witness push {ref} failed: {r.stderr.strip()[:200]}")
