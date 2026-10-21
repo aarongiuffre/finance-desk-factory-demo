@@ -31,3 +31,8 @@ families:
     retired: true                # failed its pre-registered dev calibration 2026-10-19 (primary q5_21 mean NET abn -1.05%, criterion >0; trial 1/3 under freeze f48fc705)
     kind: hypothesis             # registered 2026-10-19 (TRI-3, Aaron-approved in session); dev-only
     hypotheses: [H5_rf_change]
+  H6_nasdaq_cheap:
+    kind: hypothesis             # registered 2026-10-21: one-shot validation read of the S3
+                                 # cheap-10 on the NASDAQ universe (dead names in) vs ONEQ;
+                                 # prereg H6_nasdaq_cheap_universe.yaml, commit e9151dd data layer
+    hypotheses: [H6_nasdaq_cheap_universe]

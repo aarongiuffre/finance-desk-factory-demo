@@ -1,0 +1,75 @@
+# PRE-REGISTRATION - H6 nasdaq cheap-universe (validation read).
+# Written 2026-10-21.  Context: the S3 cheap-10 sleeve was built and judged on the
+# S&P-500 PIT universe (v6 engine; full-window verdict vs SPY = all-null, dev fold
+# 2016-19 = -0.61%/mo rel).  The NASDAQ-Composite expansion (2026-10-21, commit
+# e9151dd) added bars + DERA facts + split calendars for ~5.9k live/dead NASDAQ
+# names; the dev-fold read on that universe was -1.42%/mo rel vs ONEQ (dead names
+# IN; survivorship correction operating - delisted picks observed).
+# THIS prereg asks the one remaining question: does the sleeve beat its OWN
+# benchmark (ONEQ) on the validation fold (2020-01-01..2024-03-31), which nobody
+# has looked at for any NASDAQ-universe strategy?
+hypothesis: H6_nasdaq_cheap_universe
+family: H6_nasdaq_cheap
+kind: hypothesis
+gate_signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"   # Aaron's signing key (must equal REGISTRY gate.signer_fpr)
+literature: >-
+  none - this is a universe-extension diagnostic of the desk's own S3 cheap-10
+  construction (Fama-French value family), NOT a published-signal test.
+  Honesty note: the construction was designed on dev data and already failed to
+  clear multiple-testing control vs SPY.  The prior that it beats ONEQ out of
+  sample is LOW; this read exists to close the "did we only ever check vs SPY?"
+  question with a counted, one-shot answer.
+fold: validation
+window: {lo: "2020-01-01", hi: "2024-03-31"}     # the validation fold, never dev, never holdout
+
+data:
+  universe_rosters: universe/nasdaq_watchlist.txt + universe/nasdaq_dead_roster.json (validation fold copies; EODHD artifact rows excluded)
+  membership: >-
+    APPROXIMATION (documented) - a name is a member at D iff it is on a roster
+    AND its bars cover D within 10 calendar days (dead bars end at delist, live
+    bars start at IPO).  No PIT membership intervals exist for NASDAQ; the S&P
+    arm of any comparison uses the true PIT intervals.
+  prices: folds/validation/raw/price (+dead tier), EODHD adjusted_close for dead names (23 LOW-TRUST vendor-junk files treated as missing per OPERATIONS.md)
+  facts: >-
+    folds/validation/facts/nasdaq + facts/nasdaq_dead (DERA Financial Statement
+    Data Sets layer, commit e9151dd; start synthesized end-qtrs*91d; EPS uom
+    remapped USD->USD/shares)
+  splits: folds/validation/raw/splits (bug-layer-3 basis correction)
+  benchmarks: ONEQ (primary, tradeable NASDAQ-100 total-return proxy, a-field) and SPY (secondary)
+
+signal:
+  construction: >-
+    S3 CONTROL verbatim from scripts/walkforward.py (commit at the code freeze):
+    top-10 eligible NASDAQ-roster names by EPS-basis P/E (px as-traded, per-entry
+    split-basis correction), monthly rebalance, no filters, equal weight.
+  eligibility: candidate_value gates verbatim (EPS>0, NI>0, P/E in [1,500], TTM freshness, split-mix guard)
+
+variants:                                          # the WHOLE budget - no other variant may be run
+  primary_oneq: benchmark ONEQ, cost 20bps/side
+  secondary_spy: benchmark SPY, cost 20bps/side (reported, does not decide)
+
+execution:
+  rebalance: monthly (first trading day), N=10, equal weight
+  costs: primary 20bps/side (desk convention); STRESS check at 40bps/side (small-cap floor from ops/edge_plan.md P3) reported alongside
+  held_return_basis: total-return ratio a(d1)/a(d0) (bug-layer-6 semantics)
+
+primary_metric:
+  definition: mean monthly (S3 - ONEQ) return over the granted window's monthly intervals, from the walkforward ledger, at 20bps/side
+  inference: Newey-West(1) t-statistic on the monthly rel series (month-clustered)
+
+pass_bar:
+  - mean rel > 0 at 20bps
+  - NW(1) t >= 2.0
+  - mean rel > 0 at 40bps/side (stress)
+kill_bar:
+  - NW(1) t <= 0  -> the NASDAQ-universe sleeve is dead, recorded, no re-test
+  - any pass_bar failure short of outright kill -> "no edge established", recorded
+
+report_also: maxDD, Sharpe, hit rate, churn, mean rel vs SPY (secondary), rel vs IXIC (descriptive only), era table (2020 / 2021 / 2022 / 2023-24), and the same-window S&P-universe S3-vs-SPY rel for context
+
+honesty_caveats:
+  - one preregistered read; family H6_nasdaq_cheap gets at most MAX_VALIDATION_READS validation reads ever (fold_gate chain-enforced)
+  - membership is an approximation (no NASDAQ PIT intervals)
+  - the dead tier's pre-2015 depth is thin (EODHD tier depth); 2020-24 is well covered
+  - rules designed on dev data; publication-decay logic applies to value factors
+  - n = ~51 monthly intervals
