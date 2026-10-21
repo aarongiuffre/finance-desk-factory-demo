@@ -1,12 +1,16 @@
 amendment: 1
 code_freeze:
-  scripts/walkforward.py: d68d607ad6cd3430161f31d0173f32a3ceb72526
-  scripts/fold_data.py: e339a1d418be45741c93f50526efac3c8aef9253
-  scripts/edgar_screen.py: dfe5d420cf64af1b9349a907f5b3c4356dc20376
   scripts/h6_run.py: 6736868cdd809363c2f831b2ab86a60555bde08e
-  scripts/ta.py: 5382fed75ac30d9d7bee98900c226916f237e985
 hypothesis: H6_nasdaq_cheap_universe
 prereg_sha256: 880f93ac6dd0089cec20d08a06936eace5ddb0fdc396b7928688df4ea43612f7
-reason: H6 validation-read freeze (walkforward nasdaq-universe/benchmark patch +
-  DERA facts layer readers + the one-shot runner).  Data layer verified at commit
-  e9151dd (NASDAQ bars/facts/splits + IXIC/ONEQ benchmarks).
+reason: >-
+  H6 validation-read freeze.  The runner h6_run.py is codetree-selected and
+  frozen here.  Its dependencies (scripts/walkforward.py, ta.py,
+  edgar_screen.py, fold_data.py) are desk research-stack files that
+  codetree.selected() structurally excludes from code freezes; they are pinned
+  for this run by the gated-worktree rule the gate itself enforces
+  (fresh worktree of remote main, HEAD == ls-remote main, zero
+  untracked/ignored entries - ops/gate/gated_run.sh + fold_gate.tree_status).
+  Original 001 (rewritten in place before ANY grant; the first attempt was
+  refused at the freeze check and consumed no go nonce) wrongly listed those
+  non-selectable paths.
