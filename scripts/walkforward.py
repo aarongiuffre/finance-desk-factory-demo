@@ -573,6 +573,9 @@ def main():
     ap.add_argument("--benchmark", choices=["SPY", "ONEQ", "IXIC"], default="SPY",
                     help="rel-vs benchmark bars (ONEQ = tradeable NASDAQ-100 TR proxy "
                          "preferred for nasdaq-universe arms; IXIC is price-only)")
+    ap.add_argument("--min-price", type=float, default=0.0,
+                    help="eligibility floor on the as-traded close at D (junk-tail "
+                         "rescue test; 0 = off)")
     args = ap.parse_args()
     import fold_data
     import fold_gate
@@ -662,6 +665,8 @@ def main():
                 continue
             px_raw = last_close_at(bars, d)   # as-traded close (c), not div-adjusted a
             if not px_raw or px_raw <= 0:
+                continue
+            if px_raw < args.min_price:
                 continue
             # as-traded basis: undo forward splits effective AFTER d
             px = px_raw * split_factor_after(t, d)
