@@ -684,16 +684,17 @@ def sandbox_ready(hypothesis):
     if go_required("dev") and not g.get("go_sha"):
         return False, "the dev grant carries no go file (require_go_file.dev)", None
     want, why = prereg_slice_sha(hypothesis)
-    if want is None:
-        return False, why, None
-    if want != pins.get("price_slice_sha256"):
-        return False, "prereg slice sha differs from the host's preflight", None
-    import fold_data
-    try:
-        for rel in fold_data.SLICES:
-            _, sha = fold_data.checked_slice(fold_data.copy_root("dev"), "dev", rel, expected=want)
-    except fold_data.FoldDataError as e:
-        return False, str(e), None
+    if want is not None:
+        # preregs that pin a materialized price slice (H1) verify it here;
+        # preregs that read the dev fold wholesale (H6) have no slice pin
+        if want != pins.get("price_slice_sha256"):
+            return False, "prereg slice sha differs from the host's preflight", None
+        import fold_data
+        try:
+            for rel in fold_data.SLICES:
+                _, sha = fold_data.checked_slice(fold_data.copy_root("dev"), "dev", rel, expected=want)
+        except fold_data.FoldDataError as e:
+            return False, str(e), None
     return True, "ok", w
 
 

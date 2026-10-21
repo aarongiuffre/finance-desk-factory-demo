@@ -145,14 +145,17 @@ def preflight(hypothesis=H1, run=None):
     if not ok:
         raise HostError(why)
     want, why = fold_gate.prereg_slice_sha(hypothesis)
-    if want is None:
-        raise HostError(why)
-    sha = None
-    for rel in fold_data.SLICES:
-        try:
-            _, sha = fold_data.checked_slice(fold_data.copy_root("dev"), "dev", rel, expected=want)
-        except fold_data.FoldDataError as e:
-            raise HostError(str(e)) from None
+    sha = ""
+    slice_pin = ""
+    if want is not None:
+        # preregs that pin a materialized price slice (H1) verify it here;
+        # preregs that read the dev fold wholesale (H6) have no slice pin
+        for rel in fold_data.SLICES:
+            try:
+                _, sha = fold_data.checked_slice(fold_data.copy_root("dev"), "dev", rel, expected=want)
+            except fold_data.FoldDataError as e:
+                raise HostError(str(e)) from None
+        slice_pin = fold_data.slice_pin("dev", fold_data.SLICES[0])
     try:
         recs = fold_gate._read_log()
         auth, _ = fold_gate._authorize(hypothesis, "dev", st, recs, remote)
@@ -160,8 +163,8 @@ def preflight(hypothesis=H1, run=None):
         raise HostError(str(e)) from None
     pins = {"v": 1, "hypothesis": hypothesis, "commit": commit, "tree": pin["tree"] if pin else "",
             "remote_sha": remote, "prereg_path": st["path"], "prereg_sha": st["sha"],
-            "prereg_commit": st["commit"], "price_slice_sha256": want, "slice_sha": sha,
-            "slice_pin": fold_data.slice_pin("dev", fold_data.SLICES[0]),
+            "prereg_commit": st["commit"], "price_slice_sha256": want or "", "slice_sha": sha,
+            "slice_pin": slice_pin,
             "freeze_sha": auth["freeze_sha"], "freeze_amendment": auth["freeze_amendment"],
             "go_sha": auth.get("go_sha", ""), "go_trial": auth.get("go_trial"),
             "go_max_trials": auth.get("go_max_trials")}

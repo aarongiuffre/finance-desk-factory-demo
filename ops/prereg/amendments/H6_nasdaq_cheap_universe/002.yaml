@@ -1,0 +1,15 @@
+amendment: 2
+code_freeze:
+  scripts/h6_run.py: 6736868cdd809363c2f831b2ab86a60555bde08e
+  scripts/h6_dev_run.py: 36bc001b7360ee3a7c422ca74f92b66d9da3fd12
+hypothesis: H6_nasdaq_cheap_universe
+prereg_sha256: 880f93ac6dd0089cec20d08a06936eace5ddb0fdc396b7928688df4ea43612f7
+reason: >-
+  H6 dev-phase freeze: adds h6_dev_run.py (the sandboxed dev runner required by
+  the gate's dev-first rule) alongside the validation runner.  Prereg unchanged.
+  Gate-infrastructure generalization in the same push: fold_gate.sandbox_ready +
+  sandbox_host.preflight now treat the prereg slice pin as conditional (H1 keeps
+  its materialized-slice verification; preregs that read the dev fold wholesale,
+  like H6, have no slice pin and skip it).  walkforward.py / ta.py /
+  edgar_screen.py / fold_data.py remain pinned by the gated-worktree and
+  code-archive rules (whole-tree pin of remote main), not by this freeze.
