@@ -498,7 +498,7 @@ def report_block(name, monthly, spy, labels, per_year=12):
         return f"{name}: no data"
     h1, h2 = monthly[:len(monthly) // 2], monthly[len(monthly) // 2:]
     s1, s2 = stats(h1, spy[:len(h1)], per_year), stats(h2, spy[len(monthly) // 2:], per_year)
-    unit = "mo" if per_year == 12 else "wk"
+    unit = {12: "mo", 52: "wk", 26: "biwk", 4: "qtr"}.get(per_year, f"{per_year}th")
     up = [a for a, b, lab in zip(monthly, spy, labels) if lab == "up"]
     dn = [a for a, b, lab in zip(monthly, spy, labels) if lab == "down"]
     up_s = f"{statistics.mean(up)*100:+.1f}%/{unit} (n={len(up)})" if up else "n/a"
@@ -529,8 +529,10 @@ def main():
                     help="S4/S5 quality gate: quarterly-EPS-beat median position "
                          "in [0,1] over trailing 3y (0=off, 0.5=top half)")
     ap.add_argument("--tag", default="")
-    ap.add_argument("--cadence", choices=["monthly", "weekly"], default="monthly",
-                    help="weekly = re-rank every Monday (tests price-churn cadence)")
+    ap.add_argument("--cadence", choices=["monthly", "weekly", "biweekly", "quarterly"],
+                    default="monthly",
+                    help="weekly/biweekly = re-rank every (other) Monday (price-churn test); "
+                         "quarterly = first trading day of each calendar quarter")
     args = ap.parse_args()
     import fold_data
     import fold_gate
@@ -559,11 +561,17 @@ def main():
         return 1
 
     # rebalance dates: first trading day of each month in window
-    # (weekly cadence: every Monday in the window — price-driven churn test)
+    # (weekly/biweekly: every/alternate Monday — price-churn cadence test;
+    #  quarterly: first trading day of each calendar quarter)
     rb, seen = [], set()
-    if args.cadence == "weekly":
+    if args.cadence in ("weekly", "biweekly"):
+        mondays = [d for d in days if d.weekday() == 0]
+        rb = mondays if args.cadence == "weekly" else mondays[::2]
+    elif args.cadence == "quarterly":
         for d in days:
-            if d.weekday() == 0:
+            key = (d.year, (d.month - 1) // 3)
+            if key not in seen:
+                seen.add(key)
                 rb.append(d)
     else:
         for d in days:
@@ -694,7 +702,7 @@ def main():
                 rets[v].append(gross - 2 * (args.cost_bps / 1e4) * turn)
         prev = row
 
-    py = 52 if args.cadence == "weekly" else 12
+    py = {"weekly": 52, "biweekly": 26, "monthly": 12, "quarterly": 4}[args.cadence]
     print()
     print("=" * 78)
     print(f"WALK-FORWARD REPORT  {rb[0]} .. {rb[-1]}  N={args.n}  "
