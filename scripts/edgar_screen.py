@@ -53,10 +53,13 @@ def watchlist():
 
 
 def load(t):
-    p = os.path.join(_data_root(), "facts", f"{t}.json")
-    if not os.path.isfile(p):
-        p = os.path.join(_data_root(), "facts", "dead", f"{t}.json")
-    if not os.path.isfile(p):
+    for name in (f"{t}.json", os.path.join("dead", f"{t}.json"),
+                 os.path.join("nasdaq", f"{t}.json"),
+                 os.path.join("nasdaq_dead", f"{t}.json")):
+        p = os.path.join(_data_root(), "facts", name)
+        if os.path.isfile(p):
+            break
+    else:
         return None
     try:
         return json.load(open(p))

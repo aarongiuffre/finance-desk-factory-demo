@@ -65,7 +65,10 @@ import finpaths  # noqa: E402
 
 CUTOFF = {"dev": "2019-12-31", "validation": "2024-03-31"}
 PRICE_DIRS = ("raw/price", "raw/price/dead", "raw/price/sp_exits")
-FACT_DIRS = ("facts", "facts/dead")
+FACT_DIRS = ("facts", "facts/dead", "facts/nasdaq", "facts/nasdaq_dead")
+# plain JSON universe files copied verbatim into the contained copy (rosters,
+# not PIT tables — NASDAQ membership is approximated from bars at read time)
+UNIVERSE_FILES = ("universe/nasdaq_watchlist.txt", "universe/nasdaq_dead_roster.json")
 JSONL_LAYERS = (("logs/confluence-history.jsonl", "date"), ("universe/lang_shift_signals.jsonl", "filing_date"),
                 ("universe/rf_change_signals.jsonl", "filing_date"))
 ZIP_LAYERS = (DERA_FSDS, DERA_INSIDER) = ("raw/dera_fsds", "raw/dera_insider")
@@ -457,6 +460,11 @@ def build(fold, apply=False, src_root=None):
         w.writerows(rows)
         _write(os.path.join(out, MEMBERSHIP), buf.getvalue().encode(), apply, man, MEMBERSHIP)
         cnt["membership_rows"] = len(rows)
+    for rel in UNIVERSE_FILES:
+        sp = os.path.join(src, rel)
+        if os.path.exists(sp):
+            _write(os.path.join(out, rel), open(sp, "rb").read(), apply, man, rel)
+            cnt[rel] = cnt.get(rel, 0) + 1
     ffd = os.path.join(src, "raw", "ff")
     if os.path.isdir(ffd):
         for fn in sorted(os.listdir(ffd)):

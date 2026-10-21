@@ -87,7 +87,9 @@ def facts_of(t):
     if t not in _FACTS:
         d = None
         for p in (os.path.join(_data_root(), "facts", f"{t}.json"),
-                  os.path.join(_data_root(), "facts", "dead", f"{t}.json")):
+                  os.path.join(_data_root(), "facts", "dead", f"{t}.json"),
+                  os.path.join(_data_root(), "facts", "nasdaq", f"{t}.json"),
+                  os.path.join(_data_root(), "facts", "nasdaq_dead", f"{t}.json")):
             if os.path.isfile(p):
                 try:
                     d = json.load(open(p))
@@ -122,6 +124,37 @@ def member_at(membership, t, d):
         if start and start <= d.isoformat() and (end is None or d.isoformat() < end):
             return True
     return False
+
+
+_UNIVERSE_MODE = "sp500"
+_BENCH = "SPY"
+_BAR_DATES = {}
+
+
+def _bar_dates(t):
+    if t not in _BAR_DATES:
+        bars = bars_of(t)
+        _BAR_DATES[t] = [b["d"] for b in bars] if bars else []
+    return _BAR_DATES[t]
+
+
+def member_at_universe(membership, t, d):
+    """sp500 = PIT intervals; nasdaq = roster + bars cover d (approx)."""
+    if _UNIVERSE_MODE != "nasdaq":
+        return member_at(membership, t, d)
+    if t not in membership:
+        return False
+    ds = _bar_dates(t)
+    if not ds:
+        return False
+    # last bar at/before d must be within 10 calendar days (covers listing
+    # start AND delist end; long halts read as delist+return — documented)
+    import bisect
+    i = bisect.bisect_right(ds, d.isoformat())
+    if i == 0:
+        return False
+    last = datetime.date.fromisoformat(ds[i - 1])
+    return (d - last).days <= 10
 
 
 # ------------------------------------------------------------ PIT fact helpers
@@ -227,7 +260,7 @@ def tech_asof(t, bars, spy_bars, d):
     spy_sl = [b for b in spy_bars if b["d"] <= cut]
     orig = ta_mod.load_bars
     ta_mod.load_bars = lambda tk, _b=sl, _s=spy_sl: (
-        _b if tk == t else _s if tk == "SPY" else [])
+        _b if tk == t else _s if tk == _BENCH else [])
     try:
         tech = ta_mod.compute(t)
     finally:
@@ -425,7 +458,7 @@ def candidate_value(t, d, px=None):
             ev_corr = ev / basis_factor(t, d, ef)
             if ev_corr:
                 impl.append(nv / ev_corr)
-        if impl and max(impl) / min(impl) > 1.25:
+        if impl and min(impl) > 0 and max(impl) / min(impl) > 1.25:
             return None
     # quality trajectory on the corrected basis
     eq_corr = {end: {v / basis_factor(t, d, ef) for v, ef in pairs}
@@ -533,6 +566,13 @@ def main():
                     default="monthly",
                     help="weekly/biweekly = re-rank every (other) Monday (price-churn test); "
                          "quarterly = first trading day of each calendar quarter")
+    ap.add_argument("--universe", choices=["sp500", "nasdaq"], default="sp500",
+                    help="nasdaq = NASDAQ-Composite universe (live + dead rosters); "
+                         "membership approximated by bars-covering-the-date "
+                         "(dead bars end at delist, live bars start at IPO)")
+    ap.add_argument("--benchmark", choices=["SPY", "ONEQ", "IXIC"], default="SPY",
+                    help="rel-vs benchmark bars (ONEQ = tradeable NASDAQ-100 TR proxy "
+                         "preferred for nasdaq-universe arms; IXIC is price-only)")
     args = ap.parse_args()
     import fold_data
     import fold_gate
@@ -552,7 +592,30 @@ def main():
     print(f"[walkforward] data root {fold_data.reader_root()}  end {args.end}", file=sys.stderr)
 
     membership = load_membership()
-    spy_bars = bars_of("SPY")
+    universe_mode = args.universe
+    if args.universe == "nasdaq":
+        # PIT membership APPROXIMATION (documented in the skill): a name is a
+        # member at d iff (a) it is on a NASDAQ roster (live watchlist or the
+        # dead roster — no delist dates exist for the dead tier) and (b) its
+        # bars cover d (a bar within the last 10 calendar days before d).
+        # Dead bars end at delist, live bars start at IPO, so both edges are
+        # implicit in the price files.  Halt gaps >10d read as a delist+return.
+        roster = set()
+        for line in open(os.path.join(_data_root(), "universe", "nasdaq_watchlist.txt")):
+            if line.strip():
+                roster.add(line.strip().upper())
+        with open(os.path.join(_data_root(), "universe", "nasdaq_dead_roster.json")) as fh:
+            for e in json.load(fh):
+                t = (e.get("ticker") or "").upper()
+                # EODHD roster artifacts (e.g. 'FILE CREATION TIME: ...' rows)
+                # must not become pseudo-tickers
+                if t and t.replace("-", "").replace(".", "").isalnum():
+                    roster.add(t)
+        membership = {t: [("", None)] for t in roster}
+        print(f"[walkforward] nasdaq universe: {len(roster)} roster names "
+              "(membership = bars cover the date)", file=sys.stderr)
+    bench = args.benchmark
+    spy_bars = bars_of(bench)
     spy_by_date = {b["d"]: b["a"] for b in spy_bars}
     days = [datetime.date.fromisoformat(b["d"])
             for b in spy_bars if args.start <= b["d"] <= args.end]
@@ -584,12 +647,15 @@ def main():
     print(f"walk-forward: {rb[0]} .. {rb[-1]}  ({len(rb)} {args.cadence} rebalances, "
           f"N={args.n}, cost {args.cost_bps}bps/side)", flush=True)
 
+    global _UNIVERSE_MODE, _BENCH
+    _UNIVERSE_MODE = args.universe
+    _BENCH = args.benchmark
     all_tickers = sorted(set(list(membership) + list(watchlist_lib.read_watchlist())))
     rows = []
     for i, d in enumerate(rb, 1):
         eligible = []
         for t in all_tickers:
-            if not member_at(membership, t, d):
+            if not member_at_universe(membership, t, d):
                 continue
             bars = bars_of(t)
             if not bars or len([b for b in bars if b["d"] <= d.isoformat()]) < 30:
@@ -670,9 +736,9 @@ def main():
             spy_sl = [b for b in spy_bars if b["d"] <= d1]
             spy_tech = None
             orig = ta_mod.load_bars
-            ta_mod.load_bars = lambda tk, _s=spy_sl: (_s if tk == "SPY" else [])
+            ta_mod.load_bars = lambda tk, _s=spy_sl: (_s if tk == _BENCH else [])
             try:
-                spy_tech = ta_mod.compute("SPY")
+                spy_tech = ta_mod.compute(_BENCH)
             finally:
                 ta_mod.load_bars = orig
             labels.append("up" if (spy_tech or {}).get("vs200", 0) > 0 else "down")
@@ -708,7 +774,7 @@ def main():
     print(f"WALK-FORWARD REPORT  {rb[0]} .. {rb[-1]}  N={args.n}  "
           f"cost {args.cost_bps}bps/side  rebalance {args.cadence}")
     print("=" * 78)
-    print(f"SPY:    CAGR {stats(spy_r, spy_r, py).get('cagr', 0)*100:+6.1f}%  "
+    print(f"{bench}:    CAGR {stats(spy_r, spy_r, py).get('cagr', 0)*100:+6.1f}%  "
           f"(costless benchmark)")
     for v in variants:
         label = {"S1": "S1 clean+uptrend, top-N P/E",
