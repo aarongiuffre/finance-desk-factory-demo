@@ -85,10 +85,12 @@ def main():
         lo, hi = ((0.03, 0.30) if k == "SPY" else (-0.50, 0.60))
         if not (lo < c < hi):
             fails.append(f"{k} CAGR {c:.1%} outside ({lo:.0%}, {hi:.0%})")
-    if os.path.exists(REF) and os.path.abspath(REF) != os.path.abspath(path) and cad == "monthly":
-        # REF (bug6-full) is a monthly 2026-window run: SPY-return and pick
-        # overlap comparisons are only meaningful for monthly ledgers on the
-        # same date grid (cadence-study arms differ by construction).
+    if (os.path.exists(REF) and os.path.abspath(REF) != os.path.abspath(path)
+            and cad == "monthly" and p.get("universe", "sp500") == "sp500"):
+        # REF (bug6-full) is a monthly 2026-window S&P-universe run: SPY-return
+        # and pick overlap comparisons are only meaningful for monthly S&P
+        # ledgers on the same date grid (other cadences/universes differ by
+        # construction; nasdaq arms overlap ~6-10% legitimately).
         _, ref = load(REF)
         rd = {r["date"]: r for r in ref}
         shared = [r for r in rebs if r["date"] in rd]
