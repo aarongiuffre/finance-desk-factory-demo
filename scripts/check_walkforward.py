@@ -28,11 +28,14 @@ def load(path):
     return rows[0], rows[1:]
 
 
-def cagr(rets, months):
+def cagr(rets, months, per_year=12):
     v = 1.0
     for r in rets:
         v *= 1 + r
-    return v ** (12 / months) - 1 if months else float("nan")
+    return v ** (per_year / months) - 1 if months else float("nan")
+
+
+PY = {"monthly": 12, "weekly": 52, "biweekly": 26, "quarterly": 4}
 
 
 def main():
@@ -47,12 +50,18 @@ def main():
     hdr, rebs = load(path)
     p = hdr.get("params", {})
     info["params"] = p
-    for k, v in (("n", 10), ("cost_bps", 20.0), ("cadence", "monthly")):
+    cad = p.get("cadence", "monthly")
+    py = PY.get(cad, 12)
+    # fixed-config check applies to the weekly repro job (tag weekly-*); the
+    # cadence-study ledgers legitimately vary cadence (2026-10-21 curve).
+    for k, v in (("n", 10), ("cost_bps", 20.0)):
         if p.get(k) != v:
             fails.append(f"param {k}={p.get(k)!r} != {v!r}")
+    if p.get("tag", "").startswith("weekly-") and cad != "monthly":
+        fails.append(f"weekly-* repro job must be monthly, got {cad!r}")
     info["rebalances"] = len(rebs)
     dev_only = bool(rebs) and max(r["date"] for r in rebs) <= "2019-12-31"
-    min_rebs = 45 if dev_only else 129       # dev-period weekly run (2016-01..2019-12) since 2026-10-18
+    min_rebs = int(py * 3.5) if dev_only else 129  # ~3.5y of intervals
     info["dev_only"] = dev_only
     if len(rebs) < min_rebs:
         fails.append(f"only {len(rebs)} rebalances (< {min_rebs})")
@@ -71,12 +80,15 @@ def main():
                 series[k].append(v)
     info["cagr"] = {}
     for k, s in series.items():
-        c = cagr(s, len(s))
+        c = cagr(s, len(s), py)
         info["cagr"][k] = round(c * 100, 2)
         lo, hi = ((0.03, 0.30) if k == "SPY" else (-0.50, 0.60))
         if not (lo < c < hi):
             fails.append(f"{k} CAGR {c:.1%} outside ({lo:.0%}, {hi:.0%})")
-    if os.path.exists(REF) and os.path.abspath(REF) != os.path.abspath(path):
+    if os.path.exists(REF) and os.path.abspath(REF) != os.path.abspath(path) and cad == "monthly":
+        # REF (bug6-full) is a monthly 2026-window run: SPY-return and pick
+        # overlap comparisons are only meaningful for monthly ledgers on the
+        # same date grid (cadence-study arms differ by construction).
         _, ref = load(REF)
         rd = {r["date"]: r for r in ref}
         shared = [r for r in rebs if r["date"] in rd]
