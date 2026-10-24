@@ -351,3 +351,19 @@ def test_numpy_edge_harness_pricestore_load_and_synthetic_dev_smoke(tmp_path):
     _save("smoke_synthetic", out)
     assert out["run_dir_under_synthetic_root"] and out["sandbox_RUN_logs"] == []
     assert store.slice_shas() == {sl: sha}
+
+
+# ------------------------------------------------- H6: the walkforward closure imports inside
+def test_h6_walk_closure_imports_inside():
+    """H6 dev phase (amendment 002) runs walkforward INSIDE the sandbox against folds/dev.
+    The trial-1 dev grant (2026-10-24) was consumed by ModuleNotFoundError: walkforward -
+    the archive predates the H6 runner.  This probe keeps smoke (grant-free) in front of
+    every future grant: if the closure ever falls out of codetree.ALLOW, smoke fails here
+    instead of a real trial dying in the bubble."""
+    import edgar_facts  # noqa: F401
+    import edgar_screen  # noqa: F401
+    import ta  # noqa: F401
+    import walkforward  # noqa: F401
+    import watchlist_lib  # noqa: F401
+    assert os.path.realpath(walkforward.__file__).startswith(os.path.realpath(os.path.dirname(os.path.dirname(
+        os.path.realpath(__file__))))), "walkforward imported from outside the code archive"

@@ -42,7 +42,18 @@ ALLOW = ("scripts/chainlog.py", "scripts/codetree.py", "scripts/edge_harness.py"
          "scripts/fold_data.py", "scripts/fold_gate.py", "scripts/witness.py", "scripts/sandbox_host.py",
          "scripts/sandbox_smoke.py", "scripts/h1_guard.py", "scripts/h1_run.py",
          "tests/conftest.py", "tests/_edge_synth.py", "tests/_gate_env.py", "tests/test_zz_sandbox_inside.py",
-         "ops/gate/h1_sandbox.sh", "ops/gate/h6_sandbox.sh", "pytest.ini")
+         "ops/gate/h1_sandbox.sh", "ops/gate/h6_sandbox.sh", "pytest.ini",
+         # H6 dev phase (amendment 002): the walkforward engine runs INSIDE the sandbox
+         # against folds/dev; its import closure is analysis code with no corporate-event
+         # data (post-2019 mentions are docstrings/CLI defaults only - re-checked when
+         # this line was added).  test_zz_sandbox_inside imports it, which keeps the
+         # S1 closure test enforcing this list.
+         "scripts/walkforward.py", "scripts/edgar_screen.py", "scripts/edgar_facts.py",
+         "scripts/ta.py", "scripts/watchlist_lib.py",
+         # edgar_facts' import closure: fetch/UA/CIK helpers + the SEC rate limiter.
+         # Network code only (sandbox is unshare-net; import must stay side-effect-free),
+         # no corporate-event data.
+         "scripts/edgar_pull.py", "scripts/sec_throttle.py")
 ALLOW_RE = re.compile(r"scripts/(h[0-9]+|insider)_[A-Za-z0-9_]+\.py")
 INCLUDE = ALLOW + ("ops/prereg/",)               # recorded in the pin
 # Everything below holds (or lists) post-2019 data and never enters the sandbox.
