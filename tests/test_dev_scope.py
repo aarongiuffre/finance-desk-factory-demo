@@ -34,6 +34,8 @@ H1_FOLDER_ALLOW = {"scripts/fold_data.py", "scripts/eodhd_final_pull.py", "ops/c
                    # H1 sandbox (Verifier v4): the launcher + its outside helper, and the tests that
                    # prove the full folder is ENOENT inside
                    "ops/gate/h1_sandbox.sh", "scripts/sandbox_host.py", "tests/test_h1_sandbox.py",
+                   "ops/gate/h6_sandbox.sh",                     # H6 dev-phase launcher: same class,
+                                                                 # conditionally re-verifies the H1 slice pin
                    "tests/test_zz_sandbox_inside.py",
                    "tests/test_staged_encrypt.py",                   # stub root for encrypt_full_period.sh
                    # v5 C-E2: moves the folder onto its own never-snapshotted dataset (+ its stub test)

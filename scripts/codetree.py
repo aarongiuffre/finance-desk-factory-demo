@@ -42,7 +42,7 @@ ALLOW = ("scripts/chainlog.py", "scripts/codetree.py", "scripts/edge_harness.py"
          "scripts/fold_data.py", "scripts/fold_gate.py", "scripts/witness.py", "scripts/sandbox_host.py",
          "scripts/sandbox_smoke.py", "scripts/h1_guard.py", "scripts/h1_run.py",
          "tests/conftest.py", "tests/_edge_synth.py", "tests/_gate_env.py", "tests/test_zz_sandbox_inside.py",
-         "ops/gate/h1_sandbox.sh", "pytest.ini")
+         "ops/gate/h1_sandbox.sh", "ops/gate/h6_sandbox.sh", "pytest.ini")
 ALLOW_RE = re.compile(r"scripts/(h[0-9]+|insider)_[A-Za-z0-9_]+\.py")
 INCLUDE = ALLOW + ("ops/prereg/",)               # recorded in the pin
 # Everything below holds (or lists) post-2019 data and never enters the sandbox.
