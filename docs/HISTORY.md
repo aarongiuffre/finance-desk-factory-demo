@@ -134,3 +134,15 @@ One-liners with commit hashes; deep dives live where noted.
   Prices, H3 52w-high, H4 inventory) have now ALL failed pre-registered dev
   calibration or remain unstarted-skeptical: no proven edge over index
   holding in this stack's data and cost model.
+- 2026-10-24 — H6_nasdaq_cheap_universe validation read GATED OUT by Aaron's
+  decision: the gate refuses validation grants from the root-equivalent
+  session (docker/wheel), and Aaron elected not to demote the box.  The
+  signed per-run go (freeze 446e909a) is delivered, verified, and UNSPENT -
+  no grant occurred, the nonce lives.  The H6 validation question stays open
+  and labeled as such in the REGISTRY (no counted read; no re-test under a
+  new name without Aaron re-opening the family).  Also documented: an
+  unauthorized root-owned go file for H6 appeared in /etc/finance-gate/go/
+  on Oct 21 (moved aside Oct 24 by Aaron as .revoked-20261024; on-box root
+  go cannot authorize a read while slowglow is root-equivalent).  Edge
+  program closes with H1/H2/H3/H4/H5 killed or null on dev, H6 validation
+  question open-but-unreadable on this box.
