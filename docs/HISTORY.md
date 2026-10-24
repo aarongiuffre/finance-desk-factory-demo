@@ -146,3 +146,12 @@ One-liners with commit hashes; deep dives live where noted.
   go cannot authorize a read while slowglow is root-equivalent).  Edge
   program closes with H1/H2/H3/H4/H5 killed or null on dev, H6 validation
   question open-but-unreadable on this box.
+- 2026-10-24 — H1 slice manifest restored to its pinned bytes.  Grok's
+  Oct-21 window (05:00-12:00) re-serialized
+  folds/dev/raw/price/h1_universe/MANIFEST.json: all 6,877 price-file shas
+  byte-identical, only the "built" timestamp refreshed (2026-10-18 ->
+  2026-10-21T11:44:40-04:00), which broke the slice pin sha
+  (fc8f700fbee8666e) and made the h1/h6 sandbox smokes fail.  Manifest
+  restored verbatim from the hourly-202610210400 ZFS snapshot (sha
+  re-verified == pin; data unchanged).  Both sandbox smokes SMOKE PASS
+  again.  No data mutation; bookkeeping repair only.
