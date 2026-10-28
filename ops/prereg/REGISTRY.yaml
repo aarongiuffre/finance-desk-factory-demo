@@ -310,3 +310,83 @@ families:
                                # family re-run clean.  Evidence logs/edge/Eq_alpha101_batch/.
     kind: hypothesis
     hypotheses: [Eq_alpha101_batch]
+  F151_3_2_earnings_mom:       # Soper FULL-151 Ch3: book 3.2 earnings momentum (SUE)
+    retired: true              # PIT EDGAR EPS layer (first-filed 10-Q quarters, Q4 derived
+                               # at the 10-K date), decile/quintile DN monthly + 3/6-mo holds.
+                               # KILLED at tune 2026-10-28: 0/4 - best net Sharpe -0.42
+                               # (sue_decile_m); hold cells die G4 too (10/5 episodes vs
+                               # 12/6 floors).  Prereg 7d573f9 BEFORE any run.  Evidence
+                               # logs/edge/F151_3_2_earnings_mom/.
+    kind: hypothesis
+    hypotheses: [F151_3_2_earnings_mom]
+  F151_3_3_value:              # Soper FULL-151 Ch3: book 3.3 value (B/P deciles)
+    retired: true              # StockholdersEquity / (close x derived diluted shares),
+                               # monthly + 3-mo hold.  KILLED at tune 2026-10-28: 0/3 -
+                               # best net Sharpe -0.07 (bp_decile_hold3), all fail G2+G5.
+                               # Evidence logs/edge/F151_3_3_value/.
+    kind: hypothesis
+    hypotheses: [F151_3_3_value]
+  F151_3_6_multifactor:        # Soper FULL-151 Ch3: book 3.6 multifactor (momentum+value)
+    retired: true              # rank-average (Eqs 276-277) + uniform and 1/sigma sleeve
+                               # blends.  KILLED at tune 2026-10-28: 0/3 - best net Sharpe
+                               # -0.36 (blend_uniform).  Evidence
+                               # logs/edge/F151_3_6_multifactor/.
+    kind: hypothesis
+    hypotheses: [F151_3_6_multifactor]
+  F151_3_10_mr_wreg:           # Soper FULL-151 Ch3: book 3.10 mean-reversion weighted reg
+    retired: true              # Omega=[1,SPY,sector-ETF betas] (XLC dropped, no pre-2018-06
+                               # bars), z=1/sigma^2, daily DN residual MR.  KILLED at tune
+                               # 2026-10-28: 0/3 - net Sharpe -22.4 to -35.3, cost death as
+                               # the prereg predicted.  Evidence logs/edge/F151_3_10_mr_wreg/.
+    kind: hypothesis
+    hypotheses: [F151_3_10_mr_wreg]
+  F151_3_11_single_ma:         # Soper FULL-151 Ch3: book 3.11 single moving average
+    retired: true              # SPY P vs SMA50/100/200 + EMA(50,0.9) + xs SMA50 DN (windows
+                               # exclude the current price per Eqs 319-321).  KILLED at tune
+                               # 2026-10-28: 0/5 - best net Sharpe 0.30 (spy_sma200, fails
+                               # G2+G5).  Evidence logs/edge/F151_3_11_single_ma/.
+    kind: hypothesis
+    hypotheses: [F151_3_11_single_ma]
+  F151_3_13_three_ma:          # Soper FULL-151 Ch3: book 3.13 three moving averages
+    retired: true              # SPY 3/10/21 + 10/50/200 + xs variant.  KILLED at tune
+                               # 2026-10-28: 0/3 - best net Sharpe -0.11.  Evidence
+                               # logs/edge/F151_3_13_three_ma/.
+    kind: hypothesis
+    hypotheses: [F151_3_13_three_ma]
+  F151_3_14_support_resist:    # Soper FULL-151 Ch3: book 3.14 support/resistance pivots
+    retired: true              # prior-day pivot C=(H+L+C)/3, R=2C-PL, S=2C-PH state machine
+                               # (same-row pivots make exits unreachable - caught and fixed
+                               # pre-final-pass).  KILLED at tune 2026-10-28: 0/2 - spy_pivot
+                               # net Sharpe -1.42 at 421 flips (churn as prereg predicted).
+                               # Evidence logs/edge/F151_3_14_support_resist/.
+    kind: hypothesis
+    hypotheses: [F151_3_14_support_resist]
+  F151_3_15_channel:           # Soper FULL-151 Ch3: book 3.15 channel (Donchian)
+    retired: true              # stop-and-reverse on T=20/55 bands (window excludes current
+                               # price per Eqs 329-331).  KILLED at tune 2026-10-28: 0/4 -
+                               # best net Sharpe -0.003 (spy_don55).  Evidence
+                               # logs/edge/F151_3_15_channel/.
+    kind: hypothesis
+    hypotheses: [F151_3_15_channel]
+  F151_3_5_iv:                 # Soper FULL-151 Ch3: book 3.5 implied volatility
+    blocked: true              # BLOCKED 2026-10-28: no free historical per-stock call/put
+                               # IV source (CBOE DataShop/ORATS/OptionMetrics paid; Yahoo
+                               # serves only current chains).  Same data wall as W2d_skew.
+                               # Nothing run.  Evidence logs/edge/F151_3_5_iv/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_3_5_iv]
+  F151_3_16_ma_event:          # Soper FULL-151 Ch3: book 3.16 event-driven M&A
+    blocked: true              # BLOCKED 2026-10-28: no structured historical M&A deals feed
+                               # (announcement dates, terms, outcomes); EDGAR filings are
+                               # unstructured prose - term extraction is a research project,
+                               # not a data pull.  Nothing run.  Evidence
+                               # logs/edge/F151_3_16_ma_event/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_3_16_ma_event]
+  F151_3_19_mm:                # Soper FULL-151 Ch3: book 3.19 market-making
+    blocked: true              # BLOCKED 2026-10-28 (HFT): bid-ask capture needs order-book/
+                               # intraday NBBO tape + queue modeling; the edge does not
+                               # exist in daily bars.  Evidence
+                               # logs/edge/F151_3_19_mm/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_3_19_mm]
