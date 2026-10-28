@@ -166,7 +166,7 @@ def t_momentum_mutant():
 check("momentum_decision_early_mutant", t_momentum_mutant)
 
 
-# 11. borrow charged on short notional only
+# 11. borrow charged on short notional only; costs only on reset days
 def t_borrow():
     p = _synth_panel()
     out = L.momentum_engine(p, 1, mode="ls")
@@ -175,9 +175,14 @@ def t_borrow():
     gross = (W * r).sum(axis=1)
     dW = W.diff().abs()
     dW.iloc[0] = W.iloc[0].abs()
+    reb = L.month_ends(p["cal_ext"])
+    mask = pd.Series([k == 0 or p["cal"][k - 1] in set(reb)
+                      for k in range(len(p["cal"]))], index=p["cal"])
+    cost = dW.where(mask, 0.0).sum(axis=1) * 20.0 / 1e4
     borrow = W.clip(upper=0).abs().sum(axis=1) * 100.0 / 1e4 / 252.0
-    want = gross - dW.sum(axis=1) * 20.0 / 1e4 - borrow
+    want = gross - cost - borrow
     assert np.allclose(out["pnl"].to_numpy(), want.to_numpy())
+    assert out["trades"] <= len(reb) + 1  # reset days, not drift days
 
 
 check("momentum_borrow", t_borrow)

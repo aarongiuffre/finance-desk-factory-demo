@@ -72,7 +72,9 @@ REGIONS = {
              "PHXRSA", "DNXRSA"],
     "south": ["ATXRSA", "DAXRSA", "MIXRSA", "TPXRSA", "CRXRSA"],
     "midwest": ["CHXRSA", "MNXRSA"],
-    "northeast": ["BOSXRSA", "NYXRSA", "WDXRSA"],
+    "northeast": ["BOXRSA", "NYXRSA", "WDXRSA"],  # BOXRSA = Boston (FRED ID;
+    # the prereg list wrote BOSXRSA - same Boston Case-Shiller series, ID
+    # corrected against the FRED series page 2026-10-28)
 }
 
 
@@ -132,18 +134,23 @@ def _drifted_weights(reb, targets, cal, r):
     """W (cal x n) with buy-and-hold DRIFT between monthly resets: the book's
     weights compound with realized returns, and are reset to target the
     session AFTER each month-end decision date (decision at close t-1).  This
-    is what makes each monthly rebalance a real trade (|target - drifted|)."""
+    is what makes each monthly rebalance a real trade (|target - drifted|).
+    Returns (W, reset_mask): reset_mask marks entry + reset days - the only
+    days that carry trade cost."""
     cols = list(targets.columns)
     W = pd.DataFrame(0.0, index=cal, columns=cols)
+    reset_mask = pd.Series(False, index=cal)
     reb_set = set(reb)
     ti = np.searchsorted(reb.values, cal.values, side="left") - 1
     cur = targets.iloc[ti[0]].to_numpy() if ti[0] >= 0 \
         else np.zeros(len(cols))
     W.iloc[0] = cur
+    reset_mask.iloc[0] = True
     for k in range(1, len(cal)):
         if cal[k - 1] in reb_set:
             cur = targets.iloc[ti[k]].to_numpy() if ti[k] >= 0 \
                 else np.zeros(len(cols))
+            reset_mask.iloc[k] = True
         else:
             rprev = r[cols].iloc[k - 1].to_numpy()
             gross_ret = float(np.dot(cur, rprev))
@@ -153,22 +160,29 @@ def _drifted_weights(reb, targets, cal, r):
                 cur = cur * (1.0 + rprev) / denom
             # else: carry weights (degenerate return day)
         W.iloc[k] = cur
-    return W
+    return W, reset_mask
 
 
-def _book_metrics(W, r, names=None, borrow=False, cost_mult=1.0):
-    """Common book accounting: gross, costs on |dW| (entry from flat), optional
-    borrow on short notional, trades, single-episode or monthly episode gross."""
+def _book_metrics(W, r, names=None, borrow=False, cost_mult=1.0,
+                  reset_mask=None):
+    """Common book accounting: gross; costs on |dW| ONLY on reset days (entry
+    + resets to target - drift days are not trades and carry no cost, per the
+    prereg cost rule); optional borrow on short notional; trades = reset days
+    with nonzero |dW|; single-episode gross."""
     cols = names if names is not None else list(W.columns)
     gross = (W[cols] * r[cols]).sum(axis=1)
     dW = W[cols].diff().abs()
     dW.iloc[0] = W[cols].iloc[0].abs()
-    cost = dW.sum(axis=1) * SIDE_BPS / 1e4 * cost_mult
+    if reset_mask is not None:
+        cost = dW.where(reset_mask, 0.0).sum(axis=1) * SIDE_BPS / 1e4 * cost_mult
+        trades = int(((dW.sum(axis=1) > 1e-9) & reset_mask).sum())
+    else:
+        cost = dW.sum(axis=1) * SIDE_BPS / 1e4 * cost_mult
+        trades = int((dW.sum(axis=1) > 1e-9).sum())
     pnl = gross - cost
     if borrow:
         pnl = pnl - (W[cols].clip(upper=0.0).abs().sum(axis=1)
                      * BORROW_BPS_ANN / 1e4 / 252.0)
-    trades = int((dW.sum(axis=1) > 1e-9).sum())
     return {"pnl": pnl, "gross": gross, "W": W[cols], "trades": trades,
             "episode_gross": [float(gross.sum())]}
 
@@ -188,8 +202,9 @@ def mix_engine(panel, weights, cost_mult=1.0, early_apply=False):
                                 if ext.get_loc(d) > 0])
     names = sorted(weights)
     tgt = pd.DataFrame({t: weights[t] for t in names}, index=reb)
-    W = _drifted_weights(reb, tgt, cal, r)
-    out = _book_metrics(W, r, names=names, cost_mult=cost_mult)
+    W, mask = _drifted_weights(reb, tgt, cal, r)
+    out = _book_metrics(W, r, names=names, cost_mult=cost_mult,
+                        reset_mask=mask)
     out["episode_gross"] = [float(out["gross"].sum())]
     return out
 
@@ -229,15 +244,15 @@ def momentum_engine(panel, lookback, mode="ls", cost_mult=1.0, early=False):
             targets.loc[d, bot] = -0.5 / k
         else:
             targets.loc[d, top] = 1.0 / k
-    W = _drifted_weights(reb, targets, cal, r)
+    W, mask = _drifted_weights(reb, targets, cal, r)
     cols = list(adj.columns)
     gross = (W[cols] * r[cols]).sum(axis=1)
     dW = W[cols].diff().abs()
     dW.iloc[0] = W[cols].iloc[0].abs()
-    cost = dW.sum(axis=1) * SIDE_BPS / 1e4 * cost_mult
+    cost = dW.where(mask, 0.0).sum(axis=1) * SIDE_BPS / 1e4 * cost_mult
     borrow = W[cols].clip(upper=0.0).abs().sum(axis=1) * BORROW_BPS_ANN / 1e4 / 252.0
     pnl = gross - cost - borrow
-    trades = int((dW.sum(axis=1) > 1e-9).sum())
+    trades = int(((dW.sum(axis=1) > 1e-9) & mask).sum())
     gm = gross.groupby(cal.to_period("M")).sum()  # episode = calendar month
     return {"pnl": pnl, "gross": gross, "W": W[cols], "trades": trades,
             "episode_gross": [float(v) for v in gm.values]}

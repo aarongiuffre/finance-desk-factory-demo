@@ -36,11 +36,14 @@ def cut_dates():
     return [TUNE_LO + (TUNE_HI - TUNE_LO) * f for f in CUTS]
 
 
-def replay_check(base_pnl, rebuild_fn):
+def replay_check(base_pnl, rebuild_fn, min_cut=None):
     """G1 truncation: rebuild flows capped at each cut; pnl through the cut
-    must be identical to the base run's pnl through the cut."""
+    must be identical to the base run's pnl through the cut.  min_cut: skip
+    cuts before a cell's own start (late-start legs, e.g. XLRE 2015-10)."""
     ok = True
     for cut in cut_dates():
+        if min_cut is not None and cut < min_cut:
+            continue
         p = rebuild_fn(cut)["pnl"]
         b = base_pnl[base_pnl.index <= cut]
         if not (len(p) == len(b) and (p.index == b.index).all()
@@ -105,7 +108,8 @@ def run_162():
         ok = replay_check(base["pnl"],
                           lambda c, w=w, cf=cf:
                           base_engine(L.build_panel(list(w), cap=c, cal_from=cf),
-                                      w))
+                                      w),
+                          min_cut=cf)
         mut = base_engine(panel, w, early_apply=True)["pnl"]
         g1_mut = mutant_check(base["pnl"], mut)
         g6 = evaluate(base_engine(panel, w, cost_mult=2.0)["pnl"])["cagr"]
@@ -145,10 +149,11 @@ def report_162():
     """(a) monthly corr matrix; (b) worst-decile SPY-month corr; (c) sleeve
     deltas; (d) rolling 60-session corr summary."""
     tick = ["VNQ", "IYR", "SCHH", "XLRE", "SPY", "AGG"]
-    panel = L.build_panel(tick)
+    xlre = L.load_name("XLRE")
+    xstart = xlre.index[xlre.index >= L.TUNE_LO][0]
+    panel = L.build_panel(tick, cal_from=xstart)  # common window: XLRE 2015-10+
     r = panel["adj"].pct_change().reindex(panel["cal"]).fillna(0.0)
     m = r.resample("ME").sum()
-    m = m[m.index >= TUNE_LO]
     corr = m.corr()
     a = {f"{i}_{j}": round(float(corr.loc[i, j]), 3)
          for i in tick for j in tick if i < j}
@@ -310,20 +315,30 @@ def report_164(panel):
         common = common[(common >= "2013-01-01") & (common <= "2016-12-01")]
         a[reg] = (round(float(np.corrcoef(past[common], fwd[common])[0, 1]), 3)
                   if len(common) > 3 else None)
-    lv = pd.concat(lvls, axis=1).ffill().dropna()
-    past_all = lv.pct_change(12).dropna()
-    fwd_all = lv.pct_change(12).shift(-12).dropna()
-    common = past_all.index.intersection(fwd_all.index)
-    common = common[(common >= "2013-01-01") & (common <= "2016-12-01")]
-    q = pd.qcut(past_all[common].rank(method="first"), 5, labels=False)
-    b = {int(k): round(float(fwd_all[common][q == k].mean()), 4)
-         for k in range(5)}
-    # (c) monthly REIT mom12 LS gross vs MSA momentum spread
-    tickers = L.UNIVERSE32 + ["SPY"]
+    # (b) MSA-level quintile table: 18 metros, per-month cross-sectional
+    # quintiles by past-12m HPI growth -> mean fwd-12m growth per bucket
+    msa_ids = sorted(sum(L.REGIONS.values(), []))
+    lv18 = pd.concat({i: L.load_fred(i) for i in msa_ids}, axis=1).ffill().dropna()
+    past18 = lv18.pct_change(12)
+    fwd18 = lv18.pct_change(12).shift(-12)
+    months = past18.index.intersection(fwd18.dropna().index)
+    months = months[(months >= "2013-01-01") & (months <= "2016-12-01")]
+    rows = []
+    for t in months:
+        p = past18.loc[t].dropna()
+        f = fwd18.loc[t][p.index]
+        if len(p) < 10:
+            continue
+        q = pd.qcut(p.rank(method="first"), 5, labels=False)
+        rows.append({int(k): float(f[q == k].mean()) for k in range(5)})
+    b = {int(k): round(float(pd.DataFrame(rows)[k].mean()), 4)
+         for k in range(5)} if rows else {}
+    # (c) monthly REIT mom12 LS gross vs MSA momentum spread (west - northeast)
     mom = L.momentum_engine(panel, 12, mode="ls")
     mg = mom["gross"].resample("ME").sum()
-    msa_m = past_all[common].mean(axis=1) if hasattr(past_all[common], 'columns') else past_all[common]
-    msa_spread = lv.loc[common, "west"].pct_change(12) - lv.loc[common, "northeast"].pct_change(12)
+    msa_spread = (lvls["west"].pct_change(12)
+                  - lvls["northeast"].pct_change(12))
+    msa_spread.index = msa_spread.index.to_period("M").to_timestamp("M")
     j = mg.index.intersection(msa_spread.dropna().index)
     j = j[(j >= TUNE_LO)]
     c = {"corr_reitmom_vs_msa_west_minus_ne": (
@@ -350,7 +365,8 @@ def report_164(panel):
         if len(nxt) == 0:
             continue
         f1 = panel["adj"].shift(-21).loc[nxt[0]] / panel["adj"].loc[nxt[0]] - 1
-        rows.append({int(k): float(f1[qq == k].mean()) for k in range(5)})
+        f1e = f1[score.index]  # eligible names only, aligned with qq
+        rows.append({int(k): float(f1e[qq == k].mean()) for k in range(5)})
     d5 = pd.DataFrame(rows).mean().to_dict()
     d5 = {k: round(v, 4) for k, v in d5.items()}
     return {"a_region_persistence": a, "b_msa_quintile_fwd12": b,
@@ -419,7 +435,7 @@ def report_165(panel, be_sess):
     cpi = L.load_fred("CPIAUCSL")
     cpi_yoy = cpi.pct_change(12)
     cpi_m = cpi_yoy.groupby(pd.PeriodIndex(cpi_yoy.index, freq="M")).last()
-    cpi_m.index = cpi_m.index.to_timestamp()
+    cpi_m.index = cpi_m.index.to_timestamp("M")  # align to month-END like m
     j = m.index.intersection(cpi_m.index)
     a = {"corr_vnq_cpiyoy": round(float(m["VNQ"][j].corr(cpi_m[j])), 3),
          "corr_vnq_dbe": round(float(m["VNQ"].corr(
