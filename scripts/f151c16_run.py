@@ -1,15 +1,29 @@
 #!/usr/bin/env python3
-"""f151c16_run.py - tune runner for the F151_Ch16 (Real Estate) families.
+"""f151c16_run.py - tune/scored runner for the F151_Ch16 (Real Estate) families.
 
 Tune 2015-01-01..2017-12-31; dev holdout 2018-2019 NEVER read (loaders cap
 bars at TUNE_HI; FRED MSA pulls were request-capped 2017-12-31 at pull time).
 Writes logs/edge/F151_16_*/tune_cells.json + prints a summary.
+
+--mode scored: requires a standing dev go at
+logs/approvals/go/<family>.dev.json (+ .sig OR chat-tap .dev.tap.json) or refuses BEFORE any data
+load (mirrors h5_run.py go_present()).  Scores the KEEP_TUNE survivor
+cells ONLY (16_2: re10_xlre + the mix_6040_base baseline the preregistered
+family rule compares against; 16_3: type_ind + type_infra), on the dev
+window 2018-01-01..2019-12-31 (loaders capped at DEV_HI; preregistered
+gates + family rules applied unchanged; replay cuts move inside the scored
+window).  Writes logs/edge/<family>/scored/scored_cells.json; emits
+PASS|KILL per cell + family rollup (PASS = the preregistered family rule
+fires on the scored window).  Report-only blocks are tune-stage evidence
+and are skipped in scored mode.  16_4/16_5 have no KEEP_TUNE survivors
+(KILL at tune) - scored mode refuses them.
 
 G1 per cell: replay truncation at 4 slice cuts + the loader-cap cut (weights /
 flows before the cut identical) + decision-early mutant (must differ).
 G6: rerun at 2x per-side costs, report cagr.
 F151_16_6_fix_flip is a BLOCKED stub at prereg - no run here.
 """
+import argparse
 import json
 import os
 import sys
@@ -23,7 +37,44 @@ from f151c13_lib import evaluate, gates  # noqa: E402
 
 EDGE = "/data/finance/logs/edge"
 TUNE_LO, TUNE_HI = L.TUNE_LO, L.TUNE_HI
+DEV_LO, DEV_HI = pd.Timestamp("2018-01-01"), L.DEV_HI
 CUTS = [0.25, 0.50, 0.75, 1.00]
+SCORED_CUTS = [pd.Timestamp("2018-04-02"), pd.Timestamp("2018-10-01"),
+               pd.Timestamp("2019-04-01"), pd.Timestamp("2019-10-01")]
+
+# ---- scored DEV mode (requires standing dev go; scores KEEP_TUNE only) ----
+GO_DIR = "/data/finance/logs/approvals/go"
+FAMILY_OF = {"162": "F151_16_2_mixed_asset_re",
+             "163": "F151_16_3_intra_re"}
+KEEP_TUNE_163 = ["type_ind", "type_infra"]
+
+
+def go_present(family):
+    """Standing go: classic ssh .sig OR Aaron chat-tap (auth=chat_tap + .dev.tap.json).
+    Chat-tap path: no private key on cachyos; F151 paper scored DEV only;
+    does not change fold_gate validation/holdout."""
+    base = os.path.join(GO_DIR, family + ".dev.json")
+    if not os.path.exists(base):
+        return False
+    if os.path.exists(base + ".sig"):
+        return True
+    tap = base.replace(".dev.json", ".dev.tap.json")
+    if not os.path.exists(tap):
+        # also accept sibling naming family.dev.tap.json via replace above
+        tap = os.path.join(GO_DIR, family + ".dev.tap.json")
+    if not os.path.exists(tap):
+        return False
+    try:
+        d = json.load(open(base))
+        t = json.load(open(tap))
+        return (d.get("kind") == "standing_dev_go"
+                and d.get("auth") == "chat_tap"
+                and d.get("hypothesis") == family
+                and d.get("fold") == "dev"
+                and t.get("kind") == "aaron_chat_tap_receipt"
+                and t.get("hypothesis") == family)
+    except Exception:
+        return False
 
 
 def jwrite(path, obj):
@@ -36,12 +87,13 @@ def cut_dates():
     return [TUNE_LO + (TUNE_HI - TUNE_LO) * f for f in CUTS]
 
 
-def replay_check(base_pnl, rebuild_fn, min_cut=None):
+def replay_check(base_pnl, rebuild_fn, min_cut=None, cuts=None):
     """G1 truncation: rebuild flows capped at each cut; pnl through the cut
     must be identical to the base run's pnl through the cut.  min_cut: skip
-    cuts before a cell's own start (late-start legs, e.g. XLRE 2015-10)."""
+    cuts before a cell's own start (late-start legs, e.g. XLRE 2015-10).
+    cuts: explicit cut list (scored mode); default = tune fraction cuts."""
     ok = True
-    for cut in cut_dates():
+    for cut in (cut_dates() if cuts is None else cuts):
         if min_cut is not None and cut < min_cut:
             continue
         p = rebuild_fn(cut)["pnl"]
@@ -60,16 +112,27 @@ def mutant_check(base_pnl, mut_pnl):
     return float(np.abs(mut_pnl.to_numpy() - base_pnl.to_numpy()).max()) > 1e-12
 
 
-def pack(results, family, verdict, report_only=None):
+def pack(results, family, verdict, report_only=None, mode="tune",
+         scored_window=None, go_file=None, family_rule=None):
     n_pass = sum(1 for r in results.values() if r["pass"])
     out = {
         "family": family,
+        "mode": mode,
         "tune_window": [str(TUNE_LO.date()), str(TUNE_HI.date())],
         "n_cells": len(results), "n_pass": n_pass, "verdict": verdict,
         "cells": results,
     }
     if report_only:
         out["report_only"] = report_only
+    if mode == "scored":
+        out["scored_window"] = [str(DEV_LO.date()), str(DEV_HI.date())]
+        out["go_file"] = go_file
+        out["family_rollup"] = ("PASS: the preregistered family rule fires "
+                                "on the scored DEV window" if verdict == "PASS"
+                                else "KILL: the preregistered family rule "
+                                     "does not fire on the scored DEV window")
+    if family_rule:
+        out["family_rule"] = family_rule
     return out
 
 
@@ -94,7 +157,24 @@ def cell_result(name, pnl, trades, floor, g6_cagr, extra=None,
 
 
 # ---------------------------------------------------------------- 16.2
-def run_162():
+def run_162(mode="tune"):
+    family = "F151_16_2_mixed_asset_re"
+    if mode == "scored":
+        if not go_present(family):
+            print("BLOCKED: scored run requires a standing dev go at")
+            print(f"  {GO_DIR}/{family}.dev.json (+ .sig OR auth=chat_tap + .dev.tap.json)")
+            print("go shape: {kind: standing_dev_go, hypothesis: <family>,")
+            print("          fold: dev,")
+            print("          freeze_amendment: ops/prereg/amendments/<family>/001.yaml,")
+            print("          freeze_sha: <sha of that amendment>, max_dev_trials: N,")
+            print("          issued/expires ISO, v: 1} signed by Aaron")
+            print("          (ssh-keygen -Y sign -n finance-go)")
+            sys.exit(3)
+        keep = ("mix_6040_base", "re10_xlre")   # base = the rule's baseline
+        cap, cuts = L.DEV_HI, SCORED_CUTS
+    else:
+        keep = None
+        cap, cuts = L.TUNE_HI, None
     tickers = sorted({t for m in L.MIXES.values() for t in m})
     xlre = L.load_name("XLRE")
     xlre_start = xlre.index[xlre.index >= TUNE_LO][0]
@@ -102,14 +182,28 @@ def run_162():
     results = {}
     base_metrics = None
     for name, w in L.MIXES.items():
-        cf = xlre_start if name == "re10_xlre" else None
-        panel = L.build_panel(list(w), cal_from=cf)
+        if keep is not None and name not in keep:
+            continue
+        if mode == "scored":
+            cf = None
+            panel = L.build_panel(list(w), cap=cap, cal_from=DEV_LO)
+        else:
+            cf = xlre_start if name == "re10_xlre" else None
+            panel = L.build_panel(list(w), cal_from=cf)
         base = base_engine(panel, w)
-        ok = replay_check(base["pnl"],
-                          lambda c, w=w, cf=cf:
-                          base_engine(L.build_panel(list(w), cap=c, cal_from=cf),
-                                      w),
-                          min_cut=cf)
+        if mode == "scored":
+            ok = replay_check(
+                base["pnl"],
+                lambda c, w=w: base_engine(
+                    L.build_panel(list(w), cap=c, cal_from=DEV_LO), w),
+                cuts=cuts)
+        else:
+            ok = replay_check(base["pnl"],
+                              lambda c, w=w, cf=cf:
+                              base_engine(L.build_panel(list(w), cap=c,
+                                                        cal_from=cf),
+                                          w),
+                              min_cut=cf)
         mut = base_engine(panel, w, early_apply=True)["pnl"]
         g1_mut = mutant_check(base["pnl"], mut)
         g6 = evaluate(base_engine(panel, w, cost_mult=2.0)["pnl"])["cagr"]
@@ -121,6 +215,8 @@ def run_162():
         r = cell_result(name, base["pnl"], base["trades"], 24, g6, extra,
                         g2_episode_exempt=True,
                         episode_gross=base["episode_gross"])
+        if mode == "scored":
+            r["status"] = "PASS" if r["pass"] else "KILL"
         results[name] = r
     # family decision rule (prereg): >=1 RE cell passes G3+G5+G6 with
     # sharpe >= base+0.25 and vol <= 1.05x base vol
@@ -134,14 +230,25 @@ def run_162():
                 and sh >= base_metrics["sharpe"] + 0.25
                 and vol <= 1.05 * base_metrics["ann_vol"]):
             survivors.append(name)
-    verdict = "KEEP_TUNE" if survivors else "KILL"
-    ro = report_162()
-    out = pack(results, "F151_16_2_mixed_asset_re", verdict, ro)
+    if mode == "scored":
+        verdict = "PASS" if survivors else "KILL"
+        ro = None
+    else:
+        verdict = "KEEP_TUNE" if survivors else "KILL"
+        ro = report_162()
+    rule = ("RE cell passes G3+G5+G6 AND sharpe >= "
+            f"{base_metrics['sharpe']:.3f}+0.25 AND vol <= "
+            f"{1.05 * base_metrics['ann_vol']:.4f}")
+    out = pack(results, family, verdict, ro, mode=mode,
+               scored_window=[str(DEV_LO.date()), str(DEV_HI.date())],
+               go_file=os.path.join(GO_DIR, family + ".dev.json"),
+               family_rule=rule)
     out["family_survivors"] = survivors
-    out["family_rule"] = ("RE cell passes G3+G5+G6 AND sharpe >= "
-                          f"{base_metrics['sharpe']:.3f}+0.25 AND vol <= "
-                          f"{1.05 * base_metrics['ann_vol']:.4f}")
-    jwrite(f"{EDGE}/F151_16_2_mixed_asset_re/tune_cells.json", out)
+    d = os.path.join(EDGE, family)
+    if mode == "scored":
+        d = os.path.join(d, "scored")
+    jwrite(os.path.join(d, "tune_cells.json" if mode == "tune"
+                        else "scored_cells.json"), out)
     return out
 
 
@@ -185,19 +292,44 @@ def report_162():
 
 
 # ---------------------------------------------------------------- 16.3
-def run_163():
+def run_163(mode="tune"):
+    family = "F151_16_3_intra_re"
+    if mode == "scored":
+        if not go_present(family):
+            print("BLOCKED: scored run requires a standing dev go at")
+            print(f"  {GO_DIR}/{family}.dev.json (+ .sig OR auth=chat_tap + .dev.tap.json)")
+            print("go shape: {kind: standing_dev_go, hypothesis: <family>,")
+            print("          fold: dev,")
+            print("          freeze_amendment: ops/prereg/amendments/<family>/001.yaml,")
+            print("          freeze_sha: <sha of that amendment>, max_dev_trials: N,")
+            print("          issued/expires ISO, v: 1} signed by Aaron")
+            print("          (ssh-keygen -Y sign -n finance-go)")
+            sys.exit(3)
     cells = {f"type_{k}": {t: 1.0 / len(v) for t in v}
              for k, v in L.TYPES.items()}
     cells["diversify_all"] = {t: 1.0 / len(L.UNIVERSE32)
                               for t in L.UNIVERSE32}
+    if mode == "scored":
+        cells = {k: v for k, v in cells.items()
+                 if k in KEEP_TUNE_163}
     tickers = L.UNIVERSE32 + ["SPY"]
     results = {}
     for name, w in cells.items():
-        panel = L.build_panel(tickers)
+        if mode == "scored":
+            panel = L.build_panel(tickers, cap=L.DEV_HI, cal_from=DEV_LO)
+        else:
+            panel = L.build_panel(tickers)
         base = L.mix_engine(panel, w)
-        ok = replay_check(base["pnl"],
-                          lambda c, w=w: L.mix_engine(
-                              L.build_panel(tickers, cap=c), w))
+        if mode == "scored":
+            ok = replay_check(base["pnl"],
+                              lambda c, w=w: L.mix_engine(
+                                  L.build_panel(tickers, cap=c,
+                                                cal_from=DEV_LO), w),
+                              cuts=SCORED_CUTS)
+        else:
+            ok = replay_check(base["pnl"],
+                              lambda c, w=w: L.mix_engine(
+                                  L.build_panel(tickers, cap=c), w))
         mut = L.mix_engine(panel, w, early_apply=True)["pnl"]
         g1_mut = mutant_check(base["pnl"], mut)
         g6 = evaluate(L.mix_engine(panel, w, cost_mult=2.0)["pnl"])["cagr"]
@@ -206,16 +338,29 @@ def run_163():
                         {"G1_replay_clean": ok, "G1_mutants_differ": g1_mut},
                         g4_exempt=exempt, g2_episode_exempt=True,
                         episode_gross=base["episode_gross"])
+        if mode == "scored":
+            r["status"] = "PASS" if r["pass"] else "KILL"
         results[name] = r
     survivors = [n for n, r in results.items()
                  if n != "type_lodging"
                  and r["gates"]["G3_single_regime"]
                  and r["gates"]["G5_fees"] and r["G6_cagr_2x_costs"] > 0]
-    verdict = "KEEP_TUNE" if survivors else "KILL"
-    ro = report_163(panel)
-    out = pack(results, "F151_16_3_intra_re", verdict, ro)
+    if mode == "scored":
+        verdict = "PASS" if survivors else "KILL"
+        ro = None
+    else:
+        verdict = "KEEP_TUNE" if survivors else "KILL"
+        ro = report_163(panel)
+    out = pack(results, family, verdict, ro, mode=mode,
+               scored_window=[str(DEV_LO.date()), str(DEV_HI.date())],
+               go_file=os.path.join(GO_DIR, family + ".dev.json"),
+               family_rule=">= 1 multi-name basket passes G3+G5+G6")
     out["family_survivors"] = survivors
-    jwrite(f"{EDGE}/F151_16_3_intra_re/tune_cells.json", out)
+    d = os.path.join(EDGE, family)
+    if mode == "scored":
+        d = os.path.join(d, "scored")
+    jwrite(os.path.join(d, "tune_cells.json" if mode == "tune"
+                        else "scored_cells.json"), out)
     return out
 
 
@@ -462,24 +607,33 @@ def report_165(panel, be_sess):
 
 
 def main():
-    which = sys.argv[1] if len(sys.argv) > 1 else "all"
+    ap = argparse.ArgumentParser()
+    ap.add_argument("which", nargs="?", default="all",
+                    choices=["all", "162", "163", "164", "165"])
+    ap.add_argument("--mode", choices=["tune", "scored"], default="tune")
+    a = ap.parse_args()
+    if a.mode == "scored" and a.which in ("164", "165"):
+        print("BLOCKED: F151_16_4_re_momentum / F151_16_5_re_inflation have "
+              "no KEEP_TUNE survivors (KILL at tune); scored mode scores "
+              "KEEP_TUNE cells only")
+        sys.exit(3)
     outs = {}
-    if which in ("all", "162"):
-        outs["162"] = run_162()
+    if a.which in ("all", "162"):
+        outs["162"] = run_162(mode=a.mode)
         print(json.dumps({k: v for k, v in outs["162"].items()
-                          if k in ("family", "n_cells", "n_pass", "verdict",
-                                   "family_survivors")}, indent=1))
-    if which in ("all", "163"):
-        outs["163"] = run_163()
+                          if k in ("family", "mode", "n_cells", "n_pass",
+                                   "verdict", "family_survivors")}, indent=1))
+    if a.which in ("all", "163"):
+        outs["163"] = run_163(mode=a.mode)
         print(json.dumps({k: v for k, v in outs["163"].items()
-                          if k in ("family", "n_cells", "n_pass", "verdict",
-                                   "family_survivors")}, indent=1))
-    if which in ("all", "164"):
+                          if k in ("family", "mode", "n_cells", "n_pass",
+                                   "verdict", "family_survivors")}, indent=1))
+    if a.which in ("all", "164"):
         outs["164"] = run_164()
         print(json.dumps({k: v for k, v in outs["164"].items()
                           if k in ("family", "n_cells", "n_pass", "verdict")},
                          indent=1))
-    if which in ("all", "165"):
+    if a.which in ("all", "165"):
         outs["165"] = run_165()
         print(json.dumps({k: v for k, v in outs["165"].items()
                           if k in ("family", "n_cells", "n_pass", "verdict")},

@@ -45,9 +45,14 @@ def _eff_weights(cal, reb_map, columns):
     return W.ffill().fillna(0.0)
 
 
-def _fund_episodes(W, reb_days):
-    """Funded rebalance episodes on the TUNE window (desk convention)."""
-    lo, hi = pd.Timestamp(L10.TUNE_LO), pd.Timestamp(L10.TUNE_HI)
+def _fund_episodes(W, reb_days, lo=None, hi=None):
+    """Funded rebalance episodes on the eval window (desk convention).
+    lo/hi default to the tune window; the scored runner passes the dev
+    window (2018-01-01..2019-12-31) so the preregistered G4 floor counts
+    episodes where the scored gates are actually applied."""
+    lo = L10.TUNE_LO if lo is None else lo
+    hi = L10.TUNE_HI if hi is None else hi
+    lo, hi = pd.Timestamp(lo), pd.Timestamp(hi)
     n = 0
     for d in reb_days:
         d = pd.Timestamp(d)
@@ -76,7 +81,7 @@ def _trailing_ols_h(panel, d, spot, fut, win):
 
 # ------------------------------------------- 10_1 / 10_1_1 hedge builders
 def build_hedge(panel, cal, spot, fut, mode="unit", ols_win=63,
-                clip=(0.25, 4.0)):
+                clip=(0.25, 4.0), ep_lo=None, ep_hi=None):
     """Book 10.1 / 10.1.1: long 1.0 spot, short h futures, monthly
     re-strike.  mode='unit': h = 1.0 (the book's construction).
     mode='ols': h = trailing-`ols_win`-business-day OLS slope of daily
@@ -97,7 +102,7 @@ def build_hedge(panel, cal, spot, fut, mode="unit", ols_win=63,
         hhist.append((str(pd.Timestamp(d).date()), round(float(h), 4)))
     W = _eff_weights(cal, signals, panel["tickers"])
     meta = {"reb_dates": list(signals), "n_rebalances": len(signals),
-            "n_episodes": _fund_episodes(W, list(signals)),
+            "n_episodes": _fund_episodes(W, list(signals), ep_lo, ep_hi),
             "spot": spot, "fut": fut, "h_first_last":
             (hhist[0], hhist[-1]) if hhist else None,
             "h_min": min((h for _, h in hhist), default=None),
@@ -106,7 +111,8 @@ def build_hedge(panel, cal, spot, fut, mode="unit", ols_win=63,
 
 
 def build_ir_hedge(panel, cal, bond, tenor_bond, mode="dur_b1",
-                   win=126, dur_clip=(0.02, 1.0), h_clip=(0.5, 5.0)):
+                   win=126, dur_clip=(0.02, 1.0), h_clip=(0.5, 5.0),
+                   ep_lo=None, ep_hi=None):
     """Book 10.1.2 (Eqs 464-468): long 1.0 bond ETF, short h ZN=F, monthly.
     Durations measured over trailing `win` business days, in return-per-pp
     units (dy is in percent points, so modD_v = -cov(r_v, dy_v)/var(dy_v)
@@ -152,7 +158,7 @@ def build_ir_hedge(panel, cal, bond, tenor_bond, mode="dur_b1",
         hhist.append((str(pd.Timestamp(d).date()), round(float(h), 4)))
     W = _eff_weights(cal, signals, panel["tickers"])
     meta = {"reb_dates": list(signals), "n_rebalances": len(signals),
-            "n_episodes": _fund_episodes(W, list(signals)),
+            "n_episodes": _fund_episodes(W, list(signals), ep_lo, ep_hi),
             "bond": bond, "fut": fut,
             "h_first_last": (hhist[0], hhist[-1]) if hhist else None,
             "h_min": min((h for _, h in hhist), default=None),

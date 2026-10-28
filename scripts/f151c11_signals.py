@@ -79,7 +79,8 @@ def _iso_h(panel, d, mbs, win):
     return sens / mzf
 
 
-def build_mbs_hedge(panel, cal, mbs="VMBS", mode="ols", win=126):
+def build_mbs_hedge(panel, cal, mbs="VMBS", mode="ols", win=126,
+                    ep_lo=None, ep_hi=None):
     fut = "ZF=F"
     dy5 = panel["dy"]["DGS5"]
     reb_days = L11.month_end_days(cal)
@@ -111,7 +112,7 @@ def build_mbs_hedge(panel, cal, mbs="VMBS", mode="ols", win=126):
         hhist.append((str(pd.Timestamp(d).date()), round(float(h), 4)))
     W = S10._eff_weights(cal, signals, panel["tickers"])
     meta = {"reb_dates": list(signals), "n_rebalances": len(signals),
-            "n_episodes": S10._fund_episodes(W, list(signals)),
+            "n_episodes": S10._fund_episodes(W, list(signals), ep_lo, ep_hi),
             "mbs": mbs, "fut": fut, "mode": mode, "win": win,
             "h_first_last": (hhist[0], hhist[-1]) if hhist else None,
             "h_min": min((h for _, h in hhist), default=None),

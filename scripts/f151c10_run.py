@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
-"""f151c10_run.py - tune-mode runner for the F151_Ch10 families.
+"""f151c10_run.py - tune/scored runner for the F151_Ch10 families.
 
 Usage: python f151c10_run.py --family F151_10_1_hedge [--cell NAME]
+                             [--mode tune|scored]
 
 Same discipline as f151c5..f151c9_run.py: tune = 2015-01-01..2017-12-31 on
 the dev fold; the dev holdout (2018-2019) is NEVER read - every series is
 disk-capped AND loader-capped at TUNE_HI.  Six preregistered gates per
 cell; verdict at tune (KILL if 0 survivors, no go ask; else KEEP_TUNE
 blocked on standing dev go).
+
+--mode scored: requires a standing dev go at
+logs/approvals/go/<family>.dev.json (+ .sig OR chat-tap .dev.tap.json; legacy ssh-keygen -Y sign -n
+finance-go) or it refuses BEFORE any data load (mirrors h5_run.py
+go_present()).  Scores the KEEP_TUNE survivor cells ONLY, on the dev
+window 2018-01-01..2019-12-31 (panel loader-capped at DEV_HI; preregistered
+gates applied unchanged), writes logs/edge/<family>/scored/scored_cells.json
+and emits PASS|KILL per cell + family rollup (PASS = >= 1 survivor cell
+passes all six gates on the dev window).  G1 replay cuts move inside the
+scored window; the G4 episode count uses the scored window.
 
 Two gate frameworks per the preregs:
   * alpha families (10_3, 10_4): STANDARD desk gates unchanged
@@ -35,6 +46,17 @@ EVID_ROOT = "/data/finance/logs/edge"
 REPLAY_CUTS = ["2015-08-15", "2016-03-15", "2016-11-15", "2017-05-15"]
 LOADER_CUT = "2016-09-15"
 ALPHA_COST_MULT = 1.0 / 6.0     # engine large-bucket 30bp -> flat 5bp/side
+
+# ---- scored DEV mode (requires standing dev go; scores KEEP_TUNE only) ----
+GO_DIR = "/data/finance/logs/approvals/go"
+SCORED_LO, SCORED_HI = "2018-01-01", L10.DEV_HI
+SCORED_CUTS = ["2018-04-15", "2018-09-15", "2019-03-15", "2019-08-15"]
+SCORED_LOADER_CUT = "2018-06-15"
+KEEP_TUNE = {
+    "F151_10_1_hedge": ["unit_spx"],
+    "F151_10_1_1_cross_hedge": ["slv_gc_h63", "slv_gc_h126"],
+    "F151_10_1_2_ir_hedge": ["ief_dur_b1", "ief_dur_bols", "ief_ols"],
+}
 
 FAMILIES = {
     "F151_10_1_hedge": dict(
@@ -132,6 +154,39 @@ def tune_mask(cal):
             & (cal <= pd.Timestamp(L.TUNE_HI)))
 
 
+def scored_mask(cal):
+    return ((cal >= pd.Timestamp(SCORED_LO))
+            & (cal <= pd.Timestamp(SCORED_HI)))
+
+
+def go_present(family):
+    """Standing go: classic ssh .sig OR Aaron chat-tap (auth=chat_tap + .dev.tap.json).
+    Chat-tap path: no private key on cachyos; F151 paper scored DEV only;
+    does not change fold_gate validation/holdout."""
+    base = os.path.join(GO_DIR, family + ".dev.json")
+    if not os.path.exists(base):
+        return False
+    if os.path.exists(base + ".sig"):
+        return True
+    tap = base.replace(".dev.json", ".dev.tap.json")
+    if not os.path.exists(tap):
+        # also accept sibling naming family.dev.tap.json via replace above
+        tap = os.path.join(GO_DIR, family + ".dev.tap.json")
+    if not os.path.exists(tap):
+        return False
+    try:
+        d = json.load(open(base))
+        t = json.load(open(tap))
+        return (d.get("kind") == "standing_dev_go"
+                and d.get("auth") == "chat_tap"
+                and d.get("hypothesis") == family
+                and d.get("fold") == "dev"
+                and t.get("kind") == "aaron_chat_tap_receipt"
+                and t.get("hypothesis") == family)
+    except Exception:
+        return False
+
+
 def _year_abs_share(pnl):
     yrs = pnl.groupby(pnl.index.year).sum()
     den = float(yrs.abs().sum())
@@ -158,8 +213,10 @@ def _vr(res, unhed):
 
 
 def run_hedge_cell(family, cfg, cell, bname, params, g4_floor,
-                   panel, panel_cut, cal, msk, out):
-    W, meta = getattr(S, bname)(panel, cal, **params)
+                   panel, panel_cut, cal, msk, out,
+                   cuts=None, loader_cut=None, ep_window=None):
+    ep = dict(zip(("ep_lo", "ep_hi"), ep_window)) if ep_window else {}
+    W, meta = getattr(S, bname)(panel, cal, **params, **ep)
     spot = meta.get("spot") or meta["bond"]
     fut = meta["fut"]
     W_spot = pd.DataFrame(0.0, index=cal, columns=panel["tickers"])
@@ -201,8 +258,10 @@ def run_hedge_cell(family, cfg, cell, bname, params, g4_floor,
     g6 = bool(np.isfinite(vr2) and vr2 >= cfg["vr_bar"])
 
     # ---- G1 replay: 4 row-slice cuts + loader cut + mutant ----
+    cuts = REPLAY_CUTS if cuts is None else cuts
+    loader_cut = LOADER_CUT if loader_cut is None else loader_cut
     replay_ok, replay_detail = True, {}
-    for cut in REPLAY_CUTS:
+    for cut in cuts:
         ps = slice_panel(panel, cut)
         W2, _ = getattr(S, bname)(ps, cal, **params)
         a = W.loc[:cut]
@@ -211,10 +270,10 @@ def run_hedge_cell(family, cfg, cell, bname, params, g4_floor,
         replay_detail[cut] = bool(same)
         replay_ok &= same
     W3, _ = getattr(S, bname)(panel_cut, panel_cut["cal"], **params)
-    a = W.loc[:LOADER_CUT]
-    b = W3.reindex(index=cal, columns=W.columns).fillna(0.0).loc[:LOADER_CUT]
+    a = W.loc[:loader_cut]
+    b = W3.reindex(index=cal, columns=W.columns).fillna(0.0).loc[:loader_cut]
     loader_same = np.allclose(a.values, b.values, atol=1e-12, equal_nan=True)
-    replay_detail["loader_cut_" + LOADER_CUT] = bool(loader_same)
+    replay_detail["loader_cut_" + loader_cut] = bool(loader_same)
     replay_ok &= loader_same
     Wmut = W.shift(-1).fillna(0.0)
     diff_days = int(((Wmut - W).abs().sum(axis=1) > 1e-12).sum())
@@ -259,7 +318,8 @@ def run_hedge_cell(family, cfg, cell, bname, params, g4_floor,
 
 
 def run_alpha_cell(family, cfg, cell, bname, params, g4_floor,
-                   panel, panel_cut, cal, msk, out):
+                   panel, panel_cut, cal, msk, out,
+                   cuts=None, loader_cut=None):
     W, meta = getattr(S, bname)(panel, cal, **params)
     bp = dict(panel)
     bt = L.backtest(W, bp, cost_mult=ALPHA_COST_MULT, borrow_bps_ann=0.0)
@@ -279,8 +339,10 @@ def run_alpha_cell(family, cfg, cell, bname, params, g4_floor,
                           n_ep, g4_floor, float(t["gross"].sum()))
     m2 = L.metrics(t2["pnl"], t2["in_market"])
 
+    cuts = REPLAY_CUTS if cuts is None else cuts
+    loader_cut = LOADER_CUT if loader_cut is None else loader_cut
     replay_ok, replay_detail = True, {}
-    for cut in REPLAY_CUTS:
+    for cut in cuts:
         ps = slice_panel(panel, cut)
         W2, _ = getattr(S, bname)(ps, cal, **params)
         a = W.loc[:cut]
@@ -289,10 +351,10 @@ def run_alpha_cell(family, cfg, cell, bname, params, g4_floor,
         replay_detail[cut] = bool(same)
         replay_ok &= same
     W3, _ = getattr(S, bname)(panel_cut, panel_cut["cal"], **params)
-    a = W.loc[:LOADER_CUT]
-    b = W3.reindex(index=cal, columns=W.columns).fillna(0.0).loc[:LOADER_CUT]
+    a = W.loc[:loader_cut]
+    b = W3.reindex(index=cal, columns=W.columns).fillna(0.0).loc[:loader_cut]
     loader_same = np.allclose(a.values, b.values, atol=1e-12, equal_nan=True)
-    replay_detail["loader_cut_" + LOADER_CUT] = bool(loader_same)
+    replay_detail["loader_cut_" + loader_cut] = bool(loader_same)
     replay_ok &= loader_same
     Wmut = W.shift(-1).fillna(0.0)
     diff_days = int(((Wmut - W).abs().sum(axis=1) > 1e-12).sum())
@@ -330,33 +392,78 @@ def run_alpha_cell(family, cfg, cell, bname, params, g4_floor,
     return cell_out
 
 
-def run_family(family, only_cell=None):
+def run_family(family, only_cell=None, mode="tune"):
     cfg = FAMILIES[family]
-    panel = build_all(L10.TUNE_HI, cfg)
-    panel_cut = build_all(LOADER_CUT, cfg)
+    if mode == "scored":
+        if family not in KEEP_TUNE:
+            print(f"BLOCKED: {family} has no KEEP_TUNE survivors (KILL at "
+                  "tune); scored mode scores KEEP_TUNE cells only")
+            sys.exit(3)
+        if not go_present(family):
+            print("BLOCKED: scored run requires a standing dev go at")
+            print(f"  {GO_DIR}/{family}.dev.json (+ .sig OR auth=chat_tap + .dev.tap.json)")
+            print("go shape: {kind: standing_dev_go, hypothesis: <family>,")
+            print("          fold: dev,")
+            print("          freeze_amendment: ops/prereg/amendments/<family>/001.yaml,")
+            print("          freeze_sha: <sha of that amendment>, max_dev_trials: N,")
+            print("          issued/expires ISO, v: 1} signed by Aaron")
+            print("          (ssh-keygen -Y sign -n finance-go)")
+            sys.exit(3)
+        cells = [c for c in cfg["cells"] if c[0] in KEEP_TUNE[family]]
+        cap, msk_fn, cuts, lcut = (L10.DEV_HI, scored_mask, SCORED_CUTS,
+                                   SCORED_LOADER_CUT)
+        ep_window = (SCORED_LO, SCORED_HI)
+    else:
+        cells = cfg["cells"]
+        cap, msk_fn, cuts, lcut = (L10.TUNE_HI, tune_mask, REPLAY_CUTS,
+                                   LOADER_CUT)
+        ep_window = None
+    panel = build_all(cap, cfg)
+    panel_cut = build_all(lcut, cfg)
     cal = panel["cal"]
-    msk = tune_mask(cal)
-    out = {"family": family, "tune_window": [L.TUNE_LO, L.TUNE_HI],
-           "dev_holdout": [L.TUNE_HI, L.DEV_HI], "holdout_read": False,
-           "cap": L.TUNE_HI, "cells": []}
-    for cell, bname, params, g4_floor in cfg["cells"]:
+    msk = msk_fn(cal)
+    out = {"family": family, "mode": mode,
+           "tune_window": [L.TUNE_LO, L.TUNE_HI],
+           "dev_holdout": [L.TUNE_HI, L.DEV_HI],
+           "holdout_read": mode == "scored",
+           "cap": cap, "cells": []}
+    if mode == "scored":
+        out["scored_window"] = [SCORED_LO, SCORED_HI]
+        out["go_file"] = os.path.join(GO_DIR, family + ".dev.json")
+    for cell, bname, params, g4_floor in cells:
         if only_cell and cell != only_cell:
             continue
         if cfg["kind"] == "hedge":
             c = run_hedge_cell(family, cfg, cell, bname, params, g4_floor,
-                               panel, panel_cut, cal, msk, out)
+                               panel, panel_cut, cal, msk, out,
+                               cuts=cuts, loader_cut=lcut, ep_window=ep_window)
         else:
             c = run_alpha_cell(family, cfg, cell, bname, params, g4_floor,
-                               panel, panel_cut, cal, msk, out)
+                               panel, panel_cut, cal, msk, out,
+                               cuts=cuts, loader_cut=lcut)
+        if mode == "scored":
+            c["status"] = "PASS" if c["pass"] else "KILL"
         out["cells"].append(c)
     survivors = [c["cell"] for c in out["cells"] if c["pass"]]
-    out["verdict"] = "KEEP_TUNE" if survivors else "KILL"
     out["survivors"] = survivors
     d = os.path.join(EVID_ROOT, family)
+    if mode == "scored":
+        out["verdict"] = "PASS" if survivors else "KILL"
+        out["family_rollup"] = ("PASS: >= 1 KEEP_TUNE survivor cell passes "
+                                "all six gates on the scored DEV window"
+                                if survivors else
+                                "KILL: no KEEP_TUNE survivor cell passes "
+                                "all six gates on the scored DEV window")
+        d = os.path.join(d, "scored")
+        fname = "scored_cells.json"
+    else:
+        out["verdict"] = "KEEP_TUNE" if survivors else "KILL"
+        fname = "tune_cells.json"
     os.makedirs(d, exist_ok=True)
-    with open(os.path.join(d, "tune_cells.json"), "w") as f:
+    with open(os.path.join(d, fname), "w") as f:
         json.dump(out, f, indent=1, default=str)
-    print(f"[{family}] verdict={out['verdict']} survivors={survivors}")
+    print(f"[{family}] mode={mode} verdict={out['verdict']} "
+          f"survivors={survivors}")
     return out
 
 
@@ -364,8 +471,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--family", required=True, choices=sorted(FAMILIES))
     ap.add_argument("--cell", default=None)
+    ap.add_argument("--mode", choices=["tune", "scored"], default="tune")
     a = ap.parse_args()
-    run_family(a.family, only_cell=a.cell)
+    run_family(a.family, only_cell=a.cell, mode=a.mode)
 
 
 if __name__ == "__main__":

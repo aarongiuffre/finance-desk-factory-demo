@@ -41,6 +41,7 @@ FRDIR = os.path.join(ROOT, "raw", "fred")
 
 TUNE_LO = pd.Timestamp("2015-01-01")
 TUNE_HI = pd.Timestamp("2017-12-31")
+DEV_HI = pd.Timestamp("2019-12-31")   # scored DEV window end (2018-2019 dev fold)
 SIDE_BPS = 20.0
 BORROW_BPS_ANN = 100.0
 SESSIONS_PER_MONTH = 21  # preregistered month-length approximation for momentum
