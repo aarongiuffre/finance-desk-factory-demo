@@ -866,6 +866,23 @@ families:
                                # unread).  Evidence logs/edge/F151_11_7_mbs/.
     kind: hypothesis
     hypotheses: [F151_11_7_mbs]
+  F151_12_1_convert_arb:       # Soper FULL-151 Ch12: book 12.1 convertible arb
+    blocked: true              # BLOCKED at prereg 2026-10-28: single-name
+                               # convertible price + terms tape is paid (TRACE
+                               # historic subscription; Bloomberg/ICE/Numerix/
+                               # FIS-Monis); Delta only recoverable from the
+                               # tape; CWB/ICVT proxies do NOT transfer.  Evidence
+                               # logs/edge/F151_12_1_convert_arb/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_12_1_convert_arb]
+  F151_12_2_convert_oas:       # Soper FULL-151 Ch12: book 12.2 convertible OAS
+    blocked: true              # BLOCKED at prereg 2026-10-28: same convertible-
+                               # tape wall + needs same-issuer OAS pairs (paid
+                               # screen) + non-convertible curve; no proxy can
+                               # express the pair.  Evidence
+                               # logs/edge/F151_12_2_convert_oas/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_12_2_convert_oas]
 
   F151_7_6_variance_swaps:     # Soper FULL-151 Ch7: book 7.6 variance swaps
     blocked: true              # BLOCKED 2026-10-28: no free variance-swap tape.
