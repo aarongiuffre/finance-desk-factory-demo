@@ -1,0 +1,37 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_12_2_convert_oas
+# (Soper 151 Ch12 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 12.2: Convertible option-adjusted spread (Eq 494).
+hypothesis: F151_12_2_convert_oas
+family: F151_12_2_convert_oas
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 12.2: buy the higher-OAS and short the lower-OAS
+  convertible bond of the SAME issuer; profitable if the two spreads
+  converge (Calamos 2003).  OAS per Hull: PC = PB + V (Eq 494) - PB is
+  the straight bond discounted off the Treasury curve, V the conversion
+  call valued on that curve; bisection-shift the Treasury curve in
+  parallel until V = PCmkt - PB; the converged shift is the OAS.
+blocked_reason: >-
+  The signal REQUIRES daily market prices of (at least) TWO convertible
+  bonds of the SAME issuer, for a same-issuer long/short spread - in
+  addition to everything F151_12_1 needs:
+  (i) the convertible market tape itself (TRACE historic is subscription-
+  for-fee; Bloomberg/ICE/Numerix/FIS-Monis convertible products are paid
+  - verified 2026-10-28, same wall as F151_12_1);
+  (ii) the same-issuer pair structure: dual convertibles outstanding at
+  one issuer is a rare corner of an already small market - this trade
+  needs an OAS-sorted PAIR, so the paid-tape wall is necessary but not
+  sufficient; the pair universe itself is a vendor screening product;
+  (iii) the OAS machinery additionally needs the straight-bond cash-flow
+  schedule and an option model per the Eq 494 bisection - the straight
+  leg alone would need the issuer's non-convertible curve (paid).
+  No free source serves any of this for 2015-2017.  ETF proxies (CWB,
+  ICVT) cannot express a same-issuer OAS pair at all - not even a
+  weakened mechanism transfers.  Re-opens only with a free convertible
+  price + terms tape covering same-issuer pairs AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_12_2_convert_oas/BLOCKED.md (this prereg is the record)"

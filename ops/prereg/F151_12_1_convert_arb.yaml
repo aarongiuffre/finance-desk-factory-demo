@@ -1,0 +1,53 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_12_1_convert_arb
+# (Soper 151 Ch12 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 12.1: Convertible arbitrage (Eqs 492-493).
+hypothesis: F151_12_1_convert_arb
+family: F151_12_1_convert_arb
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 12.1: buy a convertible bond at issuance and short
+  h units of the underlying stock, h = Delta * C (Eq 492), where C is the
+  conversion ratio and Delta = dV/dS is the delta of the conversion option
+  V (Eq 493, model-dependent).  The edge is the empirical undervaluation of
+  convertibles at issuance relative to fair value; position held ~6-12
+  months from issuance, hedge ratio updated daily (Gamma per 7.4.1 optional).
+blocked_reason: >-
+  The signal REQUIRES the single-name convertible market tape plus terms
+  and an implied-vol surface for the embedded option.  Specifically:
+  (i) the long leg is the ACTUAL convertible's daily market price (the
+  trade buys the market's issuance underpricing, so a model price of our
+  own is circular - it cannot test whether the MARKET undervalues
+  issuance);
+  (ii) the hedge ratio needs C (conversion terms) and Delta, and Delta is
+  model-dependent on the convertible's own implied vol / credit dynamics -
+  the market's IV is only recoverable from the convertible's market price
+  itself, so without (i) there is no delta either.
+  None of this is free anywhere on this desk or on the public web
+  (verified 2026-10-28):
+  - FINRA TRACE historic trade data (convertibles are TRACE-eligible) is
+    subscription-for-fee; the free site serves current quotes / lookups
+    only, not a historical daily tape.
+  - Convertible pricing + security-master products (terms, conversion
+    ratios, model vol) are paid vendor offerings: Bloomberg, ICE,
+    Numerix convertible-bond library (proprietary reference database),
+    FIS/Monis convertible bond services.
+  - EDGAR has issuance terms (424B2/424B3 prospectuses) but UNSTRUCTURED
+    and not a price tape; the trade still dies without daily prices.
+  - Synthetic substitution (long corporate-bond proxy + long exchange-
+    listed call on the issuer) is by construction our own model value,
+    NOT the market convertible: it would measure our model, not the
+    book's market-mispricing edge.  Fund proxies (CWB, ICVT) are
+    long-only diversified convertible funds: no issuance timing, no
+    single-name delta hedge, no short leg - the mechanism does NOT
+    transfer, so they are not preregistered as a proxy (same rule as
+    F151_11_2's ETF wall).
+  Same standing wall class as F151_3_5_iv (no free per-name IV tape),
+  F151_5_14 (no free CDS tape), F151_11_2..11_6 (Markit tranche walls).
+  Re-opens only with a free single-name convertible price + terms tape
+  (and a recoverable IV for the embedded option) AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_12_1_convert_arb/BLOCKED.md (this prereg is the record)"
