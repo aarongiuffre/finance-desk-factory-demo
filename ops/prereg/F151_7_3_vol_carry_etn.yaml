@@ -1,0 +1,117 @@
+# PRE-REGISTRATION - F151_7_3_vol_carry_etn (Soper 151 Trading Strategies Ch7 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*, F151_4_*, F151_5_*,
+# F151_6_*, F151_7_2 all closed 2026-10-28).  Book section: 7.3 Volatility carry
+# with two ETNs - short VXX (short-term futures ETN) and buy VXZ (medium-term
+# futures ETN) with the hedge ratio h from a serial regression (with intercept)
+# of VXX returns on VXZ returns (footnote 131: h = beta = rho*sigma_X/sigma_Z).
+# 7.3.1 (hedging short VXX with a BASKET of individual medium-maturity VIX
+# futures, weights via Eq 432-433) is a separate BLOCKED stub - see
+# logs/edge/F151_7_3_1_vxx_futures_basket/BLOCKED.md: no free tape of individual
+# VIX futures contracts exists on this desk, and VIXM is the pre-packaged
+# basket, so the N-futures covariance construction is not implementable.
+# The book has NO backtests - no performance claims are attributed to it anywhere
+# below.  DISTINCT from W2a/W2b crypto carry families (closed) - different asset
+# class, different legs.
+# Paper / Yahoo (+ free FRED) only; no spend; no paid tape.
+hypothesis: F151_7_3_vol_carry_etn
+family: F151_7_3_vol_carry_etn
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 7.3: VXX holds short-maturity (months 1-2) VIX futures and
+  decays in contango (roll loss); VXZ holds months 4-7 and decays less (curve
+  slope flattens with maturity).  Short VXX / long VXZ with hedge ratio
+  h = beta of the serial regression (with intercept) of VXX returns on VXZ
+  returns (footnote 131).  Risk: short-term VXX spikes (VXZ spikes less) cause
+  short-term drawdowns even if the strategy is overall profitable.
+prior: >-
+  MILD PRIOR AGAINST clearing the desk gates: the true VXX/VXZ ETNs have no
+  free 2015-2017 tape on this desk (delisted originals; Yahoo serves only
+  2018-01-25+ under the current symbols), so the legs are proxied by VIXY
+  (short-term futures ETF, ~30d constant maturity) and VIXM (mid-term futures
+  ETF, months 4-7) - same underlying indices, but ETF wrappers with ~0.85%/yr
+  expense ratios.  Measured landscape on the tune slice (probe, pre-prereg,
+  no costs): the book's construction with h~1.7-2.5 (rolling 126d regression
+  slope of VIXY on VIXM) runs Sharpe ~0.5 with a NEGATIVE 2017 third, while
+  the degenerate dollar-neutral control (h=1) runs ~1.2 but concentrates
+  ~0.55 of net pnl in 2016 (G2 risk).  The G5 bar (net Sharpe >= 0.8) is the
+  same bar that killed every F151_3-6 cell.
+signal: >-
+  Legs: VIXY (short leg, weight -1.0) and VIXM (long leg, weight +h).  Decision
+  at close D uses only data <= D.  Hedge ratio h(D) = slope of the OLS (with
+  intercept) of VIXY daily returns on VIXM daily returns over the trailing
+  window ending at D (min 50% valid joint obs; else keep the previous h, or
+  stay flat if none).  Weights fixed between rebalances (no drift rebalancing).
+  Rebalance schedules: monthly (month-end close) and weekly (last trading day
+  of each week).  Control cell c_h1_m: h fixed at 1.0 (dollar-neutral
+  degenerate version of the book's construction, preregistered to locate where
+  the pnl actually comes from).
+cells:
+  c_h63_m: "h = trailing 63d regression slope, monthly rebalance"
+  c_h126_m: "h = trailing 126d regression slope, monthly rebalance"
+  c_h252_m: "h = trailing 252d regression slope, monthly rebalance"
+  c_h63_wk: "h = trailing 63d regression slope, weekly rebalance"
+  c_h126_wk: "h = trailing 126d regression slope, weekly rebalance"
+  c_h252_wk: "h = trailing 252d regression slope, weekly rebalance"
+  c_h1_m: "CONTROL: fixed h=1.0 (dollar-neutral), monthly rebalance"
+total_cells: 7 (whole preregistered budget; no post-hoc cells)
+g4_floor: >-
+  >= 24 funded rebalances for monthly cells (36 month-ends in tune); >= 12
+  actual rebalances for weekly cells (weekly is designed to rebalance often,
+  so the floor only catches a degenerate h path).
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 panel rows only as trailing lookback)"
+  data_end: "2017-12-31 tune cap (loader-capped: no bar past the cap is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run.  Cap enforced at
+    the loader (load_ticker_bars hard-caps every file at 2017-12-31).
+    Panel calendar starts at the fold SPY tape (2014-01-02), so the h window
+    w=252 warmup ends ~2015-01-05 - the first tune days keep the prior h or
+    stay flat (documented; w=126 ends 2014-07, w=63 ends 2014-04).
+data:
+  prices: >-
+    Desk tapes (Yahoo chart v8): VIXY (2011-), VIXM (2011-).  New pulls
+    2026-10-28 for this batch: VIXY, VIXM, UVXY (VXX/VXZ pulled and REJECTED -
+    Yahoo serves only 2018-01-25+ under the current symbols, the delisted
+    originals are gone).  Full history on disk; loader caps at the tune cap so
+    the holdout is never loaded.
+universe: >-
+  Fixed legs; eligibility = tape covers the tune window (VIXY/VIXM both do).
+costs: &costs >-
+  Equity desk floors (edge_plan section 6, same as F151_5/6): per side = fee
+  15 bps + half-spread bucket by ADV20 (VIXY 2015-17 ADV20 ~ $43M -> mid 15 bps;
+  VIXM ~ $1.4M -> small 40 bps) + slippage 10 bps; per-side floor 20 bps
+  (round-trip floor 40).  Short borrow 100 bps/yr on the short VIXY notional.
+  Costs charged on |dW| of BOTH legs at the decision day's ADV bucket - the
+  weekly cells pay the small-bucket VIXM spread on every h update.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights (exempt only if W is provably constant).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25 (episode = one executed rebalance).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, rebalances, turnover/yr,
+     cost drag/yr, borrow drag/yr, avg/median h, h range"
+  - "benchmarks reported ungated: constant short-VIXY (the carry attractor);
+     naive 1:1 is preregistered as cell c_h1_m, not a benchmark"
+  - "report-only: h series stats per window; VIXY/VIXM yearly total returns"
+  - "honest caveats: VXX/VXZ originals delisted - VIXY/VIXM are ETF proxies for
+     the same underlying indices with ~0.85%/yr expense ratios each; ETF vs ETN
+     wrapper/financing differences unmodeled; VIXM small-ADV spread (40 bps
+     half-spread) is a real cost the book's ETN trade would not pay; the book
+     contains no backtests to compare against"

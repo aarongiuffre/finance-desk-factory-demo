@@ -1,0 +1,129 @@
+# PRE-REGISTRATION - F151_7_2_vix_basis (Soper 151 Trading Strategies Ch7 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*, F151_4_*, F151_5_*,
+# F151_6_* all closed 2026-10-28).  Book section: 7.2 VIX futures basis trading
+# (mean-reversion: short the front VIX future when the basis D=(P_UX1-P_VIX)/T is
+# positive (contango), long when negative (backwardation); rule 431 with +/-0.10
+# open, +/-0.05 close thresholds; optional ES-futures hedge).
+# The book has NO backtests - no performance claims are attributed to it anywhere
+# below.  DISTINCT from W2d_vol_rp (closed KILL, 7.4 vol risk premium) and from
+# W2d_skew (BLOCKED, 7.5) - different section, different legs.
+# Paper / Yahoo (+ free FRED) only; no spend; no paid tape.
+hypothesis: F151_7_2_vix_basis
+family: F151_7_2_vix_basis
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 7.2: the VIX futures basis B = P_UX1 - P_VIX (Eq 429) and
+  daily roll value D = B/T (Eq 430, T = business days to first-month settlement,
+  assumed >= 10) has no forecasting power for subsequent VIX changes but
+  substantial forecasting power for subsequent VIX FUTURES price changes
+  (Mixon 2007; Nossman & Wilhelmsson 2009; Simon & Campasano 2014): futures fall
+  for positive basis and rise for negative basis.  Rule 431: open long UX1 if
+  D < -0.10, close long if D > -0.05, open short UX1 if D > +0.10, close short
+  if D < +0.05; optional hedge with mini-S&P futures sized by serial regression.
+prior: >-
+  MILD PRIOR AGAINST clearing the desk gates with free proxies: (a) the true
+  first-month VIX future UX1 has no free daily tape on this desk - the delisted
+  iPath VXX/VXZ notes serve only 2018-01-25+ under their current Yahoo symbols,
+  so the front leg must be proxied by VIXY (S&P 500 VIX Short-Term Futures ETF,
+  constant ~30d maturity, months 1-2 blend); (b) VIXY's Yahoo tape is reverse-
+  split-adjusted (displayed 2015-17 levels ~x121 the pre-split tape), so the
+  ABSOLUTE basis of Eqs 429-430 is not recoverable and the preregistered signal
+  is the de-trended RELATIVE basis; (c) in the 2015-2017 contango era the
+  relative-basis signal sits above zero most days, so the rule degenerates
+  toward the short-VIXY carry trade, whose pnl concentrates in the calm years
+  (G2 risk); (d) the G5 bar (net Sharpe >= 0.8) is the same bar that killed
+  every F151_3-6 cell.
+signal: >-
+  Legs: ^VIX (spot, index level) and VIXY (front-futures proxy).  Decision at
+  close D uses only data <= D.  Relative-basis signal
+    D_rel(D) = ln[VIX(D)/VIXY(D)] - MA_w( ln[VIX/VIXY] )(D),  w in {126, 252}
+  (trailing mean, min_periods=w, past-only).  Sign convention matches the book:
+  contango => VIXY decays vs spot => D_rel > 0 => SHORT; backwardation/spike =>
+  D_rel < 0 => LONG.  Trade rule (book 431 mirrored on D_rel with threshold
+  theta): open short if D_rel > +theta; close short if D_rel < +theta/2; open
+  long if D_rel < -theta; close long if D_rel > -theta/2.  Position = +/-1.0
+  notional in VIXY while open, flat otherwise; weights fixed between changes.
+  Hedged cell: SPY weight = beta from a trailing 126d OLS (with intercept) of
+  VIXY daily returns on SPY daily returns, recomputed at each position change
+  (book: hedge short UX1 by shorting ES; beta < 0 so the SPY leg is a short).
+  Control cell b_raw_t10_w21: the LITERAL substitution P_UX1 := VIXY close,
+  D_raw = (VIXY - VIX)/21 with the book's +/-0.10 open / +/-0.05 close
+  thresholds - preregistered to demonstrate the data wall (VIXY's split-
+  adjusted level makes absolute D meaningless; expected degenerate).
+cells:
+  b_rel_t05_w126: "theta=0.05, MA w=126"
+  b_rel_t10_w126: "theta=0.10, MA w=126 (book's open threshold on the proxy scale)"
+  b_rel_t20_w126: "theta=0.20, MA w=126"
+  b_rel_t05_w252: "theta=0.05, MA w=252"
+  b_rel_t10_w252: "theta=0.10, MA w=252"
+  b_rel_t20_w252: "theta=0.20, MA w=252"
+  b_rel_t10_w126_hedge: "theta=0.10, w=126, + SPY hedge leg beta(VIXY~SPY, 126d)"
+  b_raw_t10_w21: "CONTROL: literal D_raw=(VIXY-VIX)/21, book thresholds +/-0.10/0.05"
+total_cells: 8 (whole preregistered budget; no post-hoc cells)
+g4_floor: >-
+  >= 12 position-opens (episodes = open->close cycles) per threshold cell in
+  tune; the raw control cell is exempt from G4 only if its signal is provably
+  constant (degenerate by construction - reported, not excused).
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 panel rows only as trailing lookback)"
+  data_end: "2017-12-31 tune cap (loader-capped: no bar past the cap is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run.  Cap enforced at
+    the loader (load_ticker_bars hard-caps every file at 2017-12-31).
+    Panel calendar starts at the fold SPY tape (2014-01-02), so the MA w=252
+    warmup ends ~2015-01-05 - the first tune days are flat by construction
+    (documented; w=126 warmup ends 2014-07).
+data:
+  prices: >-
+    Desk tapes (Yahoo chart v8): ^VIX (spot, 1990-), VIXY (2011-), SPY (hedge
+    leg).  New pulls 2026-10-28 for this batch: VIXY, VIXM, UVXY (VXX/VXZ pulled
+    and REJECTED - Yahoo serves only 2018-01-25+ under the current symbols, the
+    delisted originals are gone; UVXY rejected as a proxy because the 2x
+    leverage rebalancing distorts the return the book trades).  Full history on
+    disk; loader caps at the tune cap so the holdout is never loaded.
+universe: >-
+  Fixed legs; eligibility = tape covers the tune window (VIXY/^VIX/SPY all do).
+costs: &costs >-
+  Equity desk floors (edge_plan section 6, same as F151_5/6): per side = fee
+  15 bps + half-spread bucket by ADV20 (VIXY 2015-17 ADV20 ~ $43M -> mid 15 bps;
+  SPY large 5 bps) + slippage 10 bps; per-side floor 20 bps (round-trip floor
+  40).  Short borrow 100 bps/yr on short notional (VIXY short; SPY short in the
+  hedge cell).  Costs charged on |dW| of BOTH legs at the decision day's ADV
+  bucket.  VIX is never a held leg.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights (exempt only if W is provably constant).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25 (episode = one open->close position cycle;
+  family treated as event-driven like the F151_6 kappa cell, monthly cap
+  applied per F151_6 precedent).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, opens, turnover/yr,
+     cost drag/yr, borrow drag/yr, % days short, % days long, % days flat"
+  - "benchmarks reported ungated: constant short-VIXY carry (Sharpe/yearly
+     sums) - the degenerate attractor of the proxy rule"
+  - "report-only: D_rel distribution stats (mean/sd/quantiles) per MA window;
+     hedge-cell beta path summary"
+  - "honest caveats: the absolute basis of Eqs 429-430 is NOT recoverable from
+     free tapes (VXX/VXZ originals delisted; VIXY split-adjusted levels) - this
+     family tests the RELATIVE basis vs its trailing norm, a weaker claim than
+     the book's; ETF legs carry ~0.85%/yr expense ratios and are not futures
+     (no margin/financing/calendar nuances); VIXY lag/decay differences vs UX1
+     are inside the tape and unmodeled; the book contains no backtests to
+     compare against"
