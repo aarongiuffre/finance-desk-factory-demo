@@ -564,3 +564,37 @@ families:
                                # logs/edge/F151_5_15_swap_spread/BLOCKED.md.
     kind: hypothesis
     hypotheses: [F151_5_15_swap_spread]
+  F151_6_5_vol_target:         # Soper FULL-151 Ch6: book 6.5 index vol targeting
+    retired: true              # w = sigma*/sigma vs T-bill proxy; SPY/QQQ/IWM +
+                               # SHY cash; ^VIX or 21/63d realized sigma; monthly
+                               # or kappa=0.10 threshold; L in {1,1.5}.  KILLED at
+                               # tune 2026-10-28: 0/8 - G2 year-concentration fails
+                               # everywhere (2017 = 0.64-0.85 of net pnl; the
+                               # overlay is beta + cash drag on a calm bull tape,
+                               # avg risky weight 0.72-1.08) and the best cell
+                               # Sharpe 1.017 does not beat untargeted 60/40 (0.97).
+                               # Evidence logs/edge/F151_6_5_vol_target/.
+    kind: hypothesis
+    hypotheses: [F151_6_5_vol_target]
+  F151_6_3_dispersion:         # Soper FULL-151 Ch6: book 6.3 dispersion trading
+    deferred: true             # DEFER 2026-10-28: standing exotic / options basket;
+                               # needs daily index + constituent implied-vol surface
+                               # (no free historical source; CBOE DataShop/ORATS/
+                               # OptionMetrics paid).  Nothing run.  Evidence
+                               # logs/edge/F151_6_3_dispersion/DEFER.md.
+    kind: hypothesis
+    hypotheses: [F151_6_3_dispersion]
+  F151_6_3_1_dispersion_subset:  # Soper FULL-151 Ch6: book 6.3.1 dispersion subset
+    deferred: true             # DEFER 2026-10-28 with parent 6.3 (same options/
+                               # vol-surface data wall).  Nothing run.  Evidence
+                               # logs/edge/F151_6_3_1_dispersion_subset/DEFER.md.
+    kind: hypothesis
+    hypotheses: [F151_6_3_1_dispersion_subset]
+  F151_6_4_etf_arb:            # Soper FULL-151 Ch6: book 6.4 intraday ETF arbitrage
+    blocked: true              # BLOCKED 2026-10-28: HFT - the rule fires on intraday
+                               # NBBO bid/ask with fill-or-kill execution; the edge
+                               # is ephemeral and absent from daily bars (book's own
+                               # warning).  No free intraday NBBO tape.  Nothing
+                               # run.  Evidence logs/edge/F151_6_4_etf_arb/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_6_4_etf_arb]
