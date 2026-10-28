@@ -1176,4 +1176,83 @@ families:
                                # logs/edge/F151_16_6_fix_flip/BLOCKED.md.
     kind: hypothesis
     hypotheses: [F151_16_6_fix_flip]
+  F151_17_2_laundering:        # Soper FULL-151 Ch17: book 17.2 money
+    blocked: true              # laundering - OUT-OF-SCOPE at inventory
+                               # 2026-10-28 (0 cells, no tune): illegal
+                               # activity; inventoried as a stub ONLY -
+                               # NO laundering workflow designed,
+                               # simulated, optimized, scored, or probed
+                               # beyond the inventory line; re-opens
+                               # never (standing policy, not a data
+                               # wall).  Evidence
+                               # logs/edge/F151_17_2_laundering/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_17_2_laundering]
+  F151_17_3_liquidity:         # Soper FULL-151 Ch17: book 17.3 liquidity
+    blocked: true              # management.  BLOCKED at prereg 2026-10-28
+                               # (0 cells, no tune; report-only
+                               # authorized): the book defines NO
+                               # tradeable rule (no signal/threshold/
+                               # equation); the only paperable object -
+                               # an always-on T-bill/money-market ETF
+                               # sleeve vs 0% cash - is trivially true
+                               # BY CONSTRUCTION (no failing null),
+                               # preregistered NOT paperable-as-strategy.
+                               # Tape facts: BIL/SHV (2007-), ICSH
+                               # (2013-12) cover 2015-2017; SGOV (2020-06)
+                               # and TBIL (2022-08) begin AFTER the tune
+                               # window.  Report-only sleeve accounting
+                               # in-window (BIL +0.69%/SHV +1.11%/ICSH
+                               # +3.06% 3y total, cash drag avoided,
+                               # positive by construction).
+                               # Evidence logs/edge/
+                               # F151_17_3_liquidity/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_17_3_liquidity]
+  F151_17_4_repo:              # Soper FULL-151 Ch17: book 17.4 repo
+    blocked: true              # BLOCKED at prereg 2026-10-28 (0 cells, no
+                               # tune; report-only authorized): the
+                               # mechanism (originating collateralized
+                               # cash lending as a repo counterparty)
+                               # does NOT transfer to any listed
+                               # instrument - money-market ETFs only HOLD
+                               # repo paper inside a managed book (same
+                               # wall class as F151_15_2_3); no free
+                               # repo-market rate tape for the window
+                               # (SOFR begins 2018-04, BGCR/TGCR/GCF 404
+                               # on fredgraph; only RRPONTSYAWARD - an
+                               # ADMINISTERED rate - and RRPONTSYD =
+                               # VOLUME, ID corrected against the values
+                               # 2026-10-28).  Report-only: RRP-award
+                               # mean 0.389% vs 1m T-bill 0.380% (mean
+                               # spread +0.9bp) - no free rate edge even
+                               # as an input.  Evidence logs/edge/
+                               # F151_17_4_repo/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_17_4_repo]
+  F151_17_5_pawn:              # Soper FULL-151 Ch17: book 17.5
+    blocked: true              # pawnbroking.  BLOCKED stub at prereg
+                               # 2026-10-28 (0 cells, no tune): private
+                               # per-loan pawn tape (LTV vs appraisal,
+                               # terms, forfeitures) + collateral
+                               # appraisal values all private/paid (same
+                               # wall class as F151_15_2_3); gold ETFs
+                               # and pawnshop-operator equities
+                               # preregistered as NOT transferring the
+                               # loan-book mechanism.  Evidence
+                               # logs/edge/F151_17_5_pawn/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_17_5_pawn]
+  F151_17_6_loan_shark:        # Soper FULL-151 Ch17: book 17.6 loan
+    blocked: true              # sharking - OUT-OF-SCOPE at inventory
+                               # 2026-10-28 (0 cells, no tune): illegal
+                               # usury; inventoried as a stub ONLY - NO
+                               # predatory-lending workflow designed,
+                               # simulated, optimized, scored, or probed
+                               # beyond the inventory line; re-opens
+                               # never (standing policy, not a data
+                               # wall).  Evidence
+                               # logs/edge/F151_17_6_loan_shark/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_17_6_loan_shark]
 

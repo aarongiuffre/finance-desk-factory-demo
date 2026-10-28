@@ -27,11 +27,14 @@ blocked_reason: >-
   (ii) NO FREE REPO-MARKET RATE TAPE for the tune window (probed 2026-10-28
   via fred_pull, cosd 2000-01-01 coed 2017-12-31): SOFR (and its averages)
   begin 2018-04-03 - AFTER the window (fredgraph window-breach guard fired);
-  BGCR/TGCR and GCF-repo-class series 404 on fredgraph (not served free);
-  the only free pre-2018 series is RRPONTSYD (Fed overnight reverse-repo
-  OFFERED rate, 2003+) - a policy-administered rate, not a traded repo
-  market rate.  The rate data, even where free, would be an input, never
-  the tradeable instrument.
+  BGCR/TGCR and GCF-repo-class series 404 on fredgraph (not served free).
+  The only free pre-2018 Fed repo-family series are RRPONTSYAWARD (overnight
+  reverse-repo AWARDED rate, 2013-09+, an ADMINISTERED policy rate, not a
+  traded repo market rate) and RRPONTSYD (the corresponding VOLUME in
+  billions - ID verified against the values 2026-10-28: 16.6-474.6 = volume,
+  corrected from the prereg's first draft which called RRPONTSYD a rate).
+  The rate data, even where free, would be an input, never the tradeable
+  instrument.
   Report-only blocks authorized below document the near-cash rate
   environment in-window; they carry no gate, no KILL/KEEP, no go ask.
 cells: "NONE - BLOCKED at prereg (0 preregistered cells; report-only)"
