@@ -302,6 +302,10 @@ def state_cycles(surface, cal, zcal, zlo=-1.0, zhi=1.0, early=False,
             elif i == len(cal) - 1:
                 cycles.append((open_i, None, cal[open_i]))
                 open_i = None
+    if open_i is not None:
+        # entry on the FINAL session: the position exists (entry cost charged)
+        # but has no holding day in-window - keep it open, no exit cost
+        cycles.append((open_i, None, cal[open_i]))
     return cycles, state
 
 
