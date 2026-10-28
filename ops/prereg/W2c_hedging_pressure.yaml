@@ -1,0 +1,114 @@
+# PRE-REGISTRATION - W2c_hedging_pressure (Soper WAVE 2c, book section 9.2).
+# Written 2026-10-28 BEFORE any tune run.  New family; does not re-open any
+# retired name (PRIMARY H4-H7, W2a, W2b all retired 2026-10-28).
+#
+# Book 9.2 "Trading based on hedging pressure": per commodity, weekly CFTC COT
+# data give hedging pressure HP = long/(long+short) separately for hedgers
+# (commercial) and speculators (noncommercial).  High hedgers' HP ~ contango,
+# low ~ backwardation; the zero-cost book portfolio buys the bottom-hedgers-HP
+# half of the cross-section and sells the top half (typical formation+holding
+# 6 months).  Literature: de Roon et al 2000, Basu & Miffre 2013.
+#
+# Crypto adaptation (paper): single asset.  The book's cross-section collapses
+# to a TIME-SERIES timing rule on CME Bitcoin futures positioning (CFTC
+# contract 133741): go long BTC when hedgers' HP is LOW (backwardation: hedgers
+# net short, speculators supply the hedge and earn the premium) or when
+# speculators' HP is HIGH (same reading from the other side).  Quantiles become
+# time-series z-scores / rolling percentile ranks (documented mapping:
+# z=+-1 ~ 16th/84th pct ~ quintile-ish band; book has no single-asset rule and
+# NO backtests - no performance claims exist for this section).
+#
+# Data provenance: CFTC public bulk archives deacot2018..2026.zip (legacy
+# Futures-Only report, free, no credentials, no API), pulled by
+# scripts/w2c_pull_cot.py into data/crypto/cftc/cot_btc_133741.csv
+# (446 weekly reports 2018-04-10..2026-10-20; commercials are 0 until
+# 2018-07-17 so HP_h is NaN-flat before then).  Prices: Binance spot BTC daily
+# tape data/crypto/binance/spot-BTC-1d.csv (2017-08-17..2026-09-30, desk pin
+# 2026-09-30, same as W2a/W2b).
+#
+# PIT release discipline: report as-of Tuesday, released Friday 3:30 PM ET.
+# release_ts = as_of + 3 days at 20:30 UTC (LATEST plausible release; EDT
+# releases are 19:30 UTC).  A report may inform a decision only at the first
+# daily close STRICTLY AFTER release_ts (i.e. the Saturday 00:00 UTC close for
+# Tuesday as-ofs).  Holiday-shifted as-ofs (5 in the sample) are covered by the
+# same rule - at least one full close past any same-week release.  Positions
+# decided at close t-1 earn r[t] (edge_common convention); fee 6 bps per fill.
+hypothesis: W2c_hedging_pressure
+family: W2c_hedging_pressure
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies 9.2 (hedging pressure, weekly CFTC
+  COT; HP = long/(long+short) for hedgers and speculators; long low-hedgers-HP
+  / high-spec-HP side).  Single-asset timing adaptation for CME BTC.
+prior: >-
+  MIXED to SKEPTICAL.  Hedging-pressure premia are documented in commodities,
+  but the crypto version has structural problems: (a) CME BTC commercials are
+  tiny (2018: 0-6% of OI) and dominated by nonreportables, so HP_h is a thin
+  signal for most of the sample; (b) the canonical premia are cross-sectional,
+  and their single-asset time-series projection may just be a noisy slow
+  indicator; (c) weekly signal with +-1 z-bands flips rarely - G4 (>=60
+  trades) may bind before economics do.  The 2018-2026 window contains the
+  2020-21 bull, so any long-tilted rule risks the same G2 year-concentration
+  kill that retired W2b.
+fold: dev
+window:
+  data_start: "2018-04-14 (first daily close strictly after the first release_ts)"
+  data_end: "2026-09-30 (desk pin, last complete monthly dump; same as W2a/W2b)"
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (BTC tape restricted to
+    the COT span); holdout = last 40%, NEVER read in tune mode.  Selection on
+    tune only.  Exact split date recorded in the run JSON.
+data:
+  positions: data/crypto/cftc/cot_btc_133741.csv (regenerable via
+    scripts/w2c_pull_cot.py; CFTC public domain)
+  prices: data/crypto/binance/spot-BTC-1d.csv (00:00 UTC daily closes)
+signal:
+  ratios: >-
+    Per weekly report: HP_h = comm_long/(comm_long+comm_short);
+    HP_s = nc_long/(nc_long+nc_short) (noncommercial spreading counts on both
+    sides, as the book's long/(long+short) definition implies when applied to
+    reported counts; documented);
+    NCnet = (nc_long-nc_short)/oi_all.
+  availability: >-
+    Report r is usable for decision close t iff t > release_ts(r); each daily
+    close carries the most recent usable report (merge_asof backward).
+  cells: >-
+    A: HP_h z over trailing L reports; long when z < -1, short when z > +1,
+    flat else.  L in {52, 104, 156}.  (3 cells)
+    B: HP_s z over L; long when z > +1, short when z < -1, flat else.  L in
+    {52, 104, 156}.  (3 cells)
+    C: HP_h rolling percentile rank over L in {104, 156}; long when rank <
+    0.2, short when rank > 0.8, flat else.  (2 cells)
+    D: HP_s rolling percentile rank over L in {104, 156}; long when rank >
+    0.8, short when rank < 0.2, flat else.  (2 cells)
+    E: NCnet sign rule, always in: long when NCnet > 0, short when NCnet < 0.
+    (1 cell)
+    F: NCnet z over L=104; long when z > +1, short when z < -1, flat else.
+    (1 cell)
+    TOTAL = 12 cells (whole preregistered budget; no post-hoc cells).
+  position: "+/-1 full notional, flat otherwise (E: always in).  NaN signal
+    (warmup, or HP_h before the first nonzero commercial count) = flat."
+costs:
+  fee: "6 bps per fill (0.06% desk convention) on each position change."
+  funding: "n/a (spot tape; the strategy trades BTC spot against CME futures
+    positioning as an indicator - no basis/funding term modeled, same
+    conservative omission as W2a/W2b)."
+  slippage_stress: "G6: same pnl at 2x (12 bps) and 3x (18 bps) fills."
+gates:
+  g1_lookahead: >-
+    replay-truncation on 5 random cuts (position series through D identical
+    when every input (COT csv + price tape) is cut at D) + future-peek mutant
+    (decision shifted one report EARLY) must FAIL the replay check.
+  g2_concentration: >-
+    max single-episode share of gross <= 0.25 AND max calendar-year share of
+    net <= 0.40.
+  g3_regime: "at least 2 of 3 equal thirds of the tune window net-positive."
+  g4_min_trades: ">= 60 completed trade episodes on the tune window (default
+    floor)."
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill (18 bps reported)."
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune, KILL.md + REGISTRY retired, no go
+    ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev
+    go (go file must name the code freeze sha + max_dev_trials)."
