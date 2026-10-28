@@ -791,6 +791,85 @@ families:
     kind: blocked_stub
     hypotheses: [F151_9_6_pricing_models]
 
-F151_7_6_variance_swaps:
-  status: blocked
-  reason: no free variance-swap tape
+  F151_10_1_hedge:             # Soper FULL-151 Ch10: book 10.1 hedging risk
+    blocked: true              # with futures (unit + 63d-OLS on SPY/ES=F,
+                               # USO/CL=F, GLD/GC=F).  KEEP_TUNE 1/6 at tune
+                               # 2026-10-28: unit_spx VR 0.940 residual CAGR
+                               # -0.17%/yr; awaiting standing_dev_go (no
+                               # scored DEV; holdout unread).  WTI cells died
+                               # on residual CAGR -20/-22%/yr (structurally
+                               # short USO roll bleed).  Evidence
+                               # logs/edge/F151_10_1_hedge/.
+    kind: hypothesis
+    hypotheses: [F151_10_1_hedge]
+  F151_10_1_1_cross_hedge:     # Soper FULL-151 Ch10: book 10.1.1 cross-hedge
+    blocked: true              # (Eq 463).  KEEP_TUNE 2/6: slv_gc_h63/h126
+                               # VR ~0.49; awaiting standing_dev_go.  Evidence
+                               # logs/edge/F151_10_1_1_cross_hedge/.
+    kind: hypothesis
+    hypotheses: [F151_10_1_1_cross_hedge]
+  F151_10_1_2_ir_hedge:        # Soper FULL-151 Ch10: book 10.1.2 IR hedge
+    blocked: true              # (Eqs 464-468).  KEEP_TUNE 3/6: all three
+                               # IEF/ZN=F cells VR ~0.88; awaiting
+                               # standing_dev_go.  TLT cells died on
+                               # |residual CAGR|<=2% cap.  Evidence
+                               # logs/edge/F151_10_1_2_ir_hedge/.
+    kind: hypothesis
+    hypotheses: [F151_10_1_2_ir_hedge]
+  F151_10_3_contrarian:        # Soper FULL-151 Ch10: book 10.3 contrarian MR
+    retired: true              # (Eqs 469-471).  KILLED at tune 2026-10-28:
+                               # 0/4; base Sharpe -0.72.  Evidence
+                               # logs/edge/F151_10_3_contrarian/.
+    kind: hypothesis
+    hypotheses: [F151_10_3_contrarian]
+  F151_10_4_trend:             # Soper FULL-151 Ch10: book 10.4 trend/momentum
+    retired: true              # (Eqs 474-475).  KILLED at tune 2026-10-28:
+                               # 0/5; every horizon negative.  Evidence
+                               # logs/edge/F151_10_4_trend/.
+    kind: hypothesis
+    hypotheses: [F151_10_4_trend]
+  F151_11_2_equity_tranche:    # Soper FULL-151 Ch11: book 11.2 equity tranche
+    blocked: true              # carry.  BLOCKED at prereg 2026-10-28: Markit
+                               # CDX tranche tape paid; no free 2015-17 source.
+                               # Evidence logs/edge/F151_11_2_equity_tranche/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_11_2_equity_tranche]
+  F151_11_3_senior_mezz:       # Soper FULL-151 Ch11: book 11.3 senior/mezz
+    blocked: true              # BLOCKED at prereg 2026-10-28: same Markit wall
+                               # + mezzanine quote.  Evidence
+                               # logs/edge/F151_11_3_senior_mezz/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_11_3_senior_mezz]
+  F151_11_4_tranche_hedge:     # Soper FULL-151 Ch11: book 11.4 tranche hedge
+    blocked: true              # BLOCKED at prereg 2026-10-28: needs two matched
+                               # tranche curves.  Evidence
+                               # logs/edge/F151_11_4_tranche_hedge/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_11_4_tranche_hedge]
+  F151_11_5_cds_hedge:         # Soper FULL-151 Ch11: book 11.5 CDS hedge
+    blocked: true              # BLOCKED at prereg 2026-10-28: tranche + single-
+                               # name CDS both paid.  Evidence
+                               # logs/edge/F151_11_5_cds_hedge/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_11_5_cds_hedge]
+  F151_11_6_cdo_curve:         # Soper FULL-151 Ch11: book 11.6 CDO curve
+    blocked: true              # BLOCKED at prereg 2026-10-28: no free multi-
+                               # tenor tranche curve.  Evidence
+                               # logs/edge/F151_11_6_cdo_curve/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_11_6_cdo_curve]
+  F151_11_7_mbs:               # Soper FULL-151 Ch11: book 11.7 MBS trading
+    blocked: true              # KEEP_TUNE 4/6 at tune 2026-10-28: vmbs_zf_h63/
+                               # h126/h252/dur VR 0.48-0.52, residual CAGR
+                               # +2.0..+2.3%/yr; awaiting standing_dev_go (carry
+                               # on free proxies, not scored-DEV alpha; holdout
+                               # unread).  Evidence logs/edge/F151_11_7_mbs/.
+    kind: hypothesis
+    hypotheses: [F151_11_7_mbs]
+
+  F151_7_6_variance_swaps:     # Soper FULL-151 Ch7: book 7.6 variance swaps
+    blocked: true              # BLOCKED 2026-10-28: no free variance-swap tape.
+                               # Soft-fold: was orphaned outside families:.
+    kind: blocked_stub
+    hypotheses: [F151_7_6_variance_swaps]
+
