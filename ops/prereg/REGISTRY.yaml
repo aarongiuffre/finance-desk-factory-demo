@@ -1255,4 +1255,44 @@ families:
                                # logs/edge/F151_17_6_loan_shark/BLOCKED.md.
     kind: hypothesis
     hypotheses: [F151_17_6_loan_shark]
+  F151_18_2_ann:              # Soper FULL-151 Ch18: book 18.2 ANN
+    blocked: true              # quantile - COVERED BY PRIMARY 2026-10-28
+                               # (0 new cells, no run, no tune, no go
+                               # ask): the same strategy is already
+                               # preregistered and scored as
+                               # H6_nn_quantile (retired: true) - KILL
+                               # 0/8 cells pass the six gates (all fail
+                               # G5 fees, net Sharpe -1.07..-1.62 at 6
+                               # bps/side; oos accuracy 0.360-0.373 vs
+                               # chance 1/3).  Stub cross-references
+                               # H6; per the batch brief do NOT
+                               # reopen/re-tune/amend H6 and never
+                               # open cells under this name (re-opening
+                               # would re-test a retired family under a
+                               # new name).  Evidence logs/edge/
+                               # F151_18_2_ann/KILL.md (cross-ref;
+                               # actual evidence logs/edge/
+                               # H6_nn_quantile/).
+    kind: covered_stub
+    covered_by: H6_nn_quantile
+    hypotheses: [F151_18_2_ann]
+  F151_18_3_sentiment:        # Soper FULL-151 Ch18: book 18.3
+    blocked: true              # Bernoulli NB tweet sentiment - COVERED
+                               # BY PRIMARY 2026-10-28 (0 new cells, no
+                               # run): same strategy is already
+                               # preregistered as H8_tweet_nb (blocked:
+                               # true) - no tweet feed confirmed by VP;
+                               # no inventing tweets/synthetic corpora/
+                               # X API purchase/scraping against ToS.
+                               # Stub cross-references H8.  Unblock
+                               # ONLY via the H8 prereg's UNBLOCK
+                               # condition (rewrite H8 in place), never
+                               # by opening cells under this name.
+                               # Evidence logs/edge/
+                               # F151_18_3_sentiment/BLOCKED.md
+                               # (cross-ref; actual evidence logs/edge/
+                               # H8_tweet_nb/BLOCKED.md).
+    kind: covered_stub
+    covered_by: H8_tweet_nb
+    hypotheses: [F151_18_3_sentiment]
 
