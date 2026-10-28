@@ -1,0 +1,98 @@
+# PRE-REGISTRATION - F151_8_1_hp_fx (Soper 151 Ch8 FX batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_7_* all closed
+# 2026-10-28).  Book section: 8.1 Moving averages with HP filter (Eqs 437-439).
+# The book has NO backtests - no performance claims are attributed to it anywhere
+# below.  DISTINCT from H4_hp_filter (BTC crypto, retired).
+# Paper / free public only (Yahoo FX chart + FRED); no spend; no paid FX feeds.
+hypothesis: F151_8_1_hp_fx
+family: F151_8_1_hp_fx
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 8.1: HP-filter the FX spot rate S(t) = S*(t) + nu(t)
+  (Eq 437); the trend S*(t) minimizes g = sum [S - S*]^2 + lambda sum
+  [Delta^2 S*]^2 (Eq 438, lambda = 100*n^2, n = data frequency per year -
+  n=12 monthly -> lambda=14400, the book's stated convention).  Then trade
+  MA(T1) > MA(T2) on S* (buy) / MA(T1) < MA(T2) (sell), T1 < T2, per
+  Harris & Yilmaz (2009)-style trend rules on the filtered component.
+prior: >-
+  MILD PRIOR FOR gross: FX trend on a smoothed component is a documented
+  anomaly (Harris-Yilmaz), but 2015-2017 is a mean-reverting range tape for
+  the majors (EUR 1.05-1.15, USDJPY 100-125 chop), MA crossovers flip often,
+  and the 30 bps/side desk floor is ~10x real FX dealing costs - the likely
+  failure modes are G5 (fee drag on flip-heavy crossovers) and G3 (one
+  trendless regime).
+signal: >-
+  Per foreign major i in {EUR, GBP, JPY, AUD, CAD, CHF, NZD} (vs USD, all
+  series converted to USD-per-foreign).  MONTHLY cells: monthly closes
+  (last daily bar of each month); at decision month-end D take the trailing
+  window of up to 60 monthly closes (skip the month if fewer than T2+6
+  available), HP-filter that window two-sided (lambda=14400) -> S*(t) over
+  the window ONLY (past-only by construction: the window ends at D);
+  signal_i = +1 if mean(S*[-T1:]) > mean(S*[-T2:]) else -1.  Portfolio
+  weight_i = signal_i / 7.  DAILY cells: daily closes, trailing window up
+  to 750 daily bars (skip the day if fewer than T2+20 available), HP
+  two-sided on the window (lambda=100*252^2 = 6.3504e6), same MA rule,
+  weight_i = signal_i / 7.  Decision at close D, active from the next bar.
+  HP filter solved as the banded system (I + lambda K'K) S* = S (K = second
+  difference), stdlib numpy/scipy only.
+cells:
+  hp_m_3_12: "monthly, lambda=14400, T1=3, T2=12 (months), long/short each major 1/7"
+  hp_m_6_24: "monthly, lambda=14400, T1=6, T2=24"
+  hp_m_12_36: "monthly, lambda=14400, T1=12, T2=36"
+  hp_d_20_60: "daily, lambda=6.3504e6, T1=20, T2=60 (bars)"
+  hp_d_50_200: "daily, lambda=6.3504e6, T1=50, T2=200"
+total_cells: 5 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes (monthly cells); >= 12 weight-change days (daily cells)"
+
+fold: dev
+window:
+  data_start: "2012-01-01 (warmup only; trailing lookbacks read pre-2015 bars)"
+  data_end: "2017-12-31 tune cap (fold-copy FX files loader-capped there; no bar past the cap is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Cap enforced at the loader: no bar past 2017-12-31
+    is loaded at all (fx_pull.py pull window coed=2017-12-31).
+data:
+  spot: >-
+    Yahoo chart v8 daily FX closes, raw/fx/<PAIR>.json, window 2012-01-01..
+    2017-12-31 (pull-capped): EURUSD=X GBPUSD=X USDJPY=X AUDUSD=X USDCAD=X
+    USDCHF=X NZDUSD=X.  Yahoo serves intermediate/indicative FX closes, not
+    executable quotes - documented proxy wall (no free historical executable
+    FX tape).
+universe: >-
+  Fixed 7-major cross-section; no membership.  Missing daily bars ffilled
+  (max 5 weekdays); leading all-NaN rows dropped.  Quoting converted to
+  USD-per-foreign (JPY=1/USDJPY, CAD=1/USDCAD, CHF=1/USDCHF).
+costs: &costs >-
+  FX spot costs: per side = 30 bps flat (engine large-liquidity bucket:
+  15 fee + 5 half-spread + 10 slippage), charged on |dW| at rebalance.
+  CONSERVATIVE vs real interbank majors dealing (~2-5 bps all-in) - only
+  makes a KILL safer.  No short-borrow term: an FX spot short of currency i
+  is self-financing at rf_i, and financing enters this family nowhere by
+  book construction (8.1 is a pure price rule); financing is priced inside
+  the carry families (8_2/8_2_1/8_3/8_4) via the forward-discount accrual.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights (signal-varying cells all vary here).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25 (episode = one rebalance).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, avg gross"
+  - "benchmarks reported ungated: equal-weight 7-major USD-per-foreign basket buy-hold (spot, no costs) and per-major spot Sharpes"
+  - "era split by calendar year (G2); flip counts per cell"
+  - "honest caveats: Yahoo FX closes are indicative, not executable; whole window is POST-publication for the trend anomaly (decay is IN the test); the book contains no backtests to compare against; HP endpoint effect at the window edge is inherent to any past-only HP (documented, not tuned away)"

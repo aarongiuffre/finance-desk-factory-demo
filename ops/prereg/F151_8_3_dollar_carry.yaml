@@ -1,0 +1,79 @@
+# PRE-REGISTRATION - F151_8_3_dollar_carry (Soper 151 Ch8 FX batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing.
+# Book section: 8.3 Dollar carry trade (Eq 444; Lustig-Roussanov-Verdelhan 2014
+# dollar factor).  Paper / free public only; no paid FX feeds.
+hypothesis: F151_8_3_dollar_carry
+family: F151_8_3_dollar_carry
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 8.3: average cross-sectional forward discount
+  D_bar(t,T) = (1/N) sum_i D_i(t,T) (Eq 444); go LONG all N foreign currency
+  forwards, equal weights, when D_bar > 0, SHORT all N when D_bar < 0
+  (T can be 1/2/3/6/12 months).  The dollar factor relates to the state of
+  the US economy: weak US -> positive average forward discount.
+prior: >-
+  MILD PRIOR FOR gross: the dollar factor earns its carry when the average
+  foreign rate exceeds the US rate; in 2015-2017 US rates ROSE toward and
+  above most peers (D_bar crosses sign: positive early-2015 via AUD/NZD,
+  negative late-2015 onward as the Fed hiked) - the sign rule therefore
+  FLIPS the whole basket at least once, paying 30 bps/side on 7 legs and
+  exposing each regime to the opposite currency beta.  Expect G2/G3
+  regime failure or a sign-flip-driven G5 fee failure; the low-conviction
+  threshold cell trades off flip frequency vs signal coverage.
+signal: >-
+  Monthly (or quarterly) decision at the last trading day D of the period.
+  D_i = rf_i - rd_us (FRED OECD monthly 3M interbank; Germany = eurozone
+  proxy), latest COMPLETED month.  D_bar = mean over the 7 majors.
+  dollar_m / dollar_q: weight_i = +1/7 if D_bar > 0 else -1/7 (ALL legs same
+  side; the book's rule has no threshold).
+  dollar_m_thr: trade only when |D_bar| > 0.0025 (25 bp annualized
+  conviction floor), else flat - preregistered low-conviction variant.
+  Carry accrual D_i/252 per day on every active leg (short legs accrue
+  -D_i/252).  P&L instrument: unhedged spot returns + differential accrual.
+  Decision at close D, active from the next bar; weights fixed between
+  rebalances.
+cells:
+  dollar_m: "monthly sign rule on D_bar, all 7 majors same side 1/7"
+  dollar_q: "quarterly sign rule (episode floor 8)"
+  dollar_m_thr: "monthly with |D_bar| > 25 bp conviction floor, else flat"
+total_cells: 3 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes (monthly); >= 8 (quarterly)"
+
+fold: dev
+window:
+  data_start: "2012-01-01 (warmup only)"
+  data_end: "2017-12-31 tune cap (fold-copy FX files and FRED pulls both capped there)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31.  Dev holdout
+    2018-2019 NEVER READ this run.  Cap enforced at the loader
+    (fx_pull.py / fred_pull.py coed=2017-12-31).
+data:
+  spot: "Yahoo chart v8 daily FX closes raw/fx/<PAIR>.json (7 majors), 2012-01-01..2017-12-31, indicative closes - documented proxy wall"
+  rates: >-
+    FRED fredgraph.csv monthly 3M interbank IR3TIB01{US,DE,GB,JP,CA,AU,CH,NZ}M156N,
+    2012-01..2017-12 (pull-capped).  DE = eurozone proxy.  Monthly obs
+    forward-filled to daily from the prior month-end (no same-month lookahead).
+universe: "Fixed 7-major cross-section; no membership; missing bars ffilled (max 5 weekdays)."
+costs: &costs >-
+  30 bps/side flat on |dW| at rebalance (engine large bucket), conservative
+  vs interbank majors.  No short-borrow term: forward shorts self-financing,
+  financing = the differential accrual in the returns.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  AND decision-early mutant must differ (all cells signal-varying).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25 (episode = one rebalance).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 AND net CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, avg gross"
+  - "benchmarks reported ungated: constant equal-weight 7-major basket (no-cost) and its sign-flipped mirror - the dollar factor pnl is measured AGAINST both, since a sign rule that mostly matches one of them is that benchmark, not an edge"
+  - "era split by calendar year (G2); D_bar monthly series with sign-flip dates; sign-agreement vs the constant baskets"
+  - "honest caveats: D ~= rf - rd is the book's Eq 443 approximation (forward points / cross-currency basis not free); the rule is a single signed beta on the whole basket - it cannot hedge; whole window POST-publication (decay IN the test)"

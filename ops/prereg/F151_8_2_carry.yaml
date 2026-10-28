@@ -1,0 +1,79 @@
+# PRE-REGISTRATION - F151_8_2_carry (Soper 151 Ch8 FX batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing.
+# Book section: 8.2 Carry trade (Eqs 440-441, UIRP / CIRP).  DISTINCT from
+# F151_8_2_1_hml_carry (rank-based HML cross-section) and from the retired
+# W2a crypto funding-carry family.  Paper / free public only; no paid FX feeds.
+hypothesis: F151_8_2_carry
+family: F151_8_2_carry
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 8.2: under CIRP the 1-period forward is
+  F(t,T) = S(t) (1+rd)/(1+rf) (Eq 441); the book's basic carry strategy buys
+  forwards on currencies at a forward discount (rf > rd) and sells forwards
+  on currencies at a forward premium (rf < rd) - the Fama forward-premium
+  anomaly.  Eq 443: D(t,T) = s - f ~= rf - rd, so the free-data proxy for
+  the forward discount is the INTEREST DIFFERENTIAL (the book's own
+  approximation).
+prior: >-
+  MODERATE PRIOR FOR gross carry: high-rate currencies earned positive
+  carry in 2015-2017 (AUD/NZD vs CHF/JPY/EUR), but the 2015 CHF floor
+  collapse and the 2016-17 USD rally are the classic crash/regime risk;
+  expect the unhedged sign rule to be regime-concentrated (G2/G3), and the
+  long-only cell to be a low-vol carry grind that may fail G5 Sharpe.
+signal: >-
+  Monthly (or quarterly) decision at the last trading day D of the period.
+  D_i = rf_i - rd_us from FRED OECD monthly 3M interbank rates
+  (IR3TIB01xxM156N; Germany series = eurozone proxy for EUR, documented),
+  using the LATEST COMPLETED month's average (the decision month itself is
+  never used).  Carry accrual for a LONG foreign position = D_i / 252 per
+  day (monthly forward-buy return ~ spot return + D_i/12 per Eq 443).
+  P&L instrument: unhedged spot exposure (USD-per-foreign daily returns)
+  plus the daily differential accrual.  Decision at close D, active from
+  the next bar.  Weights held fixed between rebalances.
+cells:
+  sign_all_m: "monthly: every major long +1/7 if D_i > 0 else short -1/7 (book's basic sign rule, all 7 active)"
+  sign_long_m: "monthly long-only: +1/7 if D_i > 0 else 0"
+  sign_all_q: "quarterly sign rule, same construction (episode floor 8)"
+total_cells: 3 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes (monthly); >= 8 (quarterly)"
+
+fold: dev
+window:
+  data_start: "2012-01-01 (warmup only; rates panel from 2012-01 monthly obs)"
+  data_end: "2017-12-31 tune cap (fold-copy FX files and FRED pulls both capped there)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31.  Dev holdout
+    2018-2019 NEVER READ this run.  Cap enforced at the loader (fx_pull.py
+    coed=2017-12-31; fred_pull.py coed=2017-12-31).
+data:
+  spot: "Yahoo chart v8 daily FX closes raw/fx/<PAIR>.json (7 majors), 2012-01-01..2017-12-31, indicative closes - documented proxy wall"
+  rates: >-
+    FRED fredgraph.csv monthly 3M interbank IR3TIB01{US,DE,GB,JP,CA,AU,CH,NZ}M156N,
+    2012-01..2017-12 (pull-capped).  DE = eurozone proxy.  Percent -> decimal.
+    Monthly obs mapped to daily by FORWARD-FILL from the prior month-end
+    (days in month M+1 accrue D(M)/252) - no same-month lookahead.
+universe: "Fixed 7-major cross-section; no membership; missing bars ffilled (max 5 weekdays)."
+costs: &costs >-
+  30 bps/side flat on |dW| at rebalance (engine large bucket: 15 fee + 5
+  half-spread + 10 slip), conservative vs interbank majors.  No short-borrow
+  term: forward/spot shorts are self-financing and the financing IS the
+  differential accrual priced in the returns.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  AND decision-early mutant must differ (all cells signal-varying).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25 (episode = one rebalance).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 AND net CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, avg gross"
+  - "benchmarks reported ungated: equal-weight 7-major basket buy-hold (unhedged, no costs), per-major carry-vs-spot decomposition (mean D_i, mean spot return)"
+  - "era split by calendar year (G2); D_bar time series stats"
+  - "honest caveats: forward POINTS are not free (Bloomberg/Reuters paid) - D ~= rf - rd is the book's Eq 443 approximation and ignores the cross-currency basis (which was wide post-2015 and is a real, unmodeled wedge); interbank 3M is unsecured and monthly-average, not a deposit fix; the 2015 CHF floor break sits inside the tune window; whole window POST-publication (decay IN the test)"

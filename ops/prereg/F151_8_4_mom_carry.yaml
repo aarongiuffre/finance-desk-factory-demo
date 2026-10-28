@@ -1,0 +1,91 @@
+# PRE-REGISTRATION - F151_8_4_mom_carry (Soper 151 Ch8 FX batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing.
+# Book section: 8.4 Momentum & carry combo (Eqs 445-452; Olszweski-Zhou style
+# min-variance combo).  FX families - DISTINCT from the retired W2a_mom_carry
+# (crypto funding carry).  Paper / free public only; no paid FX feeds.
+hypothesis: F151_8_4_mom_carry
+family: F151_8_4_mom_carry
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 8.4: combine the momentum strategy (Subsection 8.1 -
+  MA crossover on the HP-filtered spot) with the carry strategy (Subsection
+  8.2) by minimizing the variance of the combo return R = w1 R1 + w2 R2,
+  w1 + w2 = 1 (Eqs 448-450), giving w1 = (s2^2 - s1 s2 rho) /
+  (s1^2 + s2^2 - 2 s1 s2 rho) and w2 = (s1^2 - s1 s2 rho) / (denominator)
+  (Eqs 451-452) from the sample covariance of the two legs' historical
+  returns.
+prior: >-
+  MILD PRIOR FOR the combination MECHANISM (diversification works whenever
+  the legs' correlation is < 1), NOT for the legs themselves: both legs are
+  preregistered KILL-prone on this tape (momentum = hp_m_3_12 from
+  F151_8_1, carry = hml_2v2_m from F151_8_2_1), and a min-variance blend
+  of two weak legs is still weak.  The mechanism can only help if the legs
+  are genuinely negatively correlated; measured rho is reported per cell.
+  If either leg is negative-gross on the tune slice the combo inherits the
+  failure - the combo is tested as the book states it, not salvaged.
+signal: >-
+  Two preregistered legs, each decided monthly at the last trading day D of
+  the month, active from the next bar:
+  LEG MOM (R1): the F151_8_1 hp_m_3_12 construction verbatim - per-major
+  HP-filtered monthly closes (lambda=14400, trailing <=60-month window),
+  MA(3) > MA(12) -> +1 else -1, weight_i = signal_i / 7, SPOT returns only
+  (financing excluded per 8.1's pure price-rule construction).
+  LEG CAR (R2): the F151_8_2_1 hml_2v2_m construction verbatim - long
+  top-2 / short bottom-2 by D_i (1/4 each), differential accrual D_i/252 on
+  active legs, spot + accrual returns.
+  COMBO cells: combo_ew_m fixes w1 = w2 = 0.5.  combo_mv12_m / combo_mv24_m
+  recompute w1 (Eqs 451-452) at each month-end from the trailing 12 / 24
+  months of DAILY returns of the two legs (each leg's own daily pnl series
+  over the trailing window, computed causally - the trailing window ends at
+  the decision date), w2 = 1 - w1, weights NOT clipped (Eqs 451-452 are
+  convex for rho in [-1, 1] and the degenerate rho = +-1 / zero-variance
+  corner is handled as: if the denominator <= 0 or either variance is 0,
+  fall back to w1 = 0.5 and report the fallback count).
+  The combo daily return = w1_t * R1_t + w2_t * R2_t; the weight vector on
+  each currency = w1_t * W1_i + w2_t * W2_i, rebalanced monthly (costs on
+  |dW| of the COMBINED currency weights).
+cells:
+  combo_ew_m: "equal-weight 0.5/0.5 combo of the two preregistered legs, monthly"
+  combo_mv12_m: "min-variance weights from trailing 12m daily leg returns, monthly"
+  combo_mv24_m: "min-variance weights from trailing 24m daily leg returns, monthly"
+total_cells: 3 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes"
+
+fold: dev
+window:
+  data_start: "2012-01-01 (warmup only)"
+  data_end: "2017-12-31 tune cap (fold-copy FX files and FRED pulls both capped there)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31.  Dev holdout
+    2018-2019 NEVER READ this run.  Cap enforced at the loader
+    (fx_pull.py / fred_pull.py coed=2017-12-31).
+data:
+  spot: "Yahoo chart v8 daily FX closes raw/fx/<PAIR>.json (7 majors), 2012-01-01..2017-12-31, indicative closes - documented proxy wall"
+  rates: >-
+    FRED fredgraph.csv monthly 3M interbank IR3TIB01{US,DE,GB,JP,CA,AU,CH,NZ}M156N,
+    2012-01..2017-12 (pull-capped).  DE = eurozone proxy.  Monthly obs
+    forward-filled to daily from the prior month-end (no same-month lookahead).
+universe: "Fixed 7-major cross-section; no membership; missing bars ffilled (max 5 weekdays)."
+costs: &costs >-
+  30 bps/side flat on |dW| at rebalance (engine large bucket), conservative
+  vs interbank majors.  No short-borrow term (financing = the differential
+  accrual inside the carry leg; the momentum leg is a pure price rule).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  AND decision-early mutant must differ (all cells signal-varying).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25 (episode = one rebalance).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 AND net CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, avg gross"
+  - "legs report-only: standalone MOM and CAR tune Sharpe/CAGR + their trailing-window correlation rho (the combo only helps if rho < 1); w1 time series for the mv cells; fallback counts"
+  - "benchmarks reported ungated: the two legs standalone; equal-weight 7-major basket"
+  - "honest caveats: both legs are preregistered constructions from the sibling families (no re-tuning inside this family); whole window POST-publication (decay IN the test); the book names no lookback for the covariance (12/24m preregistered as the standard choices)"
