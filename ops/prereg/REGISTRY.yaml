@@ -75,7 +75,14 @@ families:
     kind: hypothesis
     hypotheses: [H4_hp_filter]
   H5_knn:                      # PRIMARY crypto slate: book 3.17 single-stock KNN on BTC daily,
-    kind: hypothesis           # 60/40 train/val, T/z1/train grid; prereg H5_knn.yaml
+    retired: true              # KILLED at tune 2026-10-28: 0/48 grid cells pass the six gates -
+                               # all fail G5 fees (long/short net Sharpe -0.20..-0.66, CAGR
+                               # -16..-32%), G2+G3 concentration/regime; long/flat is weak beta
+                               # (Sharpe ~0.5, CAGR 6-8% vs B&H 58.8% on the same val window).
+                               # Frozen-pool KNN, replay+mutant tests pass - failure is economic.
+                               # Holdout never read, no go issued. Family retired permanently.
+                               # prereg H5_knn.yaml; evidence logs/edge/H5_knn/{h5_summary.json,KILL.md}
+    kind: hypothesis
     hypotheses: [H5_knn]
   H6_nn_quantile:              # PRIMARY crypto slate: book 18.2 ANN quantile classifier on
     kind: hypothesis           # BTC 15m, ReLU+softmax K=3, retrain daily; prereg H6_nn_quantile.yaml
