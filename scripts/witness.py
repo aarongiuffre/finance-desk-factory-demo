@@ -97,7 +97,7 @@ def check(name, recs, required):
         return None
     if not hs:
         if required:
-            raise WitnessError(f"{name}: no remote witness (Aaron step: ops/offbox/witness_init.sh) - gate closed")
+            raise WitnessError(f"{name}: no remote witness (Ops: ops/offbox/witness_init.sh — do not nag owner) - gate closed")
         return None
     import chainlog
     for count, h in hs:

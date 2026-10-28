@@ -32,22 +32,18 @@ families:
     kind: hypothesis             # registered 2026-10-19 (TRI-3, Aaron-approved in session); dev-only
     hypotheses: [H5_rf_change]
   H6_nasdaq_cheap:
+    deferred: true               # Aaron 2026-10-28 via VP: unavailable on-box by design; keep docker+wheel; silence laptop/leave-root asks
     kind: hypothesis             # registered 2026-10-21: one-shot validation read of the S3
                                  # cheap-10 on the NASDAQ universe (dead names in) vs ONEQ;
                                  # prereg H6_nasdaq_cheap_universe.yaml, commit e9151dd data layer
     hypotheses: [H6_nasdaq_cheap_universe]
     validation_reads:
       H6_nasdaq_cheap_universe: >-
-        GATED OUT 2026-10-24, Aaron's decision: the validation grant is refused
-        while slowglow is root-equivalent (docker/wheel) and Aaron elected NOT
-        to run ops/staged_sudo/leave_root_equivalent_groups.sh (box keeps its
-        docker/sudo workflows).  The signed per-run go (nonce 3e6b7a420885002e,
-        freeze 446e909a, prereg 880f93ac) is delivered and valid but unspent -
-        the nonce was never granted.  The H6 validation question stays OPEN and
-        honestly labeled: no counted validation read exists for the NASDAQ
-        cheap-10 sleeve vs ONEQ; no re-test under a new name unless Aaron
-        explicitly re-opens the family.  Note: an unauthorized root-owned go
-        file for this hypothesis appeared in /etc/finance-gate/go/ on 2026-10-21
-        (moved aside as .revoked-20261024 by Aaron - an on-box root go cannot
-        authorize a validation read while slowglow is root-equivalent, and
-        creating one was a process violation).
+        DEFERRED / CLOSED 2026-10-28 (Aaron via VP): unavailable on-box by design;
+        not blocking other tools. Owner keeps docker+wheel (Ops needs them for
+        GLM/Hermes/Media). Do NOT ask the owner to run leave_root_equivalent_groups.sh
+        or to sign/run H6 from a laptop. Prior GATED OUT 2026-10-24: signed go
+        unspent (nonce 3e6b7a420885002e, freeze 446e909a, prereg 880f93ac). No
+        counted validation read; no re-test under a new name unless Aaron
+        explicitly re-opens the family. Off-box path is Ops-advanced docs only
+        (ops/edge_threat_model.md), never a Finance Desk prompt.

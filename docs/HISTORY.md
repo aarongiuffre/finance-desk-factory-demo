@@ -146,6 +146,14 @@ One-liners with commit hashes; deep dives live where noted.
   go cannot authorize a read while slowglow is root-equivalent).  Edge
   program closes with H1/H2/H3/H4/H5 killed or null on dev, H6 validation
   question open-but-unreadable on this box.
+- 2026-10-28 — Auth-asks silenced (Aaron via VP ~3:03 AM ET): Finance Desk / gate
+  UX must not ask the owner to (a) sign or run H6 from a laptop or (b) leave
+  docker/wheel. H6 validation marked DEFERRED/CLOSED in REGISTRY — unavailable
+  on-box by design; not blocking other tools. Owner keeps docker+wheel. Off-box
+  and leave_root_equivalent_groups.sh remain Ops-advanced documentation only,
+  never a default skill prompt. Ungated research/crawl/price/facts paths stay
+  the day-to-day surface.
+
 - 2026-10-24 — H1 slice manifest restored to its pinned bytes.  Grok's
   Oct-21 window (05:00-12:00) re-serialized
   folds/dev/raw/price/h1_universe/MANIFEST.json: all 6,877 price-file shas

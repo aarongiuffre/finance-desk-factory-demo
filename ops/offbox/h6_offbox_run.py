@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""h6_offbox_run.py - H6 validation read OFF-BOX (Aaron's laptop, WSL).
+"""h6_offbox_run.py - H6 validation read OFF-BOX (Ops-advanced only).
+
+STATUS (Aaron 2026-10-28 via VP): Do NOT prompt the owner to run this from a
+laptop. H6 is DEFERRED on the desk box; unavailable on-box by design; not
+blocking other tools. This file remains for Ops if Aaron explicitly re-opens
+the family. Finance Desk must never paste the layout/scp recipe into chat.
 
 Doctrine: ops/edge_threat_model.md - off-box evaluation is the sanctioned
 alternative to leaving docker/wheel on cachyos.  This machine's user is NOT

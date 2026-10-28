@@ -93,14 +93,16 @@ Verifier v6 (2026-10-18):
       nothing: root-owned go files are refused, and a signature is accepted only from an
       ssh-ed25519 key in allowed_signers whose SHA256 fingerprint equals the one committed
       in BOTH REGISTRY.yaml (gate.signer_fpr) and the hypothesis prereg (gate_signer_fpr).
-      Lifted by ops/staged_sudo/leave_root_equivalent_groups.sh.
+      Ops-only lift: ops/staged_sudo/leave_root_equivalent_groups.sh (do NOT prompt the owner).
 
 Verifier v7 (2026-10-18):
   M3' that fingerprint is committed by slowglow itself, so while root-equivalent it proves
       nothing for gated data: EVERY validation and holdout grant is refused, and find_grant
       / verify reject any gated window (so no earlier grant can be read either), whatever
-      the signature.  Dev keeps the committed-fingerprint rule.  leave_root_equivalent_groups.sh
-      is a hard prerequisite for any gated read (or evaluate off-box, see the threat model).
+      the signature.  Dev keeps the committed-fingerprint rule.  Standing (Aaron 2026-10-28):
+      slowglow KEEPS docker/wheel; gated validation/holdout is unavailable on-box by design
+      and must not nag the owner to demote or sign from a laptop (see leave_root_equivalent_groups.sh
+      / off-box notes in ops/edge_threat_model.md — Ops advanced path only).
 Verifier v8: the group check is a TRIPWIRE, not a lock (a root-equivalent user can hide
       its membership: docker --user with its own /etc/group, a renamed group).  It fails
       closed: a pwd KeyError or a group-database error counts as root-equivalent, and the
@@ -232,16 +234,15 @@ def root_equivalent_groups():
 
 def gated_root_equivalent_refusal(fold):
     """Verifier v7 M3': while this user is root-equivalent NO validation / holdout grant (or
-    read) is possible, whatever the signature: a root process can install its own key, and
-    slowglow can commit and push its fingerprint, so no on-box signature proves Aaron.
-    Dev keeps the committed-fingerprint rule (it reads dev data only).  -> reason or None."""
+    read) is possible, whatever the signature.  Standing UX (Aaron 2026-10-28): report a
+    one-line unavailable-on-box status; do not ask the owner to demote docker/wheel or
+    sign from a laptop.  Dev keeps the committed-fingerprint rule.  -> reason or None."""
     req = root_equivalent_groups()
     if not req:
         return None
-    return (f"{fold} refused: {getpass.getuser()} is in {', '.join(req)} (root-equivalent). Every validation "
-            f"and holdout grant is refused until ops/staged_sudo/leave_root_equivalent_groups.sh --apply has "
-            f"run (or the evaluation runs off this server - ops/edge_threat_model.md, off-box evaluation)")
-
+    return (f"{fold} unavailable on-box by design; not blocking other tools "
+            f"({getpass.getuser()} is in {', '.join(req)} (root-equivalent); "
+            f"leave_root_equivalent_groups.sh is Ops-only — owner keeps those groups)")
 
 def committed_signer_fpr(hypothesis):
     """(ok, reason, fpr): the SHA256 key fingerprint committed in REGISTRY.yaml gate.signer_fpr
@@ -284,7 +285,7 @@ def pinned_signers():
     and not group/other-writable, so slowglow (without root) cannot swap the key."""
     p = signers_path()
     if not os.path.isfile(p):
-        return False, f"{p} missing (Aaron step: ops/staged_sudo/install_gate_key.sh)", b""
+        return False, f"{p} missing (Ops: ops/staged_sudo/install_gate_key.sh — do not nag owner)", b""
     if not finpaths.is_test():
         for q in (p, os.path.dirname(p)):
             st = os.stat(q)
@@ -811,9 +812,9 @@ def load_go(hypothesis, fold):
     signed, sig, ro = go_files(hypothesis, fold)
     req = root_equivalent_groups()
     if os.path.lexists(ro) and req:
-        return False, (f"root-owned go file {ro} refused: {getpass.getuser()} is in {', '.join(req)} "
-                       f"(root-equivalent) - only an ed25519-signed go file counts until "
-                       f"leave_root_equivalent_groups.sh is applied"), None, b"", ""
+        return False, (f"root-owned go file {ro} unavailable on-box by design; not blocking other tools "
+                       f"({getpass.getuser()} is in {', '.join(req)} (root-equivalent); "
+                       f"leave_root_equivalent_groups.sh is Ops-only — owner keeps those groups)"), None, b"", ""
     if os.path.lexists(ro):
         data, st = _read_small(ro)
         if not finpaths.is_test():
@@ -829,8 +830,9 @@ def load_go(hypothesis, fold):
             return False, f"go file {os.path.basename(signed)}: {why}", None, b"", ""
         kind = "signed"
     else:
-        return False, (f"no go file for {hypothesis} {fold}: Aaron-signed {GO_DIR}/{hypothesis}.{fold}.json"
-                       f"(+.sig, ops/offbox/aaron_sign_dev_go.sh) or root-owned {ro}"), None, b"", ""
+        return False, (f"no go file for {hypothesis} {fold}: unavailable on-box by design; "
+                       f"not blocking other tools (go would be {GO_DIR}/{hypothesis}.{fold}.json "
+                       f"or root-owned {ro}; Ops docs only — do not ask owner to laptop-sign)"), None, b"", ""
     try:
         doc = json.loads(data)
     except ValueError:
@@ -1230,7 +1232,7 @@ def main():
         print(f"gated tree check vs remote main {sha[:12]}: {'OK' if ok else 'REFUSED: ' + why}")
         sys.exit(0 if ok else 1)
     elif cmd == "witness-init":
-        # Aaron step: publish the CURRENT heads of both chains as the first remote witness.
+        # Ops-only: publish the CURRENT heads of both chains as the first remote witness (do not ask owner).
         # DRY RUN unless --apply.  Pushes tags to the real remote (externally visible).
         apply = "--apply" in sys.argv[2:]
         sha, why = remote_head()

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""h6_run.py - the ONLY entrypoint for H6_nasdaq_cheap_universe (validation read).
+"""h6_run.py - entrypoint for H6_nasdaq_cheap_universe (validation read).
+
+STATUS (Aaron 2026-10-28 via VP): H6 validation is DEFERRED / CLOSED on this box —
+unavailable on-box by design; not blocking other tools. Do not ask the owner to
+leave docker/wheel or sign from a laptop to run this. Kept for Ops if the family
+is explicitly re-opened.
 
 Run via:  bash ops/gate/gated_run.sh -- /usr/bin/python3 scripts/h6_run.py
 (the gated worktree of remote main is created by the wrapper; the data root stays
 /data/finance, the ledger outputs are copied to /data/finance/logs/edge/h6/).
 
-Flow:
-  1. fold_gate.request(H6..., fold=validation)  -> chain-logged grant (needs the
-     Aaron-signed per-run go file + a root-equivalent-free session)
-  2. two subprocess walks of walkforward.py with --gate-token:
-       primary_oneq  (benchmark ONEQ)   - the prereg primary
-       secondary_spy (benchmark SPY)    - reported, does not decide
-  3. pass-bar evaluation per the prereg (mean rel, NW(1) t, 40bps stress) on the
-     ONEQ ledger; summary JSON + printed verdict.
+Flow (Ops-only if re-opened):
+  1. fold_gate.request(H6..., fold=validation)  -> chain-logged grant
+  2. two subprocess walks of walkforward.py with --gate-token (ONEQ primary, SPY secondary)
+  3. pass-bar evaluation per the prereg; summary JSON + printed verdict.
 """
 import hashlib
 import json

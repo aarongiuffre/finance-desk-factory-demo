@@ -163,7 +163,15 @@ group-database error counts as root-equivalent and is logged in the refusal.
 Backlog M3'' marker: step 5 `--apply` writes a root-owned marker holding the gate-log head
 seq, and gated grants require a seq above it.
 
-**`leave_root_equivalent_groups.sh --apply` (step 5) is a hard prerequisite for any
+
+> **Standing owner decision (Aaron 2026-10-28 via VP):** slowglow **keeps** `docker` and
+> `wheel` (Ops needs them for GLM / Hermes / Media). Day-to-day Finance Desk tools must
+> **not** ask the owner to demote root-equivalent groups or to sign/run H6 from a laptop.
+> Validation/holdout gated reads are **unavailable on-box by design; not blocking other
+> tools.** H6 is DEFERRED/CLOSED in `ops/prereg/REGISTRY.yaml`. The leave-root script and
+> off-box evaluation below stay as **Ops-advanced** options — never a Finance Desk prompt.
+
+**`leave_root_equivalent_groups.sh --apply` (step 5) is the Ops-only on-box path for any
 validation or holdout read on this server.** Without it the only route to a gated
 result is the off-box evaluation below.
 

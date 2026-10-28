@@ -110,7 +110,7 @@ def p(*parts):
     return os.path.join(root(), *parts)
 
 
-# Optional finance-gate user (Aaron step, ops/staged_sudo/install_finance_gate_user.sh):
+# Optional finance-gate user (Ops-only, ops/staged_sudo/install_finance_gate_user.sh — do not nag owner):
 # when the ROOT-OWNED marker exists, both chained logs and their anchors live in a
 # directory owned by the finance-gate system user; slowglow can only append through
 # the sudo helper (no truncate / delete / reset - Verifier F3, F12).

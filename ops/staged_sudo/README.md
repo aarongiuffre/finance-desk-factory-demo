@@ -1,4 +1,10 @@
-# Staged sudo steps (for Aaron)
+# staged_sudo (Ops only)
+
+> **Standing owner decision (Aaron 2026-10-28 via VP):** do **not** ask Aaron to run
+> `leave_root_equivalent_groups.sh` or to give up docker/wheel. He keeps those groups.
+> Gated validation/holdout is unavailable on-box by design; not blocking other tools.
+> These scripts stay for Ops/advanced use; Finance Desk must not surface them as prompts.
+
 
 Agents on this box run without sudo. Anything that needs root is staged here as a
 script that does a dry run by default and changes nothing until it gets `--apply`.
