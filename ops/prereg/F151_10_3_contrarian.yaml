@@ -1,0 +1,88 @@
+# PRE-REGISTRATION - F151_10_3_contrarian (Soper 151 Ch10 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing.
+# SKIP per batch brief: 10.2 calendar spread (W2a KILL), 10.3.1 market-
+# activity filter (W2b KILL) - neither is touched by this family.
+# Book section 10.3: Contrarian trading / mean-reversion (Eqs 469-471).
+hypothesis: F151_10_3_contrarian
+family: F151_10_3_contrarian
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 10.3: within a universe of futures i = 1..N the market
+  return Rm = (1/N) sum Ri (Eq 469, typically over the last one week);
+  weights wi = -gamma [Ri - Rm] (Eq 470) normalized to sum |wi| = 1
+  (Eq 471) - buy losers, sell winners vs the equal-weight index;
+  automatically dollar-neutral; rebalanced weekly.  The book warns the
+  scheme overinvests in volatile futures and suggests suppressing wi by
+  1/sigma_i or 1/sigma_i^2 - both preregistered as cells.
+prior: >-
+  WEAK PRIOR AGAINST: short-horizon cross-sectional mean reversion on
+  daily-frequency futures is the classic crowed trade; weekly weekly-return
+  reversal on liquid futures is weak/noisy in the published literature
+  (equity weekly reversal is strong; futures evidence is thinner), and the
+  2015-2017 tape includes two trend-heavy years (2016-17 post-election,
+  energy recovery) where weekly reversal bleeds.  Costs modest at weekly
+  cadence on liquid futures under the preregistered 5 bp/side proxy.
+  Tested as the book states it; not salvaged.
+signal: >-
+  Panel = the 30 preregistered Yahoo continuous futures with full
+  2012-2017 coverage (see data; RTY=F excluded - tape starts 2017-07;
+  DX=F excluded - no Yahoo series).  At the last trading day D of week W
+  (position active from the next bar, held one week): eligibility_i =
+  ticker i has >= 90% of the trailing window as RAW bars (no ffill before
+  first bar); R_i = futures return over the last 5 business days ending D
+  (Rm = mean over eligible, Eq 469); sigma_i = std of DAILY returns over
+  the trailing 63 business days ending D.  Requires >= 12 eligible names,
+  else flat.  Cells:
+    base_w    wi = -gamma (Ri - Rm), gamma set by sum|wi| = 1 (Eq 471)
+    vol1_w    wi proportional to -(Ri - Rm)/sigma_i, renormalized
+    vol2_w    wi proportional to -(Ri - Rm)/sigma_i^2, renormalized
+    base_w_4w robustness: R_i over the last 20 business days instead of 5
+  Weekly rebalance, dollar-neutral by construction.
+cells:
+  base_w: "Eqs 469-471 verbatim, 5-day Ri, weekly"
+  vol1_w: "1/sigma_i suppression, 5-day Ri, weekly"
+  vol2_w: "1/sigma_i^2 suppression, 5-day Ri, weekly"
+  base_w_4w: "Eqs 469-471 with 20-day Ri (robustness), weekly"
+total_cells: 4 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 78 funded weekly rebalance episodes (~75% of 3y weeks)"
+
+fold: dev
+window:
+  data_start: "2012-01-01 (warmup: 63d sigma + eligibility)"
+  data_end: "2017-12-31 tune cap (disk pull cap AND loader cap both 2017-12-31)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this
+    run.  Loader hard-caps every series at 2017-12-31.
+data:
+  futures: "30-ticker panel, raw/futures/<T>.json (futures_pull.py, Yahoo chart v8, 2012-01-01..2017-12-31): ES NQ YM CL NG RB HO GC SI HG PL PA ZC ZW ZS ZL KC SB CT CC ZN ZB ZF ZT 6E 6J 6B 6A 6C 6S (all '=F')"
+proxy_walls: &walls >-
+  (1) Yahoo "=F" continuous series: blend/roll method unpublished, not the
+  CME settlement tape, no per-delivery-month data (CME/ICE paid) - the free
+  substitute; the scored returns embed whatever roll convention Yahoo uses,
+  including its roll-day returns, which are NOT tradeable basis pnl;
+  (2) volume is contracts, dollar ADV not computable - flat cost
+  convention below; (3) no open-interest series is free historically, so
+  the 10.3.1 volume/open-interest filters are NOT testable here (that
+  family is retired anyway - W2b KILL); (4) no live execution.
+costs: &costs >-
+  Futures-only panel: flat 5 bp/side on both legs (engine large-bucket side
+  cost 30 bp scaled by 1/6 via cost_mult = 1/6 - documented proxy: real
+  liquid-futures round trips are ~1-4 bp; 5 bp/side is conservative), no
+  borrow (futures shorts self-financing, Ch8 convention).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune
+  slice - STANDARD desk gates, no adaptation (this is an alpha family):
+  G1 lookahead (4 row-slice cuts + loader cut + decision-early mutant must
+  differ); G2 concentration (max year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25); G3 regime (>= 2 of 3 thirds
+  net-positive); G4 min trades (floor above); G5 fees (net Sharpe >= 0.8
+  AND net CAGR > 0); G6 stress (net CAGR > 0 at 2x costs).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing
+     dev go before any scored DEV run."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, avg gross"
+  - "report-only: cross-sectional rank IC of (Ri - Rm) vs next-week returns on the tune slice (mechanism evidence); per-cell long/short bucket pnl; names held at last 6 rebalances"
+  - "benchmarks reported ungated: equal-weight futures basket weekly"
+  - "honest caveats: whole window POST-publication; continuous-tape roll returns pollute weekly reversal signals (documented wall); weekly cadence on 30 names = 2.0x/yr one-sided turnover minimum"

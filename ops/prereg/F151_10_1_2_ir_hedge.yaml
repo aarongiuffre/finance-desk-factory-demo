@@ -1,0 +1,93 @@
+# PRE-REGISTRATION - F151_10_1_2_ir_hedge (Soper 151 Ch10 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing.
+# Book section 10.1.2: Interest rate risk hedging (Eqs 464-468).
+hypothesis: F151_10_1_2_ir_hedge
+family: F151_10_1_2_ir_hedge
+kind: risk_reduction
+literature: >-
+  Kakushadze & Serur 10.1.2: hedge fixed-income exposure with interest-rate
+  futures.  Long (short) hedge PnL per Eqs 464-466 with the futures basis
+  B(t,T) = S(t) - F(t,T).  Hedge ratios per Eqs 467-468: conversion-factor
+  model hC = (MB/MF) C (deliverable-basket bonds only) and modified-duration
+  model hD = beta DB/DF (DB, DF dollar durations; beta = change in bond
+  yield per change in futures yield, "often set to 1").
+prior: >-
+  MODERATE PRIOR for the duration model: TLT (~20y duration) and IEF (~7y)
+  vs ZN=F (10y note, ~6.5y duration) are the same asset class - a
+  duration-matched ZN short should remove most rate-parallel variance, and
+  this is the most tractable hedge family on free data.  Adversarial
+  concerns preregistered: (i) the curve is NOT parallel - a 2s10s or
+  10s20s move leaves residual pnl that is a curve position, not noise;
+  (ii) ETF proxies carry fund mechanics (TLT roll/hold behavior vs the ZN
+  continuous series); (iii) measured durations from short return/yield
+  regressions are noisy.
+signal: >-
+  Bonds: TLT (20y+ proxy; yield series DGS20), IEF (7y proxy; DGS7).  At
+  the last trading day D of month M: long 1.0 bond / short h ZN=F, hold
+  one month, re-strike monthly, active from the bar after D.
+  Hedge ratios (all trailing 126 business days, clipped to [0.5, 5.0]):
+  dur_b1 cells: modified durations measured as
+  modD_v = -cov(r_v, dy_tenor)/var(dy_tenor) (v = bond ETF or ZN=F,
+  tenor = DGS20 for TLT, DGS7 for IEF, DGS10 for ZN=F), h = modD_bond /
+  modD_fut (Eq 468 with beta = 1, return-space notional ratio -
+  derivation in family code docstring); dur_bols cells: same but
+  beta = OLS slope of dy_bond-tenor on dy_DGS10 over the trailing window;
+  ols cells: h = trailing-126d OLS slope of daily bond-ETF returns on
+  daily ZN=F returns (the book's serial-regression alternative, footnote
+  161).  Both legs must have raw bars on D.
+cells:
+  tlt_dur_b1: "TLT vs ZN=F, Eq 468 duration model, beta = 1"
+  tlt_dur_bols: "TLT vs ZN=F, Eq 468 duration model, beta = trailing OLS"
+  tlt_ols: "TLT vs ZN=F, returns-based OLS hedge ratio"
+  ief_dur_b1: "IEF vs ZN=F, Eq 468 duration model, beta = 1"
+  ief_dur_bols: "IEF vs ZN=F, Eq 468 duration model, beta = trailing OLS"
+  ief_ols: "IEF vs ZN=F, returns-based OLS hedge ratio"
+total_cells: 6 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded monthly hedge episodes"
+
+fold: dev
+window:
+  data_start: "2013-01-01 (FRED DGS pull start; 126d warmup before the first 2015 tune decision)"
+  data_end: "2017-12-31 tune cap (disk pull cap AND loader cap both 2017-12-31)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this
+    run.  Loader hard-caps every series at 2017-12-31.
+data:
+  futures: "raw/futures/ZN.json (futures_pull.py, Yahoo chart v8, 2012-01-01..2017-12-31)"
+  bonds: "raw/price/{TLT,IEF}.json raw close 'c' (price return: Eqs 464-466 score bond PRICE B(t,T), not total return)"
+  yields: "raw/fred/{DGS20,DGS7,DGS10}.json daily (2013-01-02..2017-12-29, free FRED H.15 CMT; already disk-capped pre-split)"
+proxy_walls: &walls >-
+  (1) Eq 467 conversion-factor model NOT preregistered: the CME conversion
+  factor C is a published-per-contract input whose historical series is not
+  free; the book itself offers Eq 468 as the model that "can be used for
+  both deliverable and non-deliverable bonds" - the duration model is the
+  free-data construction and this wall is documented, not silently skipped;
+  (2) Yahoo ZN=F continuous series (unpublished roll method) stands in for
+  the CME tape; (3) TLT/IEF are fund proxies for the hedged bonds; DGS
+  tenors are constant-maturity PROXIES for the fund's effective duration
+  tenor; (4) futures volume is contracts - cost convention below; (5) no
+  live execution.
+costs: &costs >-
+  Engine side cost by REAL dollar-ADV bucket for the bond-ETF leg; ZN=F
+  adv20 pinned to the LARGE bucket = 30 bp/side (conservative ~6-30x real).
+  Borrow 0 bp/yr: no ETF short in any preregistered cell; futures shorts
+  self-financing (Ch8 convention).
+gates: &gates >-
+  Six preregistered gates (HEDGE ADAPTATION framework per
+  F151_10_1_hedge.yaml): G1 lookahead UNCHANGED (4 row-slice cuts + loader
+  cut + decision-early mutant).  G2 concentration on the residual PnL:
+  max |residual| year share <= 0.60, max episode share of |gross| <= 0.25.
+  G3 regime = per-third VR >= 0 in >= 2 of 3 thirds (VR =
+  1 - Var(residual)/Var(unhedged bond)).  G4 min trades = floor above.
+  G5 effectiveness bar = VR >= 0.50 (curve hedge across mismatched
+  tenors - partial by construction) AND |residual net CAGR| <= 2.0% AND
+  cost drag <= 50 bp/yr.  G6 stress = VR >= 0.50 at 2x costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing
+     dev go.  KEEP = the duration hedge measured effective on the tune
+     slice - risk reduction, never an alpha claim."
+reporting:
+  - "headline per cell: VR, residual net Sharpe, residual net CAGR, cost drag/yr, turnover/yr, episodes, h range, measured duration ranges"
+  - "report-only: unhedged bond Sharpe/CAGR; corr(dy_bond, dy_DGS10); per-year residual pnl; long-hedge mirror residual CAGR"
+  - "honest caveats: window POST-publication; measured durations are 126d regression estimates (noisy, no coupon-carry model); curve non-parallelism is IN the scored residual by design"

@@ -1,0 +1,96 @@
+# PRE-REGISTRATION - F151_10_1_hedge (Soper 151 Ch10 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing
+# (W2a calendar / W2b 10.3.1 remain retired; H1-H3 / Eq_* untouched).
+# Book section 10.1: Hedging risk with futures (p.92).  SKIP per batch brief:
+# 10.2 calendar spread (W2a KILL), 10.3.1 market-activity filter (W2b KILL).
+hypothesis: F151_10_1_hedge
+family: F151_10_1_hedge
+kind: risk_reduction
+literature: >-
+  Kakushadze & Serur 10.1: a trader anticipating a purchase (sale) of X at a
+  later time T hedges by BUYING (SELLING) at time t a futures contract with
+  delivery T for the desired amount.  The scored construction is the hedged
+  book's PnL: long the spot exposure, short the futures hedge (short-hedge
+  direction; the long-hedge mirror is the same residual with opposite sign
+  and is reported only).  Book's hedge ratio is 1 by construction; the book
+  itself notes the optimal ratio "may not be 1" (10.1.1 footnote 161), so a
+  trailing-OLS hedge-ratio cell is preregistered alongside the unit cells.
+prior: >-
+  RISK-REDUCTION PRIOR, not alpha: a same-asset spot/futures hedge should
+  remove most spot variance (corr ~0.95-0.99), leaving the basis.  Two
+  adversarial concerns are preregistered: (i) the ETF spot proxies carry
+  mechanics the raw asset does not (USO roll bleed vs the CL=F continuous
+  series, GLD tracking) so the residual can become a persistent carry
+  position rather than noise; (ii) the Yahoo "=F" tape is a blended
+  continuous series of unpublished roll method - NOT the exchange tape.
+  A hedge that "works" here means measured variance reduction at acceptable
+  cost, NOT a return edge; the family verdict language reflects that.
+signal: >-
+  Hedge pairs (spot proxy, futures proxy): (SPY, ES=F), (USO, CL=F),
+  (GLD, GC=F).  Spot leg = PRICE return (raw close; the book's S(t) is a
+  spot price, not a total-return index - dividend wedge deliberately kept
+  OUT of the scored residual).  At the last trading day D of month M,
+  establish long 1.0 spot / short h futures (dollar-neutral at strike,
+  h=1.0 for unit cells); h for hreg cells = trailing 63-business-day OLS
+  slope of daily spot returns on daily futures returns, clipped to
+  [0.25, 4.0]; hold one month; re-strike monthly (the book's t -> T hedge
+  with T = 1 month preregistered, rolled).  Position active from the bar
+  after D.  Pair requires BOTH legs to have raw bars on D.
+cells:
+  unit_spx: "SPY vs ES=F, unit hedge ratio h=1"
+  unit_wti: "USO vs CL=F, unit hedge ratio h=1"
+  unit_gold: "GLD vs GC=F, unit hedge ratio h=1"
+  hreg63_spx: "SPY vs ES=F, h = trailing-63d OLS beta (clip 0.25-4.0)"
+  hreg63_wti: "USO vs CL=F, h = trailing-63d OLS beta (clip 0.25-4.0)"
+  hreg63_gold: "GLD vs GC=F, h = trailing-63d OLS beta (clip 0.25-4.0)"
+total_cells: 6 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded monthly hedge episodes"
+
+fold: dev
+window:
+  data_start: "2012-01-01 (warmup for the 63d OLS hedge ratio)"
+  data_end: "2017-12-31 tune cap (disk pull cap AND loader cap both 2017-12-31)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this
+    run.  Loader hard-caps every series at 2017-12-31.
+data:
+  futures: "raw/futures/<T>.json (futures_pull.py, Yahoo chart v8, 2012-01-01..2017-12-31)"
+  spot: "raw/price/SPY.json raw close 'c'; raw/commodities/{USO,GLD}.json adjclose ('c' field; within 2012-2017 these vehicles have no split/dividend events so adjclose == price path - verified 2026-10-28)"
+proxy_walls: &walls >-
+  (1) Yahoo "=F" continuous series: blend/roll method unpublished, not the
+  CME settlement tape, no per-delivery-month data (CME/ICE paid) - the free
+  substitute; (2) spot legs are FUND proxies (SPY/USO/GLD), so the scored
+  residual contains tracking + (for USO) roll mechanics - documented, not
+  adjusted away; (3) futures volume is contracts, dollar ADV not computable
+  - cost convention below; (4) no live execution anywhere - paper prices.
+costs: &costs >-
+  Engine side cost by REAL dollar-ADV bucket for the ETF leg; the futures
+  leg has no dollar ADV (contract volume) so its adv20 is pinned to the
+  LARGE bucket = 30 bp/side (conservative ~6-30x real liquid-futures
+  costs).  Borrow 0 bp/yr: no ETF short appears in any preregistered cell
+  and futures shorts are self-financing (Ch8 convention).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune
+  slice.  HEDGE ADAPTATION (preregistered because the scored object is a
+  risk-reduction construction, not an alpha; every adaptation is stated,
+  nothing silently relaxed): G1 lookahead UNCHANGED (4 row-slice cuts +
+  loader cut + decision-early mutant must differ).  G2 concentration on
+  the residual PnL measured in ABSOLUTE value with a 0.60 year-share cap
+  and 0.25 episode-share cap (a hedge residual is ~0 by design, so the
+  standard 0.40 net-share cap would fire on sign noise - documented).
+  G3 regime = variance reduction VR_third >= 0 in >= 2 of 3 thirds, where
+  VR = 1 - Var(residual)/Var(unhedged spot).  G4 min trades = floor above.
+  G5 effectiveness bar = VR >= 0.75 AND |residual net CAGR| <= 2.0% AND
+  cost drag <= 50 bp/yr (the hedge must actually de-risk, must not become
+  an unintended carry position, and must not cost the hedge away).
+  G6 stress = VR >= 0.75 at 2x costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing
+     dev go before any scored DEV run.  A KEEP on a hedge family means the
+     hedge construction measured effective on the tune slice - it is a
+     risk-reduction result, never an alpha claim."
+reporting:
+  - "headline per cell: VR (tune), residual net Sharpe, residual net CAGR, cost drag/yr, turnover/yr, episodes, hedge-ratio range"
+  - "report-only: unhedged spot Sharpe/CAGR per pair; per-year residual pnl; long-hedge mirror residual CAGR (sign flip)"
+  - "honest caveats: whole window POST-publication; Yahoo continuous futures roll method unknown; ETF mechanics in the spot leg; unit-hedge cells hold fixed weights between re-strikes under the desk engine convention (no drift-rebalance trades charged - documented, favorable-to-cost); no conversion-factor or duration machinery in THIS family (that is 10_1_2)"

@@ -1,0 +1,87 @@
+# PRE-REGISTRATION - F151_10_1_1_cross_hedge (Soper 151 Ch10 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing.
+# Book section 10.1.1: Cross-hedging (Eq 463).
+hypothesis: F151_10_1_1_cross_hedge
+family: F151_10_1_1_cross_hedge
+kind: risk_reduction
+literature: >-
+  Kakushadze & Serur 10.1.1: when no futures contract exists for the asset
+  to be hedged, hedge with a futures contract on ANOTHER asset with similar
+  characteristics.  At maturity the payoff (Eq 463, short futures, unit
+  ratio) splits into [S* - F] basis risk + [S - S*] cross-asset difference
+  + the entry futures price.  In practice the optimal ratio is estimated
+  (book footnote 161: serial regression et al.) - preregistered here as
+  trailing OLS of spot returns on futures returns, 63d and 126d windows.
+prior: >-
+  WEAK PRIOR: a cross hedge removes only the common-factor variance; the
+  residual is BY CONSTRUCTION a spread position (the [S - S*] term), so the
+  honest test is whether variance reduction is material WITHOUT turning the
+  book into a losing spread.  Preregistered pairs are the classic free-data
+  cross hedges: energy EQUITIES hedged with crude (XLE/CL=F - equity beta
+  and refining crack left unhedged), silver with gold (SLV/GC=F - precious
+  complex), platinum with gold (PALL/GC=F - precious but industrially
+  driven).  The gold pair is the control intuition: if even precious-metal
+  cross hedges cannot clear a modest VR bar, the family has no free-tape
+  case.
+signal: >-
+  Pairs (spot, futures): (XLE, CL=F), (SLV, GC=F), (PALL, GC=F).  Spot leg
+  = PRICE return (raw close 'c'; Eq 463's S(t) is a spot price).  At the
+  last trading day D of month M: long 1.0 spot / short h futures with
+  h = trailing OLS slope of daily spot returns on daily futures returns
+  over the last 63 (h63 cells) or 126 (h126 cells) business days, clipped
+  to [0.25, 4.0]; hold one month; re-strike monthly; active from the bar
+  after D.  Both legs must have raw bars on D.
+cells:
+  xle_cl_h63: "XLE vs CL=F, h = trailing-63d OLS beta"
+  xle_cl_h126: "XLE vs CL=F, h = trailing-126d OLS beta"
+  slv_gc_h63: "SLV vs GC=F, h = trailing-63d OLS beta"
+  slv_gc_h126: "SLV vs GC=F, h = trailing-126d OLS beta"
+  pall_gc_h63: "PALL vs GC=F, h = trailing-63d OLS beta"
+  pall_gc_h126: "PALL vs GC=F, h = trailing-126d OLS beta"
+total_cells: 6 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded monthly hedge episodes"
+
+fold: dev
+window:
+  data_start: "2012-01-01 (warmup for the 126d OLS hedge ratio)"
+  data_end: "2017-12-31 tune cap (disk pull cap AND loader cap both 2017-12-31)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this
+    run.  Loader hard-caps every series at 2017-12-31.
+data:
+  futures: "raw/futures/{CL,GC}.json (futures_pull.py, Yahoo chart v8, 2012-01-01..2017-12-31)"
+  spot: "raw/price/XLE.json raw close 'c'; raw/commodities/{SLV,PALL}.json adjclose ('c' field; no split/dividend events within 2012-2017 - verified 2026-10-28)"
+proxy_walls: &walls >-
+  (1) Yahoo "=F" continuous series: blend/roll method unpublished, not the
+  CME settlement tape, no per-delivery-month data (CME/ICE paid) - the free
+  substitute; (2) spot legs are FUND proxies (XLE/SLV/PALL), so the scored
+  residual contains tracking + fund mechanics - documented, not adjusted
+  away; (3) futures volume is contracts, dollar ADV not computable - cost
+  convention below; (4) no live execution anywhere - paper prices.
+costs: &costs >-
+  Engine side cost by REAL dollar-ADV bucket for the ETF spot leg; the
+  futures leg has no dollar ADV (contract volume) so its adv20 is pinned
+  to the LARGE bucket = 30 bp/side (conservative ~6-30x real liquid-futures
+  costs).  Borrow 0 bp/yr: no ETF short appears in any preregistered cell
+  and futures shorts are self-financing (Ch8 convention).
+gates: &gates >-
+  Six preregistered gates (same HEDGE ADAPTATION framework as
+  F151_10_1_hedge.yaml, cross-hedge parameters): G1 lookahead UNCHANGED
+  (4 row-slice cuts + loader cut + decision-early mutant).  G2
+  concentration on the residual PnL: max |residual| year share <= 0.60,
+  max episode share of |gross| <= 0.25.  G3 regime = per-third VR >= 0 in
+  >= 2 of 3 thirds (VR = 1 - Var(residual)/Var(unhedged spot)).  G4 min
+  trades = floor above.  G5 effectiveness bar = VR >= 0.25 (CROSS-hedge
+  bar; a same-asset bar would be vacuous here - the book's own premise is
+  that the hedge is partial) AND residual net Sharpe >= -0.25 (the cross
+  hedge must not become a materially losing spread) AND cost drag <= 50
+  bp/yr.  G6 stress = VR >= 0.25 at 2x costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing
+     dev go.  KEEP = the cross hedge measured effective on the tune slice -
+     risk reduction, never an alpha claim."
+reporting:
+  - "headline per cell: VR, residual net Sharpe, residual net CAGR, cost drag/yr, turnover/yr, episodes, h range"
+  - "report-only: corr(spot, futures) tune; unhedged spot Sharpe per pair; per-year residual pnl"
+  - "honest caveats: Eq 463's [S*-F] term is not separately observable on the Yahoo blended tape (basis and roll mixed into one series); spot legs are fund proxies; window POST-publication"
