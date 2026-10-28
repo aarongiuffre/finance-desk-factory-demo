@@ -883,6 +883,44 @@ families:
                                # logs/edge/F151_12_2_convert_oas/BLOCKED.md.
     kind: blocked_stub
     hypotheses: [F151_12_2_convert_oas]
+  F151_13_1_muni_tax_arb:      # Soper FULL-151 Ch13: book 13.1 muni tax arb (Eq 495)
+    retired: true              # KILLED at tune 2026-10-28: 0/6 - long muni-ETF TR
+                               # funded at (1-tau)*r_f, tau=0.35, DFF/DGS3MO.  Every
+                               # cell fails G2 concentration (year share 0.63-1.57,
+                               # episode 0.51-1.03 vs 0.40/0.25) - the Eq 495 carry
+                               # is real in YIELD terms (report-only +2.06%/yr,
+                               # 100% positive days) but the tradeable TR version is
+                               # a static duration bet (TFI Sharpe 0.80-0.82 passes
+                               # G5, still dies on concentration).  Prereg
+                               # 99017c4 + machinery 51caf5c BEFORE any run.  Evidence
+                               # logs/edge/F151_13_1_muni_tax_arb/.
+    kind: hypothesis
+    hypotheses: [F151_13_1_muni_tax_arb]
+  F151_13_2_cross_border:      # Soper FULL-151 Ch13: book 13.2 cross-border tax arb
+    retired: true              # KILLED at tune 2026-10-28: 0/2 (unhedged/hedged,
+                               # amendment 001: short owes the dividend, r_ev =
+                               # (Delta-D)/S_cum - first-pass Delta/S_cum formula
+                               # double-counted the dividend, fixed pre-verdict).
+                               # 102 events, 17-name ASX panel: mean ex-day drop
+                               # 2.612% vs mean dividend 2.509% (Delta/D 1.028) -
+                               # the imputation credit (benchmark 3.585% at full
+                               # franking) is NOT priced into the drop; net
+                               # -0.30%/event after 40bp, Sharpe -1.04/-1.23, all
+                               # thirds negative.  Prereg 99017c4.  Evidence
+                               # logs/edge/F151_13_2_cross_border/.
+    kind: hypothesis
+    hypotheses: [F151_13_2_cross_border]
+  F151_13_2_1_cross_border_opts:  # Soper FULL-151 Ch13: book 13.2.1 with options
+    blocked: true              # BLOCKED at prereg 2026-10-28: Eq 497-499 P&L =
+                               # S0 + Vput - K is an option-tape quantity - needs
+                               # historical deep-ITM American put quotes on ASX
+                               # names around each ex-date (no free historical
+                               # chain exists, F151_3_5_iv wall class; ASX options
+                               # data paid) + per-dividend franking percentage
+                               # (paid vendor).  Evidence
+                               # logs/edge/F151_13_2_1_cross_border_opts/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_13_2_1_cross_border_opts]
 
   F151_7_6_variance_swaps:     # Soper FULL-151 Ch7: book 7.6 variance swaps
     blocked: true              # BLOCKED 2026-10-28: no free variance-swap tape.
