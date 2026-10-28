@@ -106,14 +106,13 @@ def build_cell(family, data, ccy, params, peek=False):
 
 
 def truncate_data(data, ccy, cut_ts):
-    """Family data truncated to strictly-before cut_ts (for G1a replay)."""
-    d = dict(data[ccy])
+    """Family data truncated STRICTLY BEFORE cut_ts (exclusive, the H4 replay
+    convention: signals through index d-1 must be identical when the tapes are
+    cut at index d)."""
     out = {}
-    for k, v in d.items():
-        if isinstance(v, pd.DataFrame):
-            out[k] = v.loc[:cut_ts]
-        elif isinstance(v, pd.Series):
-            out[k] = v.loc[:cut_ts]
+    for k, v in data[ccy].items():
+        if isinstance(v, (pd.Series, pd.DataFrame)):
+            out[k] = v.loc[v.index < cut_ts]
         else:
             out[k] = v
     return {ccy: out}
@@ -142,9 +141,35 @@ def replay_check(family, data, ccy, params, n_checks=5, seed=20261028, peek=Fals
 
 
 def mutant_killed(family, data, ccy, params):
-    """G1b: a future-peeking mutant must FAIL the replay check."""
-    ok, _ = replay_check(family, data, ccy, params, peek=True)
-    return not ok
+    """G1b: a future-peeking mutant must FAIL the replay check.
+
+    A one-bar peek leaks exactly at decision indices, so the cut set targets the
+    mutant's own decision transitions (plus random cuts): at a transition t* the
+    peeked value x[t*] drives pos[t*-1]; an exclusive cut at t* removes x[t*] and
+    the truncated rebuild must diverge there.
+    """
+    pos_full, _, _, _ = build_cell(family, data, ccy, params, peek=True)
+    pos_full = pos_full.dropna()
+    hi = len(pos_full)
+    if hi < 120:
+        return False
+    arr = np.nan_to_num(pos_full.to_numpy(), nan=9.0)
+    trans = (np.flatnonzero(np.diff(arr) != 0) + 1).tolist()
+    rng = np.random.default_rng(20261028)
+    # a transition at t* is driven by the peeked x[t*+1]; an exclusive cut at
+    # t*+1 removes x[t*+1] and the truncated rebuild must diverge at t*.
+    cand = [t + 1 for t in trans if 80 <= t + 1 <= hi - 10]
+    cand += rng.choice(np.arange(80, hi - 10), size=min(10, hi - 90), replace=False).tolist()
+    for d in sorted(set(cand)):
+        cut_ts = pos_full.index[d]
+        dsmall = truncate_data(data, ccy, cut_ts)
+        pos_cut, _, _, _ = build_cell(family, dsmall, ccy, params, peek=True)
+        a = pos_full.iloc[:d].to_numpy()
+        b = pos_cut.reindex(pos_full.index[:d]).to_numpy()
+        if len(a) != len(b) or not np.array_equal(np.nan_to_num(a, nan=9.0),
+                                                  np.nan_to_num(b, nan=9.0)):
+            return True
+    return False
 
 
 def eval_cell(pos, legret, fee_bps, ts_idx):

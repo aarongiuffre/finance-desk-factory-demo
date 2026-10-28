@@ -141,21 +141,21 @@ def tape_ready():
 
 def t7_t8_replay_mutant():
     import w2a_run as R
-    data = R.load_family_data("W2a_cash_carry")
-    data.update(R.load_family_data("W2a_cross_venue"))
+    data_spot = R.load_family_data("W2a_cash_carry")     # spot/perp/fund/panels
+    data_xv = R.load_family_data("W2a_cross_venue")      # a/b/fa/fb
     probes = [
-        ("W2a_cash_carry", "BTC", dict(kappa=0.01, exit_frac=0.5)),
-        ("W2a_cash_carry", "ETH", dict(kappa=0.01, exit_frac=0.5)),
-        ("W2a_roll_yield", "BTC", dict(theta=0.0, mode="long_flat", delta=3)),
-        ("W2a_roll_yield", "ETH", dict(theta=0.0, mode="long_short", delta=3)),
-        ("W2a_carry_funding", "BTC", dict(lookback=7, theta=0.0)),
-        ("W2a_carry_funding", "ETH", dict(lookback=3, theta=0.05)),
-        ("W2a_cross_venue", "BTC", dict(kappa=0.005, hold=3)),
-        ("W2a_cross_venue", "ETH", dict(kappa=0.005, hold=10)),
-        ("W2a_calendar", "BTC", dict(win=30, z_th=0.5, mode="both")),
-        ("W2a_calendar", "ETH", dict(win=90, z_th=1.0, mode="bull_only")),
+        ("W2a_cash_carry", data_spot, "BTC", dict(kappa=0.01, exit_frac=0.5)),
+        ("W2a_cash_carry", data_spot, "ETH", dict(kappa=0.01, exit_frac=0.5)),
+        ("W2a_roll_yield", data_spot, "BTC", dict(theta=0.0, mode="long_flat", delta=3)),
+        ("W2a_roll_yield", data_spot, "ETH", dict(theta=0.0, mode="long_short", delta=3)),
+        ("W2a_carry_funding", data_spot, "BTC", dict(lookback=7, theta=0.0)),
+        ("W2a_carry_funding", data_spot, "ETH", dict(lookback=3, theta=0.05)),
+        ("W2a_cross_venue", data_xv, "BTC", dict(kappa=0.005, hold=3)),
+        ("W2a_cross_venue", data_xv, "ETH", dict(kappa=0.005, hold=10)),
+        ("W2a_calendar", data_spot, "BTC", dict(win=30, z_th=0.5, mode="both")),
+        ("W2a_calendar", data_spot, "ETH", dict(win=90, z_th=1.0, mode="bull_only")),
     ]
-    for fam, ccy, prm in probes:
+    for fam, data, ccy, prm in probes:
         ok, cut = R.replay_check(fam, data, ccy, prm)
         check(f"T7 replay {fam} {ccy}", ok, f"cut={cut}")
         killed = R.mutant_killed(fam, data, ccy, prm)
