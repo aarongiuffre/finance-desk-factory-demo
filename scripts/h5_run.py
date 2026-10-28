@@ -60,7 +60,9 @@ def replay_check(ts, closes, volume, cell, n_checks=5):
 
 def run_tests():
     r = subprocess.run([sys.executable, os.path.join(HERE, "h5_test.py")], capture_output=True, text=True)
-    return {"returncode": r.returncode, "tail": r.stdout.strip().splitlines()[-6:]}
+    lines = r.stdout.strip().splitlines()
+    keep = [ln for ln in lines if ln.startswith(("PASS ", "FAIL ", "ERROR "))]
+    return {"returncode": r.returncode, "tail": keep or lines[-12:]}
 
 
 def go_present():
@@ -142,8 +144,12 @@ def main():
         "split_date": ts.iloc[split_i - 1].strftime("%Y-%m-%d"),
         "val_start_date": val_date, "val_bars": val_bars,
         "fee_bps_per_side": FEE_BPS, "min_trades_gate": MIN_TRADES_VAL,
-        "scoring_status": ("scored" if a.mode == "scored" else
-                           "TUNE_ONLY diagnostic - scored DEV BLOCKED pending standing dev go"),
+        "scoring_status": (
+            "scored" if a.mode == "scored" else
+            ("TUNE_ONLY - 0 eligible cells; scored DEV not applicable; no go issued"
+             if len(eligible) == 0 else
+             "TUNE_ONLY - scored DEV requires standing_dev_go before holdout read")
+        ),
         "tests": tests,
         "G1_lookahead_selected_cell": g1,
         "selected_cell": selected,

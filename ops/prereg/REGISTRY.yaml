@@ -108,12 +108,14 @@ families:
     kind: hypothesis
     hypotheses: [H7_statarb_10coin]
   H8_tweet_nb:                 # PRIMARY crypto slate: book 18.3 Bernoulli NB tweet sentiment.
-    kind: hypothesis           # BLOCKED: no tweet feed confirmed by VP; do not invent tweets
-                               # or buy the X API. Stub only until the feed exists.
+    blocked: true              # no tweet feed confirmed by VP; do not invent tweets or buy X API.
+                               # Stub only until the feed exists. Evidence: logs/edge/H8_tweet_nb/BLOCKED.md
+    kind: hypothesis
     hypotheses: [H8_tweet_nb]
   H9_alpha_combo:              # PRIMARY crypto slate: book 3.20 alpha combo over >= N parameter-
-    kind: hypothesis           # variant alphas from the H4-H7 grids; gated on those grids existing.
-                               # prereg H9_alpha_combo.yaml written when variants exist
+    blocked: true              # gated on >=~200 variant alphas from H4-H7; pool was 116 raw / 0 survivors.
+                               # Stub. Evidence: logs/edge/H9_alpha_combo/BLOCKED.md
+    kind: hypothesis
     hypotheses: [H9_alpha_combo]
   W2a_cash_carry:              # WAVE 2a: book 6.2 quarterly basis (long spot / short cm
     retired: true              # quarterly when basis > kappa). KILLED at tune 2026-10-28:
