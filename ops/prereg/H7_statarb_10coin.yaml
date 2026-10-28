@@ -1,0 +1,125 @@
+# PRE-REGISTRATION - H7_statarb_10coin (PRIMARY crypto slate, book section 3.18).
+# Written 2026-10-28.  NOT RUN.  New family; does not re-open any retired name.
+#
+# Crypto paper adaptation of Kakushadze & Serur 3.18 (Statistical arbitrage -
+# optimization): cross-sectional dollar-neutral portfolio over 10 liquid coins,
+# weights wi proportional to C^-1 E (Sharpe-maximizing solution, eq. 350) made
+# dollar-neutral per 3.18.1, with expected returns Ei from short-horizon
+# mean-reversion vs the equal-weight basket (and a momentum-sign flip variant).
+# Paper data only via ccxt; no orders, no credentials.
+#
+# DATA VENUE NOTE (verified 2026-10-28): Binance US *USD-quoted* pairs serve
+# broken kline history (BTCUSD jumps 2023-07-15 -> 2025-02-19 regardless of the
+# requested startTime; verified against raw /api/v3/klines).  The *USDT-quoted*
+# pairs serve the full depth, so H7 uses BTCUSDT..DOTUSDT daily bars.  USDT is
+# treated as a USD proxy (a standard paper-backtest convention; documented as a
+# caveat, not modeled).
+#
+# This prereg authorizes TUNE-window work.  The scored DEV claim additionally
+# requires a committed code-freeze amendment and a standing dev go signed by
+# Aaron at logs/approvals/go/H7_statarb_10coin.dev.json.  No equity fold_gate
+# read is requested anywhere in H7 code.
+hypothesis: H7_statarb_10coin
+family: H7_statarb_10coin
+kind: hypothesis
+gate_signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"   # Aaron's signing key (must equal REGISTRY gate.signer_fpr)
+literature: "Kakushadze & Serur 151 Trading Strategies section 3.18 + 3.18.1:
+  Sharpe-maximizing weights wi = gamma * C^-1 E (eq. 350) with the dollar-
+  neutrality adjustment, I * sum|wi| = 1.  Book has NO backtests."
+prior: >-
+  SKEPTICAL.  Cross-sectional crypto MR vs an equal-weight basket is a crowded
+  trade and the C^-1 E weights lean hard on a noisy covariance estimate; fees
+  on daily rebalancing plus 2022's correlated crash (corr -> 1) are the obvious
+  killers.  The dollar-neutral construction at least removes the market beta
+  that made H5's long/flat a beta story.
+fold: dev
+window:
+  data_start: "2021-12-02"          # first day all 10 coins have Binance US USDT bars
+  data_end:   "2026-10-27"
+  split_rule: >-
+    tune = the FIRST 60% of bars (2021-12-02 .. ~2024-10), holdout = the LAST
+    40% (NEVER read by the tune grid; scored run only).  Selection on tune only.
+
+data:
+  prices: data/crypto/binanceus/{COIN}USDT-1d.csv for COIN in BTC ETH SOL BNB XRP DOGE ADA AVAX LINK DOT
+  venue: binanceus (Binance US spot, public ccxt OHLCV, no credentials, USDT pairs)
+  bar: UTC daily close; forming bar never used
+  availability: >-
+    the tape as pulled: LINKUSDT starts 2022-01-14 (43 days into the window);
+    XRPUSDT is absent 2021-01-13 .. 2023-07-14 (Binance US delisting after the
+    SEC suit, relisted 2023-07) - inside the tune window.  A coin missing on
+    day t is excluded that day and the remaining weights are renormalized to
+    sum|wi| = 1 (rule in the runner, exercised by the real tape); the coin
+    rejoins when bars resume.  Covariance and expected returns always use the
+    coins available that day.
+
+signal:
+  expected_returns: >-
+    for horizon d: r_i(d, t) = P_i(t)/P_i(t-d) - 1; basket r_b(d, t) = the
+    equal-weight mean of available coins' r_i(d, t).  MR: E_i(t) = -(r_i - r_b).
+    MOM (momentum flip): E_i(t) = +(r_i - r_b).  d in {1, 3, 7} days.
+  covariance: >-
+    C = trailing C_win-day sample covariance of daily returns of available
+    coins, shrunk toward its diagonal: C_shr = 0.75*C + 0.25*diag(C).
+    C_win in {60, 180} days; coins with fewer than C_win usable days are
+    excluded until they warm up (counts reported).
+  weights: >-
+    v = C_shr^-1 E over available coins; dollar-neutralize: v <- v - mean(v);
+    w = v / sum|v|  (book 3.18.1).  Position w_i(t) earns coin i's return over
+    [t, t+1]; every weight change costs fee_bps per side on the changed notional.
+  leverage: gross exposure sum|w_i| = 1 (dollar-neutral, no net leverage)
+
+variants:                                          # the WHOLE budget - no other variant may be run
+  grid: "d in {1, 3, 7} x signal in {MR, MOM} x C_win in {60, 180} = 12 cells"
+  primary: >-
+    long/short dollar-neutral book rule; the selected cell is the one with the
+    highest TUNE-window net Sharpe among cells passing all six gates on TUNE
+  secondary: >-
+    the same cell with a 3-day rebalance cadence instead of daily (turnover
+    stress view; reported, not separately selected)
+  selection: tune-only; ties broken by lower turnover then smaller d
+
+costs:
+  fee_bps_per_side: 6                              # 0.06% per unit turnover, charged on each fill
+  slippage_stress: "+5 bps per side on top of the 2x fee stress"
+  funding: "n/a for spot bars; recorded as N/A, not PASS"
+
+six_gates:                                         # adversarial KEEP/KILL, evaluated per cell on TUNE
+  G1_lookahead: >-
+    (a) truncated-tape replay: weights and PnL through any date D must be
+    identical when the tape is cut at D (5 random cuts); (b) covariance/expected-
+    return windows are trailing and end AT t; (c) mutation kill: a future-peeking
+    mutant (r_i(d) reads bar t+1) MUST fail the replay test.
+  G2_day_concentration: "no single DAY > 5% of gross PnL and no calendar year > 40% of cumulative net PnL over the tune window"
+  G3_single_regime: "net PnL > 0 in at least 2 of the 3 equal thirds of the tune window"
+  G4_min_turnover: "annualized two-sided turnover >= 1.0x notional (the strategy actually trades its signal)"
+  G5_fees: "net Sharpe >= 0.8 and net CAGR > 0 at 6 bps/side; still net CAGR > 0 at 12 bps/side"
+  G6_slippage_funding: "still net CAGR > 0 at 17 bps/side; funding N/A (spot), recorded as such"
+
+pass_bar:                                          # scored DEV, both folds reported
+  tune: all six gates KEEP for the selected primary cell
+  holdout: >-
+    net CAGR > 0, net Sharpe > 0, and G2/G3/G4 still KEEP on the holdout
+    (G1 structural; G5/G6 re-reported at holdout costs)
+  decision: >-
+    pass => eligible to ASK for a validation read (Verifier + Aaron steps);
+    fail => retire the H7_statarb_10coin family permanently (no re-test under a
+    new name).  WITHOUT a standing dev go there is NO scored claim: BLOCKED,
+    tune evidence recorded as diagnostic-only.
+
+metrics: >-
+  CAGR, vol, net Sharpe, gross Sharpe, max DD, hit rate, annualized turnover,
+  cost drag, per-cell gate table, net exposure check (mean |sum w_i| ~ 0),
+  per-coin weight summary, equal-weight basket B&H comparison (not a gate),
+  max pairwise correlation in the worst month (crash-correlation watch)
+
+reporting:
+  - "headline: selected cell (d, signal, C_win), tune net Sharpe, gate table"
+  - "all 12 cells x the 3-day-rebalance secondary view"
+  - "honest caveats: USDT-as-USD proxy; covariance shrinkage fixed at 0.25 ex ante; 2022 correlated crash is inside the tune window (that is the regime test); no funding/borrow modeling (spot); daily rebalancing at UTC close is an idealization"
+
+evidence: logs/edge/H7_statarb_10coin/h7_summary.json
+runner: scripts/h7_run.py (grid + backtest + gates)
+signal_module: scripts/h7_statarb.py (Ei, shrunk C, dollar-neutral weights)
+tests: scripts/h7_test.py (dollar-neutrality, replay truncation, mutant kill, fee recheck)
+python: /data/finance/.venv-crypto/bin/python

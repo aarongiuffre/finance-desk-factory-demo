@@ -96,7 +96,16 @@ families:
     kind: hypothesis
     hypotheses: [H6_nn_quantile]
   H7_statarb_10coin:           # PRIMARY crypto slate: book 3.18 dollar-neutral stat arb over
-    kind: hypothesis           # 10 coins, wi ~ C^-1 E, Ei = d-day MR vs basket; prereg H7_statarb_10coin.yaml
+    retired: true              # KILLED at tune 2026-10-28: 0/12 cells pass the six gates - all
+                               # fail G5 fees (daily-rebalanced C^-1E churns 94-248x/yr -> 11-30%/yr
+                               # drag; MR net Sharpe -1.06..-1.52, best MOM flip Sharpe 0.48 < 0.8
+                               # and cost-dead at 12 bps). Dollar-neutrality verified ~1e-16; B&H
+                               # basket CAGR 47% on the same window. Holdout never read, no go
+                               # issued. Family retired permanently. prereg H7_statarb_10coin.yaml;
+                               # evidence logs/edge/H7_statarb_10coin/{h7_summary.json,KILL.md}.
+                               # Data note: USD-quoted Binance US pairs serve broken kline history
+                               # (verified) - USDT pairs used; USDT treated as USD proxy.
+    kind: hypothesis
     hypotheses: [H7_statarb_10coin]
   H8_tweet_nb:                 # PRIMARY crypto slate: book 18.3 Bernoulli NB tweet sentiment.
     kind: hypothesis           # BLOCKED: no tweet feed confirmed by VP; do not invent tweets

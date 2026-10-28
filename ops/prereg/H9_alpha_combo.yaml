@@ -1,0 +1,40 @@
+# PRE-REGISTRATION - H9_alpha_combo (PRIMARY crypto slate, book section 3.20).
+# Status: BLOCKED STUB - DO NOT RUN.  Written 2026-10-28.
+#
+# Book 3.20 combines many parameter-variant alphas into a mega-alpha and trades
+# the combination.  The directive gates H9 on ">= N parameter-variant alphas from
+# the H4-H7 grids (~200)".  State of the variant pool after the 2026-10-28 tune
+# runs:
+#
+#   H4_hp_filter      48 grid variants run,  0 pass the six gates (KILLED at tune)
+#   H5_knn            48 grid variants run,  0 pass the six gates (KILLED at tune)
+#   H6_nn_quantile     8 grid variants run,  0 pass the six gates (KILLED at tune)
+#   H7_statarb_10coin 12 grid variants run,  0 pass the six gates (KILLED at tune)
+#   ---------------------------------------------------------------------
+#   total raw parameter-variant alpha series: 116 (< ~200 target)
+#   gate-surviving variants: 0
+#
+# Two independent blockers:
+#   (1) COUNT: 116 raw variants < the ~200 the directive set; and
+#   (2) SUBSTANCE: every constituent fails the same six-gate bar the combo would
+#       have to clear - the fee/turnover drag that killed each variant applies to
+#       the combo's own turnover too.  Combining gate-dead alphas cannot produce a
+#       live mega-alpha; running the combo now would be theater, not evidence.
+#
+# UNBLOCK CONDITION: a future wave (e.g. WAVE 2, or a re-opened family with a
+# different cost structure such as low-turnover rebalances) produces >= 200
+# parameter-variant alpha series with at least some gate-surviving
+# constituents; then this prereg is rewritten in place (combination weights per
+# Kakushadze-Yu eq. 360-style residual regression + equal-weight and
+# inverse-vol baselines, vs best single; fee 0.06%/turnover; six gates) and the
+# standard tune/scored discipline applies.
+hypothesis: H9_alpha_combo
+family: H9_alpha_combo
+kind: hypothesis
+status: BLOCKED
+blocker: "variant pool 116 raw (< ~200 target) and 0 gate-surviving constituents from H4-H7 (all four families KILLED at tune 2026-10-28)"
+unblock: ">= 200 variant alpha series with surviving constituents from a future wave; then prereg rewritten in place"
+gate_signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"
+evidence: logs/edge/H9_alpha_combo/BLOCKED.md
+runner: none (stub only)
+python: /data/finance/.venv-crypto/bin/python
