@@ -48,9 +48,9 @@ families:
         explicitly re-opens the family. Off-box path is Ops-advanced docs only
         (ops/edge_threat_model.md), never a Finance Desk prompt.
   H2_lazy_prices:
+    retired: true                # failed its pre-registered scored DEV 2026-10-28 (primary full_cos alpha_t_nw 1.16, secondary full_jac 0.81; pass bar needs >= 3; trial under freeze 370d41f3)
     kind: hypothesis             # registered 2026-10-28 (VP GO H2, 10:17 ET); dev-only;
                                  # prereg H2_lazy_prices.yaml - the fuller Lazy Prices
                                  # construction (full doc + 1A + 7, cos+Jaccard, monthly
-                                 # quintiles, 63d hold); scored dev run needs a standing
-                                 # dev go naming the code freeze (none installed yet)
+                                 # quintiles, 63d hold); scored DEV KILLED 2026-10-28
     hypotheses: [H2_lazy_prices]

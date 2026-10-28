@@ -21,6 +21,18 @@ One-liners with commit hashes; deep dives live where noted.
 
 ## 2026-10
 
+- 2026-10-28 — H2_lazy_prices KILLED at its pre-registered scored DEV (standing
+  go signed finance-go, freeze 370d41f3…, max_dev_trials 3). Primary
+  full_cos_q5: alpha_t_nw 1.16, alpha_m +0.29%, 11,213 events / 58 months;
+  secondary full_jac_q5: alpha_t_nw 0.81, 10,453 events. Both miss alpha_t>=3,
+  DSR, era_share, and robustness gates (net excess vs SPY/EW held). Kill
+  doctrine: H2_lazy_prices family retired permanently, no re-test. Evidence:
+  logs/edge/h2_lazy_prices/h2_summary.json;
+  logs/edge/20261028T103832-h2_primary_full_cos_q5/;
+  logs/edge/20261028T103837-h2_secondary_full_jac_q5/; go at
+  logs/approvals/go/H2_lazy_prices.dev.json(+.sig). H3 remains held until
+  Aaron/VP open it.
+
 - 2026-10-01: Paper program LIVE — Alpaca PAPER $100k, S3 cheap-10 book,
   inception fills −0.35% favorable. (skill: Paper program era)
 - 2026-10-01: Bug layer 6 (div-adjusted look-ahead) fixed; **v6 = definitive
