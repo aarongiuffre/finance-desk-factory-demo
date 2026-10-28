@@ -1,0 +1,113 @@
+# PRE-REGISTRATION - F151_19_3_inflation_hedge (Soper FULL-151 Ch19 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_18_* all
+# closed 2026-10-28).  Book 19.3 Global macro inflation hedge, Eq 547.
+# The book has NO backtests and NO performance claims - no performance numbers
+# attributed below.  Paper / free public only; no spend.
+hypothesis: F151_19_3_inflation_hedge
+family: F151_19_3_inflation_hedge
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 19.3 Eq 547: commodity shocks pass through to headline
+  inflation (HI) first, then to core (CI); the spread HI_YoY - CI_YoY is the
+  inflation-hedge indicator.  CA = max(0, min((HI_YoY - CI_YoY) / HI_YoY, 1))
+  is the commodity allocation percentage within the portfolio; the hedge is
+  executed by buying a basket of commodities through ETFs.
+prior: >-
+  WEAK-PRIOR, two-sided, with a preregistered ACTIVATION RISK: Eq 547 gives
+  CA > 0 only when HEADLINE YoY exceeds CORE YoY.  2015-2017 is the
+  post-oil-crash regime: headline ran AT or BELOW core for most of the
+  window (2015: headline ~0-1% vs core ~1.8-2.2%), so the rule may sit at
+  CA = 0 - the cell then IS the base portfolio and can carry no edge.  The
+  few activations (early-2017 headline spike above core) may be too few
+  changes to clear G4.  This is exactly why the G4b activation guard below
+  is preregistered BEFORE the tune.
+signal: >-
+  Monthly.  Decision at the close of the last session of month m; pnl from
+  the next session.  HI_YoY(t) = CPIAUCSL(t)/CPIAUCSL(t-12) - 1 and
+  CI_YoY(t) = CPILFESL(t)/CPILFESL(t-12) - 1 on the latest fully-published
+  CPI month, month m-1 (CPI month m publishes mid m+1; 1-month lag,
+  preregistered).  CA = max(0, min((HI_YoY - CI_YoY)/HI_YoY, 1)) computed on
+  that month-1 pair.  Weights: commodity basket CA, base portfolio (1-CA),
+  rebalanced monthly to the new CA (weights drift intra-month, Ch16
+  convention).  Base portfolio = 60/40 SPY/AGG (the book's portfolio is
+  unspecified; preregistered as the desk's standard 60/40, same class as the
+  Ch16 mixes).  CA is IDENTICAL across basket cells by construction - only
+  the commodity leg differs.
+cells:
+  ca_dbc: "CA weight in DBC, rest 60/40 SPY/AGG (scaled by 1-CA)"
+  ca_gsg: "CA weight in GSG, rest 60/40"
+  ca_uso: "CA weight in USO, rest 60/40"
+  ca_ew3: "CA split equally DBC/GSG/USO, rest 60/40"
+  static_10_dbc: >-
+    always-on fixed 10% DBC / 90% 60-40 base for the whole tune window (the
+    premise cell: does a static commodity sleeve carry the hedge at all?) -
+    G2 episode share 1.0 BY CONSTRUCTION and G4 exempt (Ch16 static-cell
+    convention); calendar-year share still enforced.
+total_cells: 5 (whole preregistered budget; no post-hoc cells)
+g4_rule: >-
+  Standard G4 >= 10 position changes (reset days with nonzero |dW|), PLUS
+  the preregistered G4b ACTIVATION GUARD for the four CA cells: the cell
+  must have CA > 0 on at least 6 of the 36 tune months.  A cell with fewer
+  activation months is the base portfolio BY CONSTRUCTION (no hedge ever
+  engaged) and FAILS regardless of trade count - a CA=0 book cannot be
+  distinguished from the 60/40 base and cannot carry the book's hedge edge.
+  static_10_dbc is exempt from G4/G4b (1 fill by construction, Ch16 rule).
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 CPI index obs
+    only: 13-month YoY pairs from the 2012-01-01 pull start)"
+  data_end: "2017-12-31 tune cap"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31 (36 months).  Dev holdout 2018-2019 NEVER
+    READ this run.  CPILFESL pulled request-capped coed=2017-12-31 AT PULL
+    TIME 2026-10-28 (CPIAUCSL on disk is the Ch16 pull, already capped
+    2017-12-31); price loaders hard-cap bars at TUNE_HI.
+data:
+  prices: >-
+    raw/price/{SPY,AGG,DBC,GSG,USO}.json (Yahoo chart v8; DBC/GSG/USO pulled
+    --backfill max 2026-10-28; total return = adjclose 'a').
+  cpi: >-
+    raw/fred/CPIAUCSL.json + raw/fred/CPILFESL.json (monthly index levels,
+    seasonally adjusted; CPI month m mapped to month-end m with the
+    preregistered 1-month publication lag applied at decision time).
+universe: >-
+  Fixed: SPY, AGG (base 60/40), DBC (Invesco DB Opt Yield... broad 14-
+  commodity futures ETF, 2006-), GSG (iShares GSCI commodity, 2006-), USO
+  (WTI crude, 2006-) - all 2006-vintage, tape verified 2026-10-28
+  (2006-03/2006-08/2006-05 starts).  Weights: CA from Eq 547; base fixed
+  60/40 constants.
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dW| PER LEG at each monthly
+  rebalance (reset) day; no cost while weights drift; no borrow (ETF longs
+  only - CA >= 0 so no short leg).  G6 stress at 2x per-side costs.
+gates: &gates >-
+  Standard F151 daily gates per cell: G1 lookahead - replay truncation at 4
+  slice cuts + loader-cap cut (weights through the cut identical) AND the
+  decision-early mutant (CA computed from month m's CPI - the LOOKAHEAD
+  mutant - must strictly differ where the cell is active; for a cell that is
+  never active G1's mutant check is moot because the cell already FAILS
+  G4b).  G2 - max calendar-year share of net pnl <= 0.40 AND max episode
+  share of gross <= 0.25 (episode = one calendar-month gross).  G3 - 2 of 3
+  equal thirds net-positive.  G4 - >= 10 position changes AND (CA cells)
+  G4b >= 6 activation months.  G5 - net Sharpe >= 0.8 AND net CAGR > 0.
+  G6 stress - net CAGR > 0 at 2x costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py) before any scored DEV run."
+report_only:
+  - "(a) CA path: monthly CA over the tune window - how often does Eq 547
+    even engage (activation share), and what does the HI-CI spread do?"
+  - "(b) Hedge-premise check: monthly corr(DBC total return, HI_YoY - CI_YoY
+    spread) and corr(DBC return, HI YoY level) - does the commodity proxy
+    co-move with the headline-core spread the book's mechanism requires?"
+  - "(c) Premise direction on a longer lens is NOT possible in-window (all
+    pulls capped at 2017-12-31; dev holdout unread) - documented limitation."
+data_walls: >-
+  * The book's CA is a portfolio-level overlay with no stated base portfolio;
+    the 60/40 base is a preregistered desk convention (same class as Ch16
+    mixes), not a book parameter.
+  * Commodity-index ETFs (DBC/GSG) carry roll yield and collateral-return
+    structure the book's abstract commodity exposure does not; USO is
+    single-commodity.  No free total-return commodity spot index tape.

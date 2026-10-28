@@ -1,0 +1,70 @@
+# PRE-REGISTRATION - F151_19_4_global_fi (Soper FULL-151 Ch19 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_18_* all
+# closed 2026-10-28).  Book 19.4 Global fixed-income strategy.
+# BLOCKED AT PREREG - 0 cells, no tune run, no gates, no go ask, no holdout
+# read, no data pull beyond the probe that established the wall (probes are
+# read-only fetches, logged in the BLOCKED evidence file).
+hypothesis: F151_19_4_global_fi
+family: F151_19_4_global_fi
+kind: hypothesis
+blocked: true
+blocked_reason: tape + factor walls (below)
+literature: >-
+  Kakushadze & Serur 19.4: cross-sectional ranking of government bonds from
+  various countries on factors including GDP, inflation, sovereign risk,
+  real interest rate, output gap, value, momentum, term spread and the
+  Cochrane-Piazzesi predictor; zero-cost portfolio long the top quantile /
+  short the bottom quantile, implemented with country-bond ETFs; multifactor
+  combination per 3.6.
+prior: >-
+  n/a - family blocked before any signal design (the paperable-object test
+  failed at the tape, so no cells were ever specified).
+blocked_walls:
+  - >-
+    TAPE WALL (probed 2026-10-28 against the desk's Yahoo chart v8 access,
+    incl. LSE '.L' / TSX '.TO' / Xetra '.DE' suffixes which DO resolve on
+    this desk): the free per-country sovereign bond ETF cross-section does
+    not exist for the book's construction.  Pre-2015 legs that resolve:
+    US (TLT/IEF/IEI 2002-2007), UK (IGLT.L 2008-02, GBP), Canada (XGB.TO
+    2006-12, CAD), euro-area AGGREGATE basket only (IEAC.L 2009-03 / IBGM.L
+    2008-02 - a currency bloc, not a country).  Missing entirely pre-2015:
+    Japan (TSE JGB ETFs 1486.T/1487.T begin 2016-08, 2510.T 2017-12; no
+    UCITS JGB leg - IGJP 404), Australia (no sovereign UCITS/US leg found),
+    Germany-specific (only euro-area baskets), EM per-country sovereign
+    (EMB/PCY/EMLC are baskets).  A cross-sectional rank on 4 legs (one of
+    them a basket) is degenerate - the book's quantile construction has no
+    honest paperable form.
+  - >-
+    FX-CONTAMINATION WALL: the legs that do exist are unhedged, local-
+    currency-listed vehicles (TLT USD, IGLT.L GBP, XGB.TO CAD) - a country
+    bond "rank" on their returns measures FX + duration, not sovereign bond
+    factor ranks; no free currency-hedged per-country sovereign tape exists.
+    (FX itself was a KILL class in Ch8; a bond-family hybrid would inherit
+    that exposure under a bond label.)
+  - >-
+    FACTOR WALL: the book's factor list needs paid/derivation-only inputs -
+    sovereign risk = CDS spreads (paid), output gap = published estimates
+    (paid/institutional), Cochrane-Piazzesi factor = a fitted term-structure
+    factor across the full sovereign curve (per-country free CMT curves
+    exist only for the US; other sovereigns on fredgraph serve a single
+    long-rate series each - IRLTLT01), inflation expectations per country =
+    breakevens not free ex-US.  GDP/inflation/momentum/term-spread ARE free
+    (used by F151_19_2) but with only 4 unhedged legs there is no
+    cross-section to rank.
+  - >-
+    listed proxies preregistered as NOT transferring the mechanism:
+    international bond BASKETS (IGOV/BWX/BNDX/WIP/EMB/PCY) have no
+    cross-country dimension at all (single holdings); mixing them into a
+    4-leg rank would re-test the FX carry block under a bond label.
+total_cells: 0 (no cells specified - blocked before signal design)
+verdict_policy:
+  - "BLOCKED at prereg: BLOCKED.md + REGISTRY blocked_stub, no go ask, no tune."
+unblock_conditions: >-
+  A free per-country sovereign bond ETF cross-section (>= 8 country legs,
+  currency-hedged or explicitly FX-documented, pre-2015 tape) OR free
+  per-country sovereign curve tape sufficient to compute the book's factor
+  set honestly.  Either wall moves: rewrite THIS prereg in place (Ch17
+  convention) - never open cells under a new name.
+evidence: logs/edge/F151_19_4_global_fi/BLOCKED.md (probe transcript + wall
+  documentation; no tune_cells.json - 0 cells).

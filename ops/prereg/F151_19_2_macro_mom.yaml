@@ -1,0 +1,137 @@
+# PRE-REGISTRATION - F151_19_2_macro_mom (Soper FULL-151 Ch19 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_18_* all
+# closed 2026-10-28).  Book 19.2 Fundamental macro momentum.
+# The book has NO backtests and NO performance claims - no performance numbers
+# attributed below.  Paper / free public only; no spend.
+hypothesis: F151_19_2_macro_mom
+family: F151_19_2_macro_mom
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 19.2: buy (sell) assets favored (adversely affected) by
+  incoming macroeconomic trends to capture underreaction.  Country equity
+  indexes are ranked on 4 state variables - business cycle, international
+  trade, monetary policy, risk sentiment (footnote 235) - and a zero-cost
+  portfolio goes long the top decile / short the bottom decile; holding
+  period 3-6 months; multifactor combination per 3.6 (footnote 236).
+  Footnote 235 construction: business cycle = 1-yr changes in real GDP growth
+  and CPI inflation forecast (50/50); trade = 1-yr changes in spot FX vs an
+  export-weighted basket; monetary = 1-yr changes in short-term rates;
+  risk sentiment = 1-yr equity market excess returns.
+prior: >-
+  WEAK-PRIOR, two-sided.  (a) The rank-combine machinery is the 3.6/Ch16
+  momentum shape that repeatedly FAILS G2 year-share in this batch (xs
+  momentum carried by one year).  (b) All four variables are 1-YR CHANGES -
+  slow macro data (quarterly GDP, monthly CPI/rates) on a 3-6 month hold:
+  few independent ranking updates in a 36-month window.  (c) Two of the four
+  variables are degraded proxies on free data (below): the forecast leg of
+  business cycle is realized CPI (paid consensus wall), and trade is a
+  bilateral-USD change (paid trade-weight baskets per country) - the ranking
+  signal is weaker than the book's spec.
+signal: >-
+  Decision at close of the last session d of each rebalance month; pnl from
+  the next session.  Per country i, four 1-yr-change variables as of d:
+    bc_i  = 0.5 * (g_q - g_q4) + 0.5 * (cpi_m - cpi_m12)
+            g_q   = YoY growth of the quarterly REAL GDP level (Constant
+                    Prices) for the latest quarter ending >= 60 days before d
+                    (first-estimate publication lag, preregistered);
+            cpi_m = CPI YoY (% chg same month prior year, FRED 657N) for the
+                    latest month whose month-end is >= 30 days before d
+                    (CPI publishes mid following month; 1-month lag).
+    tr_i  = -1yr log change of the USD value of country i's currency
+            (FRED DEX series = local currency per USD, so NEGATIVE log change
+            = appreciation; tr = -(ln fx(d-1) - ln fx(d-253))).  US uses
+            DTWEXB (the Fed's BROAD export-weighted dollar index - the book's
+            actual trade-weight construction; per-country export-weighted
+            baskets for the others are paid, IMF DOTS wall -> bilateral USD
+            proxy, documented).
+    mon_i = ir(m) - ir(m12): 1-yr change of the 3-month interbank rate
+            (IR3TIB01), latest month-end >= 30 days before d.
+    rs_i  = 1-yr equity excess return: adj(d-1)/adj(d-253) - 1 - r_f,
+            r_f = annualized 3m interbank rate (same ir(m) obs).
+  Cross-sectional RANK of each variable (ascending = higher value -> better
+  rank); combined score = mean of the 4 ranks (rank_avg, book 3.6); at each
+  rebalance long the top-k names (+1/k each), short the bottom-k (-1/k each),
+  weights constant between rebalances with intra-period drift (Ch16
+  _drifted_weights convention); rebalance every H months (H = 3 or 6, the
+  book's holding range).
+cells:
+  xavg_h3_top1: "rank_avg 4 vars, H=3m, k=1 (book-literal decile: ceil(0.1*10)=1)"
+  xavg_h3_top2: "rank_avg 4 vars, H=3m, k=2"
+  xavg_h6_top2: "rank_avg 4 vars, H=6m, k=2 (book's 6-month hold end)"
+  xavg_h3_top2_z: "z-score combine (mean of 4 standardized variables) instead of rank, H=3m, k=2"
+  xavg_h3_top2_3v: "3 variables (bc, tr, mon) - risk sentiment excluded (XS equity momentum inside an equity book is self-referential), H=3m, k=2"
+  xsent_h3_top2: "risk sentiment ONLY (pure 1-yr XS equity momentum), H=3m, k=2 - isolates the momentum variable"
+total_cells: 6 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 10 position changes (reset days with nonzero |dW|; quarterly
+  rebalance of a 4-leg book gives 12-13)"
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars/macro obs
+    only: 253-session equity/FX windows, 13-month CPI/rate lags, 8-quarter
+    GDP history from the 2012-01-01 pull start)"
+  data_end: "2017-12-31 tune cap"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31 (36 months, 12 quarterly rebalances).
+    Dev holdout 2018-2019 NEVER READ this run.  All FRED pulls
+    request-capped coed=2017-12-31 AT PULL TIME; price loaders hard-cap
+    bars at TUNE_HI.
+data:
+  prices: >-
+    raw/price/{SPY,EWJ,EWG,EWU,EWQ,EWI,EWN,EWC,EWY,EWW}.json (Yahoo chart
+    v8, pulled --backfill max 2026-10-28; total return = adjclose 'a').
+  fred: >-
+    raw/fred/ per-ID json (fred_pull.py, request-capped 2012-01-01..
+    2017-12-31 at pull 2026-10-28): CPI YoY CPALTT01{US,JP,DE,GB,FR,IT,NL,
+    CA,KR,MX}M657N; quarterly real GDP (Constant Prices) NAEXKP01{US,GB}Q652S
+    + NAEXKP01{JP,DE,FR,IT,NL,CA,KR,MX}Q189S; 3m interbank IR3TIB01{US,JP,
+    DE,GB,FR,IT,NL,CA,KR,MX}M156N; daily FX DEXJPUS, DEXUSEU, DEXUSUK,
+    DEXCAUS, DEXKOUS, DEXMXUS; US trade-weighted dollar DTWEXB.
+universe: >-
+  FIXED 10 countries - the full free-data intersection of (a) all four state
+  variables and (b) a tradeable iShares country equity ETF on the desk's
+  Yahoo tape pre-2015: US SPY, JP EWJ, DE EWG, GB EWU, FR EWQ, IT EWI,
+  NL EWN, CA EWC, KR EWY, MX EWW.  Documented EXCLUSIONS (probed 2026-10-28,
+  all 404/absent free): ES (no OECD GDP series), CH (no OECD GDP), SE (no
+  free FX series; DEXSEUS 404), NO (no pre-2016 US-listed Norway ETF),
+  AU/NZ/SG/HK/TW (no OECD CPI+GDP feeds), BR (no free short rate;
+  IR3TIB01BRM156N 404), BE (no OECD GDP).  Euro members share the EUR leg
+  (DEXUSEU) and the euro money-market rate (IR3TIB01 identical across DE/
+  FR/IT/NL) - documented: trade and monetary ranks are IDENTICAL inside the
+  euro bloc by construction of the free proxies.
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dW| PER LEG at each rebalance
+  (reset) day; no cost while weights drift; no borrow (ETF pairs, Ch14/16
+  convention).  G6 stress at 2x per-side costs.
+gates: &gates >-
+  Standard F151 daily gates per cell: G1 lookahead - replay truncation at 4
+  slice cuts + loader-cap cut (weights through the cut identical) AND the
+  decision-early mutant (bc/tr/mon/rs computed with data through d itself,
+  lags removed) must STRICTLY differ (max abs diff > 1e-12).  G2 - max
+  calendar-year share of net pnl <= 0.40 AND max episode share of gross
+  <= 0.25 (episode = one H-month holding period gross).  G3 - 2 of 3 equal
+  thirds net-positive.  G4 - >= 10 position changes.  G5 - net Sharpe >= 0.8
+  AND net CAGR > 0.  G6 stress - net CAGR > 0 at 2x costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py) before any scored DEV run."
+report_only:
+  - "(a) Variable cross-sectional dispersion table: per variable, the
+    cross-sectional std of the 10 country values at each rebalance - are the
+    macro proxies even discriminating (euro-bloc degeneracy quantified)?"
+  - "(b) Rank-stability: fraction of rebalances where the top1/bottom1 names
+    are unchanged from the prior rebalance."
+  - "(c) Sign sensitivity: monetary variable sign-flipped rank_avg H=3 k=2
+    (report-only; the book does not state the equity sign of the monetary
+    trend - the gate cells use the plain ascending reading)."
+  - "(d) Per-variable standalone ranking pnl (each variable alone, H=3 k=2) -
+    which state variable, if any, carries the combined score."
+data_walls: >-
+  * CPI inflation FORECAST (consensus) is paid (OECD Economic Outlook /
+  Bloomberg consensus) -> realized CPI YoY used as the preregistered proxy.
+  * Per-country export-weighted FX baskets need trade weights (IMF DOTS,
+  paid) -> bilateral USD change for the 9 non-US legs; US gets the book's
+  real construction via DTWEXB (the Fed's broad export-weighted index).
+  * Sovereign CDS, output-gap estimates and the Cochrane-Piazzesi factor
+  (book 19.4's factor list) are out of scope here.

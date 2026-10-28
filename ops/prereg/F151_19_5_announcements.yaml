@@ -1,0 +1,27 @@
+# PRE-REGISTRATION - F151_19_5_announcements (Soper FULL-151 Ch19 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  COVERED STUB - 0 new cells, no run,
+# no tune, no gates, no go ask, no holdout read, no data pull, no code.
+hypothesis: F151_19_5_announcements
+family: F151_19_5_announcements
+kind: covered_stub
+covered_by: W2b_fomc
+covered_verdict: KILL
+literature: >-
+  Kakushadze & Serur 19.5: buy stocks on important announcement days (FOMC
+  announcements) and switch to risk-free assets on non-announcement days,
+  implemented via ETFs (100% equities on ADs -> 100% Treasuries on NDAs).
+prior: >-
+  COVERED.  The identical mechanism is already preregistered and SCORED as
+  W2b_fomc (WAVE2): equity ETF held on FOMC announcement days / risk-free
+  otherwise, scored at tune 2026-10-28 with the six gates - KILL (see
+  logs/edge/W2b_fomc/ + VERDICT_W2b.md).  Per the batch brief: cross-ref
+  only, do NOT reopen or re-tune W2b_fomc; no cells under this name
+  (re-testing a retired family under a new name is forbidden).
+total_cells: 0
+verdict_policy:
+  - "COVERED STUB: inherit W2b_fomc's KILL; KILL.md cross-ref only."
+unblock_conditions: >-
+  Same as W2b_fomc's own unblock path (rewrite W2b_fomc in place).  Never
+  via this name.
+evidence: logs/edge/F151_19_5_announcements/KILL.md (cross-ref; actual
+  evidence logs/edge/W2b_fomc/).
