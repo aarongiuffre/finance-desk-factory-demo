@@ -986,3 +986,83 @@ families:
     kind: blocked_stub
     hypotheses: [F151_7_6_variance_swaps]
 
+  F151_15_1_hold_distressed:   # Soper FULL-151 Ch15: book 15.1 passive
+    blocked: true              # distressed debt.  BLOCKED at prereg
+                               # 2026-10-28 (0 cells): the long leg is the
+                               # distressed ISSUER'S OWN BONDS at a deep
+                               # discount timed on default/bankruptcy-filing
+                               # event dates - per-issuer bond tape (incl.
+                               # defaulted issuers) = TRACE historic
+                               # subscription-for-fee (standing F151_5_14/
+                               # 11_5/12_1 wall class); distress screen +
+                               # event dates (S&P CI / Moody's default DBs,
+                               # PACER docket) + reorg recovery values all
+                               # paid/unstructured; equity of bankrupt
+                               # issuers does NOT transfer claim-seniority;
+                               # fallen-angel/broad-HY ETFs preregistered as
+                               # NOT transferring.  Prereg 8535b2c.  Evidence
+                               # logs/edge/F151_15_1_hold_distressed/.
+    kind: blocked_stub
+    hypotheses: [F151_15_1_hold_distressed]
+  F151_15_2_active_distress:   # Soper FULL-151 Ch15: book 15.2 active
+    blocked: true              # distressed investing (15.2.1 planning a
+                               # reorganization / 15.2.2 buying outstanding
+                               # debt / 15.2.3 loan-to-own).  BLOCKED at
+                               # prereg 2026-10-28 (0 cells; sub-stubs share
+                               # the wall class - court/private-process
+                               # data): 15.2.1 needs the court process
+                               # itself (PACER fee-per-page; EDGAR 8-K
+                               # milestones unstructured); 15.2.2 = the
+                               # 15_1 bond-tape wall PLUS per-plan
+                               # debt-to-equity conversion terms; 15.2.3 IS
+                               # originating a private secured loan (LSTA/
+                               # LCD + S&P CI Leveraged Loans paid; no free
+                               # origination tape of any kind; no listed
+                               # instrument expresses control rights).
+                               # Prereg 8535b2c.  Evidence
+                               # logs/edge/F151_15_2_active_distress/.
+    kind: blocked_stub
+    hypotheses: [F151_15_2_active_distress]
+  F151_15_3_distress_puzzle:   # Soper FULL-151 Ch15: book 15.3 distress
+    retired: true              # risk puzzle.  KILL at tune 2026-10-28: 0/3
+                               # cells (Ohlson-1980 O-score decile/quintile/
+                               # hold6 monthly L/S, long lowest-O safest /
+                               # short highest-O riskiest; ~197-207 names/
+                               # month-end).  Net Sharpe -0.83/-0.95/-0.18;
+                               # cost drag 46-74 bp/yr - the SIGN kills.
+                               # Premise measured REVERSED in-window (fwd-21d
+                               # by O-decile, 6,396 obs: safest +1.28% vs
+                               # riskiest +1.60%) - consistent with the
+                               # risk-premium view, not the puzzle view; loss
+                               # concentrated in the 2016 energy-distress
+                               # third (G3 fails, only 2017 third positive).
+                               # Altman-Z variant also negative (-0.21);
+                               # O-vs-Z health-rank corr median -0.37 (both
+                               # scores lose).  Walls: fitted CH-2008 logit
+                               # not estimable free (bankruptcy labels
+                               # unstructured/paid -> fixed-weight 1980
+                               # logit transfer); S&P-500-only PIT universe.
+                               # Fresh EDGAR companyfacts pull raw/edgar15
+                               # filed<=2019-12-31 hard-capped at pull (PIT).
+                               # Prereg 8535b2c, machinery 543621b, runner
+                               # fix 389d94c - all pre-verdict; G1 replay
+                               # CLEAN (incl. new fundamentals-cap cut).
+                               # Evidence logs/edge/F151_15_3_distress_puzzle/.
+    kind: hypothesis
+    hypotheses: [F151_15_3_distress_puzzle]
+  F151_15_3_1_distress_vol:    # Soper FULL-151 Ch15: book 15.3.1 Eq 519
+    retired: true              # vol-target overlay on the 15_3 HMD.  KILL at
+                               # tune 2026-10-28: 0/3 cells (vt10/vt15 decile
+                               # + vt10 quintile).  Base HMD realized vol sat
+                               # BELOW target all 3y (mean scale 1.32/1.91/
+                               # 2.16 by year) -> Eq 519 LEVERED UP a negative-
+                               # expectancy strategy: net CAGR -7.1..-10.0%/yr,
+                               # max DD -15.4% -> -25.8% (vt10) / -35.5% (vt15);
+                               # 1x-capped variant identical to base (whole
+                               # effect = leverage), daily-scale variant same
+                               # (-0.665).  Prereg 8535b2c; same data walls as
+                               # 15_3.  Evidence
+                               # logs/edge/F151_15_3_1_distress_vol/.
+    kind: hypothesis
+    hypotheses: [F151_15_3_1_distress_vol]
+
