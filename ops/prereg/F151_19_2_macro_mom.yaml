@@ -36,8 +36,12 @@ signal: >-
                     Prices) for the latest quarter ending >= 60 days before d
                     (first-estimate publication lag, preregistered);
             cpi_m = CPI YoY (% chg same month prior year, FRED 657N) for the
-                    latest month whose month-end is >= 30 days before d
-                    (CPI publishes mid following month; 1-month lag).
+                    month immediately BEFORE d's decision month (period rule:
+                    at a month-end decision of month m the latest published
+                    CPI is m-1, published mid m).  Formalized as the period
+                    rule in the machinery commit BEFORE any tune run - the
+                    earlier 'month-end >= 30 days before d' phrasing
+                    silently slipped to m-2 for most months.
     tr_i  = -1yr log change of the USD value of country i's currency
             (FRED DEX series = local currency per USD, so NEGATIVE log change
             = appreciation; tr = -(ln fx(d-1) - ln fx(d-253))).  US uses
@@ -63,8 +67,11 @@ cells:
   xavg_h3_top2_3v: "3 variables (bc, tr, mon) - risk sentiment excluded (XS equity momentum inside an equity book is self-referential), H=3m, k=2"
   xsent_h3_top2: "risk sentiment ONLY (pure 1-yr XS equity momentum), H=3m, k=2 - isolates the momentum variable"
 total_cells: 6 (whole preregistered budget; no post-hoc cells)
-g4_floor: ">= 10 position changes (reset days with nonzero |dW|; quarterly
-  rebalance of a 4-leg book gives 12-13)"
+g4_floor: ">= 10 position changes (reset days with nonzero |dW|) for the H=3
+  cells; the H=6 cell floor is 5 (proportional to holding frequency: a 36-month
+  window contains only 6 six-month holding periods, so the flat 10 would fail
+  the cell BY CONSTRUCTION rather than by evidence - amended 2026-10-28 in the
+  machinery commit BEFORE any tune run)"
 fold: dev
 window:
   data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars/macro obs
