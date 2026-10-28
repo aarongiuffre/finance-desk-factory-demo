@@ -1,0 +1,72 @@
+# PRE-REGISTRATION - W2b_mr_technical (Soper WAVE 2b, book 3.14, 3.15).
+# Written 2026-10-28 BEFORE any run.  New family; no retired name re-opened.
+#
+# Book 3.14 support and resistance via the pivot point: C = (PH+PL+PC)/3 from
+# the PREVIOUS day's high/low/close; R = 2C - PL; S = 2C - PH (eq. 325-327).
+# Signal (eq. 328): long if P > C, liquidate long if P >= R, short if P < C,
+# liquidate short if P <= S.  Book 3.15 channel (Donchian): Bup = max, Bdown =
+# min of the last T closes (eq. 329-330); establish long / liquidate short when
+# P = Bdown, establish short / liquidate long when P = Bup (eq. 331) - a
+# mean-reversion read; the book also notes a breakout read when price breaks
+# the channel (new trend).
+#
+# Crypto adaptation (paper): BTC and ETH Binance spot daily (00:00 UTC), the
+# two assets with a deep 2017+ tape on this desk.  Daily decisions, position
+# decided at close t-1 earns r[t] (desk convention).  "P = Bdown" read as
+# P <= Bdown (touch of the floor), "P = Bup" as P >= Bup.  The Donchian state
+# machine holds the position until the opposite touch liquidates it; the
+# breakout variant inverts the touch rule (long on new high, short on new low)
+# and holds until the opposite extreme.  Book has NO backtests.
+hypothesis: W2b_mr_technical
+family: W2b_mr_technical
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 3.14 (eq. 325-328) pivot-point support/resistance;
+  3.15 (eq. 329-331) Donchian channel mean-reversion, with the book's own
+  breakout alternative.
+prior: >-
+  SKEPTICAL.  Daily pivot/Donchian rules on BTC pay 12bps per round trip at
+  6bps/side and fire often; crypto's documented daily-horizon reversal is weak
+  for large caps, and the pivot rule's expectations are inherited from equity
+  session structure that does not exist in a 24/7 market.  The breakout
+  variant is a trend bet and may do better in the 2020-21 regime, which is
+  exactly what G2/G3 exist to catch.
+fold: dev
+window:
+  data_start: "2017-08-17 (Binance spot BTC); ETH same tape family"
+  data_end: "2026-09-30 (desk pin, same as W2a)"
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (per asset); holdout =
+    last 40%, NEVER read in tune mode.  Selection on tune only.
+data:
+  prices: "data/crypto/binance/spot-{BTC,ETH}-1d.csv (00:00 UTC daily OHLCV)."
+signal:
+  pivot_3_14: >-
+    At close t: C(t) = (H(t-1)+L(t-1)+C(t-1))/3, R(t) = 2C-PL, S(t) = 2C-PH
+    from day t-1's OHLC.  State machine: if flat, go long when C(t) < P(t)
+    (book: establish long if P > C; the decision uses day t's close and holds
+    from t), go short when P(t) < C(t).  Long liquidated when P >= R, short
+    liquidated when P <= S.
+  donchian_3_15: >-
+    Bup(t)/Bdown(t) = max/min of closes over the last T bars INCLUDING t.
+    Meanrev variant: flat -> long when P(t) <= Bdown(t), flat -> short when
+    P(t) >= Bup(t); hold until the opposite touch.  Breakout variant: flat ->
+    long when P(t) >= Bup(t), short when P(t) <= Bdown(t); hold until the
+    opposite extreme.  T in {10, 20, 55}.
+  grid: >-
+    2 assets x (pivot + 3 T x 2 variants) = 14 cells (whole preregistered
+    budget; no post-hoc cells).
+costs:
+  fee: "6 bps per fill (single-asset position changes, |pos| <= 1)."
+  funding: "n/a (spot only).  Interest on cash NOT credited."
+  slippage_stress: "G6: same pnl at 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: "replay-truncation on 5 random cuts + future-peek mutant must FAIL the replay."
+  g2_concentration: "max single-trade share of gross <= 0.25 AND max calendar-year share of net <= 0.40."
+  g3_regime: "at least 2 of 3 equal thirds of the tune window net-positive."
+  g4_min_trades: ">= 60 closed trades on the tune window (default floor; daily signals should clear it easily)."
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill (17 bps reported)."
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune, KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: BLOCKED awaiting standing dev go; holdout unread."

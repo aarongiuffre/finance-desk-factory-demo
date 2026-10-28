@@ -1,0 +1,95 @@
+# PRE-REGISTRATION - W2b_tsmom (Soper WAVE 2b, book sections 4.1.1, 4.1.2, 4.6).
+# Written 2026-10-28 BEFORE any run.  New family; does not re-open any retired
+# name (PRIMARY H4-H7 retired 2026-10-28; W2a families retired 2026-10-28).
+#
+# Book 4.1.1 sector momentum rotation with MA filter: buy top-decile ETFs only
+# if P > MA(T0); short bottom-decile only if P < MA(T0) (eq. 362).  Book 4.1.2
+# dual momentum: the relative-momentum long is established only if the broad
+# market index has an upward trend (P > MA(T0)); otherwise funds sit in an
+# uncorrelated asset (eq. 363).  Book 4.6 multi-asset trend following: long-only
+# portfolio of assets with positive T-day cumulative return Ricum, optional MA
+# filter, weights wi = gamma*Ricum (eq. 371), gamma*Ricum/sigma_i (372) or
+# gamma*Ricum/sigma_i^2 (373), normalized to sum 1.
+#
+# Crypto adaptation (paper): the "sector ETFs" are the 10 Binance.US USDT
+# daily tapes (universe X, PIT membership = coins with a close that day; XRP
+# is genuinely absent 2021-01-13..2023-07-14 = the Binance.US delisting, so
+# no fabricated fills).  The "broad market index" for 4.1.2 is BTC itself.
+# Top/bottom decile -> top/bottom 3 coins of 10 (quintile granularity is
+# meaningless at N=10; documented).  Rebalance monthly (book convention for
+# rotation strategies), decided at the close before the first trading day of
+# the month.  Cash earns 0 (no Treasury ETF modeled; conservative omission).
+# Book has NO backtests; no performance claims exist for these sections.
+hypothesis: W2b_tsmom
+family: W2b_tsmom
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies 4.1.1 (eq. 362), 4.1.2 (eq. 363),
+  4.6 (eq. 371-373).  Relative momentum ranked cross-sectionally, gated by a
+  price/MA filter per constituent (4.1.1), by broad-market trend (4.1.2), or
+  replaced by long-only momentum-proportional weights (4.6).
+prior: >-
+  MIXED.  Time-series momentum in crypto is documented on single assets and
+  the 2019-2026 window contains long bull regimes, so a long-only 4.6 variant
+  may pass Sharpe on the tune window - the concentration/regime gates (G2/G3)
+  are the real test.  The rotation variants (4.1.1/4.1.2) at monthly
+  frequency pay ~12bps per round trip per coin at 6bps/side; cross-sectional
+  spreads between large caps are small.  SKEPTICAL on 4.1.1/4.1.2.
+fold: dev
+window:
+  data_start: "2019-09-23 (earliest common date of the 10-coin universe)"
+  data_end: "2026-09-30 (last complete monthly dump; desk pin, same as W2a)"
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars; holdout = last 40%,
+    NEVER read in tune mode.  Selection on tune only.
+data:
+  prices: >-
+    data/crypto/binanceus/{ADA,AVAX,BNB,BTC,DOGE,DOT,ETH,LINK,SOL,XRP}USDT-1d.csv
+    (Binance.US bulk dumps, 00:00 UTC daily closes + volume).
+  universe_note: >-
+    Per-day universe = coins with a close that day.  A coin that vanishes from
+    the tape while held (XRP 2021-01..2023-07) is forced flat at its last
+    available close with the exit fee charged (delisting treatment, honest).
+signal:
+  momentum: "Ricum_i = close_i(t)/close_i(t-T) - 1, T-day cumulative return."
+  ma_filter: "MA_i(T0) = mean of close_i over the last T0 daily bars."
+  rot_ma_4_1_1: >-
+    Rank by Ricum.  Long the top-3 coins that pass P > MA(T0) at weight +1/3
+    each; short the bottom-3 that pass P < MA(T0) at -1/3 each; coins failing
+    their filter get 0.  No cash residual management (weights simply sum to
+    whatever the passing set implies).
+  dual_4_1_2: >-
+    Same ranking; long the top-3 coins that pass P > MA(T0) ONLY IF BTC itself
+    has P_BTC > MA_BTC(T0) (broad-market gate); otherwise 100% cash.  Longs
+    only (book 4.1.2 is a long-only mitigation; shorts not traded, documented).
+  multi_4_6: >-
+    Long-only.  Candidates = coins with Ricum > 0 (and, when the MA filter is
+    on, P > MA(T0)).  Weights w_i prop to Ricum (prop_R), Ricum/sigma_i
+    (invvol), or Ricum/sigma_i^2 (invvol2), sigma_i = trailing T-day std of
+    daily returns; normalized so sum(w) = 1.  All-cash when no candidate.
+  rebalance: "Monthly, decided at the close before the month's first bar."
+  grid: >-
+    rot_ma: T {90,180} x T0 {100,200} = 4 cells.  dual: T {90,180} x
+    T0 {100,200} = 4 cells.  multi: wtype {prop_R, invvol, invvol2} x
+    T {90,180} x ma_filter {none, 200} = 12 cells.  Total 20 cells
+    (whole preregistered budget; no post-hoc cells).
+costs:
+  fee: >-
+    6 bps per fill per coin leg (0.06% desk convention), charged on each
+    unit weight change (entry, rebalance, exit).
+  funding: "n/a (spot only).  Interest on cash NOT credited (conservative)."
+  slippage_stress: "G6: same pnl at 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: >-
+    replay-truncation on 5 random cuts (weights through D identical when every
+    input tape is cut at D) + future-peek mutant must FAIL the replay.
+  g2_concentration: >-
+    max single-episode share of gross <= 0.25 (episode = one coin's contiguous
+    nonzero-weight run) AND max calendar-year share of net <= 0.40.
+  g3_regime: "at least 2 of 3 equal thirds of the tune window net-positive."
+  g4_min_trades: ">= 60 coin-entry episodes on the tune window (default floor)."
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill (17 bps reported)."
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune, KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: BLOCKED awaiting standing dev go; holdout unread."

@@ -1,0 +1,72 @@
+# PRE-REGISTRATION - W2b_vol_target (Soper WAVE 2b, book 6.5).
+# Written 2026-10-28 BEFORE any run.  New family; no retired name re-opened.
+#
+# Book 6.5 index volatility targeting with risk-free asset: maintain a constant
+# volatility level by rebalancing between the risky asset and a riskless asset;
+# the risky weight is w = sigma*/sigma (capped at max leverage L), sigma* the
+# volatility target; to avoid overtrading, rebalance only when the percentage
+# change |dw|/w since the last rebalance exceeds a preset threshold kappa.
+# The book notes sigma is usually IMPLIED vol or a forecast; historical vol is
+# the paper-practical choice here.
+#
+# Crypto adaptation (paper): risky asset = BTC or ETH Binance spot daily;
+# sigma = trailing realized daily-return vol over T days, annualized
+# (x sqrt(365)); targets sigma* in {0.5, 1.0}; leverage cap L = 2.  The
+# risk-free leg is cash earning ZERO (no T-bill tape on the crypto desk;
+# the conservative omission documented in W2a carries over - the strategy's
+# risk-free interest alpha is NOT modeled, so any pass is on the risky-leg
+# timing alone).  Rebalance decision made daily at the close, executed only
+# when |dw|/w > kappa.  Book has NO backtests.
+hypothesis: W2b_vol_target
+family: W2b_vol_target
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 6.5: constant-vol allocation w = sigma*/sigma between a
+  risky asset and cash, threshold-kappa rebalancing to limit turnover.
+prior: >-
+  MIXED.  Vol targeting historically raises Sharpe in equities mainly through
+  the countercyclical exposure plus the risk-free coupon; with the coupon
+  omitted, the test here is pure exposure timing, which in crypto mostly
+  de-levers before crashes (helpful 2022) but also caps the recoveries.
+  Whether it clears Sharpe >= 0.8 AFTER fees is genuinely uncertain; G2/G3
+  guard against the answer being one regime.
+fold: dev
+window:
+  data_start: "2017-08-17 (Binance spot BTC); ETH same tape family"
+  data_end: "2026-09-30 (desk pin, same as W2a)"
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (per asset); holdout =
+    last 40%, NEVER read in tune mode.  Selection on tune only.
+data:
+  prices: "data/crypto/binance/spot-{BTC,ETH}-1d.csv (00:00 UTC daily closes)."
+signal:
+  weight: >-
+    w_raw(t) = sigma* / sigma_hat(t), sigma_hat = std of daily returns over the
+    trailing T bars x sqrt(365), T in {20, 60}; w capped at L = 2; w >= 0
+    (long-only; the book's strategy holds the remainder in the risk-free
+    asset, cash here).
+  rebalance: >-
+    Execute at close t only if |w_raw(t) - w_last(t-1)| / w_last(t-1) > kappa,
+    kappa in {0.10, 0.25}; otherwise carry the previous weight.  w_last(t-1)
+    is the weight actually held, so no look-ahead is possible.
+  grid: >-
+    2 assets x T {20, 60} x sigma* {0.5, 1.0} x kappa {0.10, 0.25} = 16 cells
+    (whole preregistered budget; no post-hoc cells).
+costs:
+  fee: "6 bps per fill on each unit weight change (threshold kappa keeps turnover bounded)."
+  funding: "n/a (spot only).  Interest on the idle cash leg NOT credited (conservative)."
+  slippage_stress: "G6: same pnl at 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: "replay-truncation on 5 random cuts + future-peek mutant must FAIL the replay."
+  g2_concentration: "max single-episode share of gross <= 0.25 AND max calendar-year share of net <= 0.40."
+  g3_regime: "at least 2 of 3 equal thirds of the tune window net-positive."
+  g4_min_trades: >-
+    Trade-count floor set from trade-frequency reality BEFORE the run: the
+    position is continuous, so closed-episode counting is degenerate here.
+    G4 = number of executed rebalance actions on the tune window >= 60.
+    The default closed-episode count is reported alongside for comparability.
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill (17 bps reported)."
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune, KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: BLOCKED awaiting standing dev go; holdout unread."

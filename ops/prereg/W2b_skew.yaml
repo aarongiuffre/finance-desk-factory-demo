@@ -1,0 +1,62 @@
+# PRE-REGISTRATION - W2b_skew (Soper WAVE 2b, book 9.5).
+# Written 2026-10-28 BEFORE any run.  New family; no retired name re-opened.
+#
+# Book 9.5 skewness premium: negative correlation between the skewness of
+# historical returns and future expected returns of commodity futures.  Skew
+# Si = (1/(sigma_i^3 T)) * sum_s (Ris - mean(Ri))^3 (eq. 456-458) over a T-
+# observation history.  Zero-cost strategy: buy the bottom quintile by
+# skewness, sell the top quintile.
+#
+# Crypto adaptation (paper): universe X = 10 Binance.US USDT daily tapes, PIT
+# membership per day.  Quintile of 10 coins = 2 coins per side (bottom/top
+# quintile; at smaller early-tape universes, at least 1 per side).
+# Long bottom-2 by trailing skew at +1/2 each, short top-2 at -1/2 each,
+# dollar-neutral, rebalanced monthly (the commodity literature rebalances
+# monthly).  Book has NO backtests.
+hypothesis: W2b_skew
+family: W2b_skew
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 9.5 (eq. 456-458): short the lottery-like (high historical
+  skewness) futures, long the low-skew ones; zero-cost quintile spread.
+prior: >-
+  SKEPTICAL.  The skewness premium is documented in commodity futures with
+  hundreds of contracts; a 10-coin crypto universe gives a 2-vs-2 spread with
+  huge idiosyncratic noise, and coins with the most positive skew are often
+  exactly the ones in momentum blowoffs that keep running.  Monthly fees are
+  small, so the binding gates are more likely G3/G2 than G5.
+fold: dev
+window:
+  data_start: "2019-09-23 (earliest common date of the 10-coin universe)"
+  data_end: "2026-09-30 (desk pin, same as W2a)"
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars; holdout = last 40%,
+    NEVER read in tune mode.  Selection on tune only.
+data:
+  prices: >-
+    data/crypto/binanceus/{ADA,AVAX,BNB,BTC,DOGE,DOT,ETH,LINK,SOL,XRP}USDT-1d.csv
+signal:
+  skew: >-
+    Si(t) = third central moment of daily returns over the trailing T bars,
+    divided by sigma_i(t)^3 (eq. 456), T in {252, 504}; requires the full T
+    bars of history for the coin (else not in the skew universe that day).
+  weights: >-
+    Long the floor(n/5) lowest-skew coins (>=1), short the floor(n/5)
+    highest-skew coins, equal weight 1/(2*floor(n/5)) per side.  Optional
+    inverse-vol damping on the weights: scale in {1, 1/sigma_i}.
+  rebalance: "Monthly, decided at the close before the month's first bar."
+  grid: "T {252, 504} x scale {1, invvol} = 4 cells (whole preregistered budget; no post-hoc cells)."
+costs:
+  fee: "6 bps per fill per coin leg, on every unit weight change."
+  funding: "n/a (spot only).  Interest on cash NOT credited."
+  slippage_stress: "G6: same pnl at 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: "replay-truncation on 5 random cuts + future-peek mutant must FAIL the replay."
+  g2_concentration: "max single-episode share of gross <= 0.25 AND max calendar-year share of net <= 0.40."
+  g3_regime: "at least 2 of 3 equal thirds of the tune window net-positive."
+  g4_min_trades: ">= 60 coin-entry episodes on the tune window (default floor)."
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill (17 bps reported)."
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune, KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: BLOCKED awaiting standing dev go; holdout unread."

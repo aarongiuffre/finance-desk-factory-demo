@@ -1,0 +1,87 @@
+# PRE-REGISTRATION - W2b_mr_residual (Soper WAVE 2b, book 3.9.1, 3.10, 3.7, 3.6).
+# Written 2026-10-28 BEFORE any run.  New family; no retired name re-opened.
+#
+# Book 3.9.1 mean-reversion, multiple clusters: cluster-demeaned returns
+# R~i = Ri - R_G(i) (eq. 309); short positive R~i, buy negative R~i, dollar
+# positions Di = -gamma*R~i (eq. 297).  Book 3.10 weighted-regression MR: the
+# loadings matrix may carry non-binary risk factors; R~ = Z*eps with
+# eps = R - Omega (Omega' Z Omega)^-1 Omega' Z R (eq. 314-317), zi = 1/sigma_i^2
+# suggested.  Book 3.7 residual momentum: regress stock returns on MKT/SMB/HML
+# over 36 months, use the residuals of a 12-month formation period (1-month
+# skip), risk-adjust r_adj = mean(resid)/std(resid) (eq. 278-282), long top
+# decile / short bottom decile.  Book 3.6 multifactor portfolio: combine factor
+# rankings, e.g. demeaned ranks sAi = rank(fAi) - mean_j rank(fAj) averaged
+# over factors (eq. 276-277).
+#
+# Crypto adaptation (paper): universe X = 10 Binance.US USDT daily tapes, PIT
+# membership per day.  Crypto is ONE sector, so the 3.9.1 "multiple clusters"
+# collapse to a single cluster = the universe itself (cluster-demeaned return =
+# return minus the equal-weight universe mean).  3.10 uses a single market
+# factor column (Omega = ones) with regression weights z in {1, 1/sigma_i^2}.
+# 3.7's Fama-French MKT/SMB/HML have no crypto analog with the tapes on hand:
+# the only factor is the BTC market return (documented omission of SMB/HML).
+# 3.6's value factor has no crypto fundamental on hand: factors = momentum +
+# low volatility (documented omission of value).  Book has NO backtests.
+hypothesis: W2b_mr_residual
+family: W2b_mr_residual
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 3.9.1 (eq. 297, 309), 3.10 (eq. 314-317), 3.7 (eq. 278-282),
+  3.6 (eq. 276-277).  Short-horizon cluster/market residual mean reversion;
+  residual momentum; blended factor ranks.
+prior: >-
+  SKEPTICAL.  Short-horizon reversal exists in crypto at the daily horizon but
+  is concentrated in small caps and is small relative to 6bps/side on a weekly
+  10-coin book; the weekly variants must beat ~24bps round-trip drag.  Residual
+  momentum (3.7) and the factor blend (3.6) are monthly and pay far less fee
+  drag, but momentum on residuals in a 10-coin universe with one factor
+  regressor is close to plain momentum and the gates are strict.
+fold: dev
+window:
+  data_start: "2019-09-23 (earliest common date of the 10-coin universe)"
+  data_end: "2026-09-30 (desk pin, same as W2a)"
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars; holdout = last 40%,
+    NEVER read in tune mode.  Selection on tune only.
+data:
+  prices: >-
+    data/crypto/binanceus/{ADA,AVAX,BNB,BTC,DOGE,DOT,ETH,LINK,SOL,XRP}USDT-1d.csv
+signal:
+  universe: "per-day membership = coins with a close that day; vanishing coin forced flat with exit fee."
+  mr_cluster_3_9_1: >-
+    Weekly (every 7 calendar days), decided at prior close.  R~i = 5-day return
+    minus the equal-weight mean 5-day return of the day's universe.  Weights
+    wi prop to -R~i * scale_i, normalized sum|wi| = 1; scale in
+    {1, 1/sigma_i, 1/sigma_i^2} (sigma_i = trailing 90d daily vol).
+  mr_wreg_3_10: >-
+    Weekly.  Omega = [ones] (market column), regression weights z in
+    {1, 1/sigma_i^2}; eps_i = Ri - market-mean-weighted return per eq. 315;
+    wi prop to -eps_i, normalized sum|wi| = 1.
+  res_mom_3_7: >-
+    Monthly.  Rolling 252-day OLS of coin daily return on BTC daily return
+    (slope only, no alpha in the residual per eq. 279); residual momentum
+    r_adj = mean(resid over formation F)/std(resid over F) with a 5-day skip,
+    F in {60, 120} days.  Long top-3 by r_adj (+1/3 each), short bottom-3
+    (-1/3 each).
+  multifactor_3_6: >-
+    Monthly.  Factors: momentum (T-day cumulative return) and low volatility
+    (negative trailing T-day vol).  Demeaned ranks per eq. 276 averaged (eq.
+    277); long top-3, short bottom-3.  T in {90, 180}.
+  grid: >-
+    mr_cluster: scale {1, invvol, invvol2} = 3 cells.  mr_wreg: z {1, invvol2}
+    = 2 cells.  res_mom: F {60, 120} = 2 cells.  multifactor: T {90, 180} =
+    2 cells.  Total 9 cells (whole preregistered budget; no post-hoc cells).
+costs:
+  fee: "6 bps per fill per coin leg, on every unit weight change."
+  funding: "n/a (spot only).  Interest on cash NOT credited."
+  slippage_stress: "G6: same pnl at 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: "replay-truncation on 5 random cuts + future-peek mutant must FAIL the replay."
+  g2_concentration: "max single-episode share of gross <= 0.25 AND max calendar-year share of net <= 0.40."
+  g3_regime: "at least 2 of 3 equal thirds of the tune window net-positive."
+  g4_min_trades: ">= 60 coin-entry episodes on the tune window (default floor)."
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill (17 bps reported)."
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune, KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: BLOCKED awaiting standing dev go; holdout unread."

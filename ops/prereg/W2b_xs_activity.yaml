@@ -1,0 +1,74 @@
+# PRE-REGISTRATION - W2b_xs_activity (Soper WAVE 2b, book 10.3.1 + 10.3 base).
+# Written 2026-10-28 BEFORE any run.  New family; no retired name re-opened.
+#
+# Book 10.3 contrarian (mean-reversion) base: market return Rm = equal-weight
+# mean of the universe's weekly returns (eq. 469); weights wi = -gamma*(Ri - Rm)
+# (eq. 470) normalized to sum|wi| = 1 (eq. 471), rebalanced weekly; the book
+# notes the raw scheme overinvests in volatile contracts and suggests
+# suppressing wi by 1/sigma_i or 1/sigma_i^2.  Book 10.3.1 adds activity
+# filters: vi = ln(Vi/Vi0) with Vi the last week's total volume and Vi0 the
+# prior week's (eq. 472), and the analogous open-interest factor ui (eq. 473);
+# trade the upper half by vi (and lower half by ui) of the base strategy's
+# universe.
+#
+# Crypto adaptation (paper): universe X = 10 Binance.US USDT daily tapes, PIT
+# membership per day; Ri = 5-day return (a trading week in a 24/7 market);
+# Vi/Vi0 = total volume over the last 7 days vs the prior 7.  OPEN INTEREST IS
+# NOT IN THE TAPES: the ui filter cannot be built honestly and is OMITTED
+# (documented), so the 10.3.1 cell uses the volume factor only.  Book has NO
+# backtests.
+hypothesis: W2b_xs_activity
+family: W2b_xs_activity
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 10.3 (eq. 469-471) contrarian market-relative weekly
+  mean reversion with optional inverse-vol damping; 10.3.1 (eq. 472-473)
+  volume/open-interest activity filters on top.
+prior: >-
+  VERY SKEPTICAL.  The base weekly contrarian is a bet against 5-day winners
+  in an asset class with documented weekly momentum; 6bps/side on a weekly
+  full-turnover book is ~24bps per week of drag on roughly 100% gross.  The
+  volume filter selects the loudest names, which in crypto are the highest-beta
+  ones - plausibly making it worse.  Expected KILL on fees (G5) if nothing
+  else.
+fold: dev
+window:
+  data_start: "2019-09-23 (earliest common date of the 10-coin universe)"
+  data_end: "2026-09-30 (desk pin, same as W2a)"
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars; holdout = last 40%,
+    NEVER read in tune mode.  Selection on tune only.
+data:
+  prices: >-
+    data/crypto/binanceus/{ADA,AVAX,BNB,BTC,DOGE,DOT,ETH,LINK,SOL,XRP}USDT-1d.csv
+    (close + volume columns).
+signal:
+  base_10_3: >-
+    Weekly (every 7 calendar days), decided at prior close.  Ri = 5-day return;
+    Rm = equal-weight mean over the day's universe; wi prop to -(Ri - Rm) *
+    scale_i, normalized sum|wi| = 1; scale in {1, 1/sigma_i} (sigma_i =
+    trailing 90d daily vol).
+  activity_10_3_1: >-
+    Volume filter variant: vi = ln(Vi/Vi0), Vi = sum of daily volume over the
+    last 7 days, Vi0 the prior 7 days (both windows must be present; a coin
+    missing volume is excluded from the filtered universe that day).  Only the
+    upper half of the universe by vi (ties at the median excluded) is traded,
+    with the base weights renormalized within the subset.  Open-interest
+    filter NOT built (no OI tape; documented omission).
+  grid: >-
+    filter {none, volume} x scale {1, invvol} = 4 cells (whole preregistered
+    budget; no post-hoc cells).
+costs:
+  fee: "6 bps per fill per coin leg, on every unit weight change."
+  funding: "n/a (spot only).  Interest on cash NOT credited."
+  slippage_stress: "G6: same pnl at 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: "replay-truncation on 5 random cuts + future-peek mutant must FAIL the replay."
+  g2_concentration: "max single-episode share of gross <= 0.25 AND max calendar-year share of net <= 0.40."
+  g3_regime: "at least 2 of 3 equal thirds of the tune window net-positive."
+  g4_min_trades: ">= 60 coin-entry episodes on the tune window (default floor)."
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill (17 bps reported)."
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune, KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: BLOCKED awaiting standing dev go; holdout unread."

@@ -1,0 +1,73 @@
+# PRE-REGISTRATION - W2b_fomc (Soper WAVE 2b, book 19.5).
+# Written 2026-10-28 BEFORE any run.  New family; no retired name re-opened.
+#
+# Book 19.5 trading on economic announcements: stocks tend to yield higher
+# returns on important announcement days such as FOMC announcements; buy
+# equities on announcement days (ADs) and switch to risk-free assets on
+# non-announcement days (NDAs), executed via ETFs/futures (eq. context:
+# [Lucca and Moench, 2012], [Savor and Wilson, 2013]).
+#
+# Crypto adaptation (paper): the risky asset is BTC or ETH Binance spot daily.
+# Announcement days = FOMC statement dates from the Fed's own pages
+# (data/crypto/fomc_announcements.csv, built by scripts/w2b_pull_fomc.py from
+# federalreserve.gov statement URLs monetaryYYYYMMDDa.htm, 2017-02-01 ..
+# 2026-09-16, 84 days).  Announcement dates are scheduled months in advance -
+# no look-ahead in the calendar itself.  Crypto trades 24/7; the UTC daily
+# bar of an AD contains the 2:00pm ET (20:00 UTC) statement, so pos=1 on the
+# AD date means holding from the prior daily close through the announcement.
+# Variants per the pre-announcement-drift literature: hold the AD only, the
+# AD plus the day BEFORE (the Lucca-Moench window), or the AD plus the day
+# AFTER.  Cash on NDAs earns 0 (no T-bill modeling; conservative omission -
+# the equity version's alpha partly IS the T-bill coupon; documented).
+# Book has NO backtests.
+hypothesis: W2b_fomc
+family: W2b_fomc
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 19.5: long risky assets on macro announcement days, cash
+  otherwise; evidence cited: Lucca-Moench pre-FOMC drift, Savor-Wilson
+  announcement-day premia.
+prior: >-
+  SKEPTICAL.  The announcement premium is an equity-index fact; crypto's
+  macro sensitivity is documented post-2020 but the effect size on ~34 tune
+  episodes is noisy, and one 2020-03-style crash AD (2020-03-03 and
+  2020-03-15 are both ADs) can dominate the pnl - exactly what the
+  concentration gate exists to catch.
+fold: dev
+window:
+  data_start: "2017-08-17 (Binance spot BTC; calendar covers 2017-02 onward)"
+  data_end: "2026-09-30 (desk pin, same as W2a)"
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (per asset); holdout =
+    last 40%, NEVER read in tune mode.  Selection on tune only.
+data:
+  prices: "data/crypto/binance/spot-{BTC,ETH}-1d.csv (00:00 UTC daily closes)."
+  calendar: >-
+    data/crypto/fomc_announcements.csv (84 FOMC statement dates 2017-02-01 ..
+    2026-09-16; source federalreserve.gov statement URLs; built by
+    scripts/w2b_pull_fomc.py; verified 8/yr except 2019=9, 2020=12 COVID,
+    2026=6 partial year).
+signal:
+  position: >-
+    pos(t) = 1 if day t is in the held window, else 0.  Windows: 'ad' = the
+    announcement day only; 'ad_prev' = AD and the day before; 'ad_next' = AD
+    and the day after.  Consecutive ADs (2020-03) merge into longer holds.
+  grid: "2 assets x 3 windows = 6 cells (whole preregistered budget; no post-hoc cells)."
+costs:
+  fee: "6 bps per fill on each position change (few fills by construction)."
+  funding: "n/a (spot only).  Interest on NDA cash NOT credited (conservative)."
+  slippage_stress: "G6: same pnl at 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: "replay-truncation on 5 random cuts + future-peek mutant must FAIL the replay."
+  g2_concentration: "max single-episode share of gross <= 0.25 AND max calendar-year share of net <= 0.40."
+  g3_regime: "at least 2 of 3 equal thirds of the tune window net-positive."
+  g4_min_trades: >-
+    Floor set from trade-frequency reality BEFORE the run: ~8-9 ADs/year gives
+    ~34 episodes on the tune window, so the default-60 floor is unattainable
+    by construction.  G4 = >= 30 closed episodes on the tune window; the
+    default-60 pass rate reported alongside (same treatment as W2a_cash_carry).
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill (17 bps reported)."
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune, KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: BLOCKED awaiting standing dev go; holdout unread."
