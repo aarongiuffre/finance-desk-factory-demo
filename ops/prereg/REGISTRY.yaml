@@ -1065,4 +1065,115 @@ families:
                                # logs/edge/F151_15_3_1_distress_vol/.
     kind: hypothesis
     hypotheses: [F151_15_3_1_distress_vol]
+  F151_16_2_mixed_asset_re:    # Soper FULL-151 Ch16: book 16.2 mixed-asset
+    blocked: true              # diversification with real estate.  KEEP_TUNE
+                               # at tune 2026-10-28 per the preregistered
+                               # family rule: 1 survivor (re10_xlre, sharpe
+                               # 1.51 vs base 1.06+0.25, vol 6.6% <= 1.05x
+                               # 7.2%) - but flagged: the survivor's edge is
+                               # a WINDOW ARTIFACT (27-month XLRE window
+                               # excludes Aug-Sep 2015; on the common
+                               # post-2015-10 window EVERY sleeve shows
+                               # Sharpe 1.33-1.49 - nothing XLRE-specific).
+                               # All 6 cells FAIL G2 year share (0.53-0.59);
+                               # full-window sleeve economics NEGATIVE
+                               # (10% sleeve Sharpe 0.99-1.00 vs base 1.06 -
+                               # adding RE diluted risk-adjusted return).
+                               # Report-only: REIT-SPY corr 0.63-0.67,
+                               # stress-month corr DROPS (VNQ 0.23 in worst
+                               # SPY decile) - book's stress claim
+                               # directionally consistent in-window.  Always-
+                               # on premise-cell class (G2 episode share 1.0
+                               # by construction, Ch13/14 rule).  Machinery:
+                               # drift-cost bug (daily drift charged as
+                               # trades) caught by selftest BEFORE any tune;
+                               # all tunes re-ran fixed.  BLOCKED awaiting
+                               # standing dev go (no scored DEV run).  Tune
+                               # 2015-01-01..2017-12-31; holdout unread.
+                               # Evidence logs/edge/F151_16_2_mixed_asset_re/.
+    kind: hypothesis
+    hypotheses: [F151_16_2_mixed_asset_re]
+  F151_16_3_intra_re:          # Soper FULL-151 Ch16: book 16.3 intra-asset
+    blocked: true              # diversification (property type / economic /
+                               # type+geo).  KEEP_TUNE at tune 2026-10-28
+                               # per the preregistered family rule: 2
+                               # survivors (type_ind sharpe 0.90 cagr 16.0%,
+                               # type_infra sharpe 1.09 cagr 18.2%, both
+                               # G3+G5+G6 pass) - flagged: always-on SECTOR
+                               # holds in the two strongest REIT sectors of
+                               # 2016-2017; year shares 0.60-0.61 FAIL G2
+                               # (sector cycle, not a timing edge).  All 9
+                               # cells fail G2 or G5 (n_pass 0).  The book's
+                               # risk-reduction claim holds mechanically
+                               # report-only: EW-32 vol 13.3% < every type
+                               # basket (14.6-22.1%), mean type-corr 0.478.
+                               # 16.3.2/16.3.3 regional exposure has NO free
+                               # tradeable form (no regional REIT ETF tape;
+                               # CME housing futures delisted 2011) -
+                               # report-only MSA HPI evidence (region
+                               # persistence 0.14/0.29/0.14/-0.15).
+                               # Universe wall: ex-post REIT list (no PIT
+                               # classification free), dead names
+                               # tape-faithful.  BLOCKED awaiting standing
+                               # dev go.  Evidence
+                               # logs/edge/F151_16_3_intra_re/.
+    kind: hypothesis
+    hypotheses: [F151_16_3_intra_re]
+  F151_16_4_re_momentum:       # Soper FULL-151 Ch16: book 16.4 regional
+    retired: true              # momentum.  KILL at tune 2026-10-28: 0/5
+                               # cells (REIT cross-sectional momentum
+                               # 12/6/3m quintile LS + 12/6 LO, monthly).
+                               # All fail G2+G5: LS net Sharpe +0.39/+0.45/
+                               # +0.59, LO +0.72/+0.78 (0.78 vs 0.8 bar);
+                               # mom12 LS year share 1.71 (one year = all
+                               # the profit).  The book's REGIONAL premise
+                               # is REAL on paper indices (report-only MSA
+                               # Case-Shiller quintiles MONOTONE: fwd-12m
+                               # 4.0->9.2% by past-12m quintile) but REIT
+                               # momentum is a different object (corr vs
+                               # MSA spread -0.11) and the per-month edge
+                               # does not survive 20bp/side x monthly
+                               # turnover + 100bp borrow.  Walls: no free
+                               # tradeable MSA housing instrument (CME
+                               # delisted 2011); ex-post universe; warmup
+                               # limits (main tape 2014-04+).  Tune
+                               # 2015-01-01..2017-12-31; holdout unread.
+                               # Evidence logs/edge/F151_16_4_re_momentum/.
+    kind: hypothesis
+    hypotheses: [F151_16_4_re_momentum]
+  F151_16_5_re_inflation:      # Soper FULL-151 Ch16: book 16.5 inflation
+    retired: true              # hedging with real estate.  KILL at tune
+                               # 2026-10-28: 0/6 cells (T10YIE breakeven-z
+                               # timing, z>=+z1 long REIT/short bond hedge
+                               # direction, z1 0.5/1.0, VNQ/IYR vs AGG/IEF,
+                               # + static VNQ/AGG premise cell).  z-cells
+                               # net Sharpe -0.24..-0.73, all fail G2+G3+G5
+                               # (breakeven COMPRESSED in-window - same
+                               # regime that killed the Ch14 z-cells 0/7).
+                               # Hedge premise absent in the proxy: corr(VNQ,
+                               # CPI YoY) -0.03, corr(VNQ, dT10YIE) -0.19
+                               # (WRONG sign); z-quintile fwd-21d spread
+                               # non-monotone (+1.08/+0.43/-0.13/-0.60/
+                               # +1.12%).  Static cell +2.9%/yr sharpe 0.27 -
+                               # below G5, G2 dead by construction.  T5YIE
+                               # variant -0.59.  Wall: REIT ETFs != direct
+                               # property inflation pass-through (NCREIF/PFI
+                               # paid).  Tune 2015-01-01..2017-12-31;
+                               # holdout unread.  Evidence
+                               # logs/edge/F151_16_5_re_inflation/.
+    kind: hypothesis
+    hypotheses: [F151_16_5_re_inflation]
+  F151_16_6_fix_flip:          # Soper FULL-151 Ch16: book 16.6 fix-and-flip
+    blocked: true              # BLOCKED at prereg 2026-10-28 (0 cells, no
+                               # tune): needs per-transaction deed tape with
+                               # purchase/resale prices + distress screen +
+                               # renovation/carry costs - MLS licensed,
+                               # ATTOM/CoreLogic/recorder deeds paid,
+                               # consumer portals bot-walled on this desk;
+                               # listed proxies preregistered as NOT
+                               # transferring the buy-renovate-resell
+                               # mechanism.  Evidence
+                               # logs/edge/F151_16_6_fix_flip/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_16_6_fix_flip]
 
