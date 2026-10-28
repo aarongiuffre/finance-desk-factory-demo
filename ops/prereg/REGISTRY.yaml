@@ -115,3 +115,24 @@ families:
     kind: hypothesis           # variant alphas from the H4-H7 grids; gated on those grids existing.
                                # prereg H9_alpha_combo.yaml written when variants exist
     hypotheses: [H9_alpha_combo]
+  W2a_cash_carry:              # WAVE 2a: book 6.2 quarterly futures basis (long spot /
+    kind: hypothesis           # short dated future when basis > kappa, converge at settlement).
+                               # prereg W2a_cash_carry.yaml written+committed BEFORE any run
+                               # 2026-10-28. Data: binance.vision bulk dumps (cm quarterlies
+                               # 2020-06+, spot); tune/holdout 60/40; holdout unread at tune.
+    hypotheses: [W2a_cash_carry]
+  W2a_roll_yield:              # WAVE 2a: book 9.1 rolled front/second quarterly curve, phi =
+    kind: hypothesis           # P1/P2 rule. prereg W2a_roll_yield.yaml committed before run.
+    hypotheses: [W2a_roll_yield]
+  W2a_carry_funding:           # WAVE 2a: book 8.2 perp funding carry (long spot + short perp).
+    kind: hypothesis           # prereg W2a_carry_funding.yaml committed before run.
+    hypotheses: [W2a_carry_funding]
+  W2a_mom_carry:               # WAVE 2a: book 8.4 momentum + funding-carry min-var combo.
+    kind: hypothesis           # prereg W2a_mom_carry.yaml committed before run.
+    hypotheses: [W2a_mom_carry]
+  W2a_cross_venue:             # WAVE 2a: book 6.4 same-perp cross-venue spread (binance um vs
+    kind: hypothesis           # deribit), daily-bar paper version. prereg committed before run.
+    hypotheses: [W2a_cross_venue]
+  W2a_calendar:                # WAVE 2a: book 10.2 near/deferred quarterly calendar spread.
+    kind: hypothesis           # prereg W2a_calendar.yaml committed before run.
+    hypotheses: [W2a_calendar]

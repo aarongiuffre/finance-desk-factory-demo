@@ -1,0 +1,70 @@
+# PRE-REGISTRATION - W2a_roll_yield (Soper WAVE 2a, book section 9.1).
+# Written 2026-10-28 BEFORE any run.  New family; re-opens nothing.
+#
+# Book 9.1 Roll yields: phi = P1/P2 (front/second futures).  Backwardation
+# (phi > 1) pays a positive roll to longs, contango (phi < 1) to shorts.  The
+# book's cross-sectional version (buy high-phi commodities, sell low-phi) needs
+# a wide commodity universe; the crypto adaptation (Aaron brief) is the
+# time-series version on the dated quarterly futures curve: hold the rolled
+# front quarterly long when phi > 1+theta, short when phi < 1-theta, harvest
+# the roll.  Book has NO backtests.
+hypothesis: W2a_roll_yield
+family: W2a_roll_yield
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies section 9.1 (eq. 454): phi = P1/P2
+  as the backwardation/contango measure; long (short) futures in backwardation
+  (contango) capture the roll yield at rebalancing.
+prior: >-
+  SKEPTICAL.  Crypto term structure was persistently in contango through the
+  2020-21 bull (perp funding >> 0, quarterlies rich) and flipped hard in bears;
+  a mechanical phi rule is mostly a disguised short-vol/long-bias trade with
+  roll fees stacked on top.  The long/short variant at least lets the rule
+  express the bear side.
+fold: dev
+window:
+  data_start: "2020-07-01 (BTC: two cm contracts both quoted) / 2020-08-05 (ETH)"
+  data_end: "2026-09-30"   # last complete month of the bulk monthly dumps (2026-10 not yet published)
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (per asset); holdout =
+    last 40%, never read in tune mode.
+data:
+  futures: >-
+    data/crypto/binancefut/cm-{BTC,ETH}-YYMMDD-1d.csv (Binance coin-margined
+    quarterly futures bulk dumps; front = smallest expiry trading today, second
+    = next).  phi needs BOTH contracts quoted, so the tape starts when two
+    contracts trade.
+signal:
+  phi: "phi(t) = front_close(t)/second_close(t) at the UTC daily close."
+  held: >-
+    held(t) = front contract while dte(t) > delta, else the second contract
+    (delta in {1, 3, 7} days before expiry; each roll = 2 fills).
+  rules: >-
+    long_flat: pos = 1 when phi > 1+theta else 0.  long_short: pos = 1 when
+    phi > 1+theta, -1 when phi < 1-theta, else 0.
+  grid: >-
+    theta in {0.0, 0.001, 0.003}; mode in {long_flat, long_short};
+    delta in {1, 3, 7}; assets {BTC, ETH}.  Grid = 36 cells (whole
+    preregistered budget).
+costs:
+  fee: >-
+    6 bps per fill; single-leg futures-only, so entry/exit/flip charge 6 bps
+    per unit |delta pos| (a long/short flip = 2 fills = 12 bps) and each roll
+    charges 2 fills (12 bps) folded into the leg return on the day after the
+    roll decision.  Funding: none (dated futures).  Margin/carry interest not
+    modeled (conservative omission, documented).
+  slippage_stress: "G6: 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: >-
+    replay-truncation (5 random cuts, all inputs truncated) + future-peek
+    mutant must FAIL the replay.
+  g2_concentration: "max single-trade share of gross <= 0.25; max calendar-year share of net <= 0.40."
+  g3_regime: ">= 2 of 3 equal thirds of tune net-positive."
+  g4_min_trades: >-
+    >= 30 closed episodes on tune (regime-switching episodes, not daily churn;
+    default-60 pass rate also reported).
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill."
+verdict_policy:
+  - "0 survivors -> KILL at tune (no go ask)."
+  - ">= 1 survivor -> KEEP_TUNE, BLOCKED on standing dev go."

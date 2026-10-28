@@ -1,0 +1,62 @@
+# PRE-REGISTRATION - W2a_calendar (Soper WAVE 2a, book section 10.2).
+# Written 2026-10-28 BEFORE any run.  New family; re-opens nothing.
+#
+# Book 10.2 Calendar spread: bull spread = buy near-month / sell deferred-month;
+# bear = the reverse.  Reduces exposure to the overall market and bets on the
+# shape of the curve.  Crypto adaptation (Aaron brief): quarterly futures
+# calendar spread on BTC/ETH - trade the near-vs-deferred quarterly ratio around
+# its trailing z-score, forced flat before near settlement.
+# Book has NO backtests.
+hypothesis: W2a_calendar
+family: W2a_calendar
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies section 10.2: bull (bear) futures
+  spread buys (sells) the near contract against the deferred contract; the
+  spread isolates curve shape from market direction.
+prior: >-
+  SKEPTICAL.  The crypto quarterly curve is dominated by funding-arb flows
+  (contango in bulls, backwardation in bears) and the near/deferred spread is
+  close to a noise series at daily granularity; z-score entries on it are a
+  mean-reversion bet on a spread whose drift is the carry itself.  Fees on two
+  legs plus forced settlement exits make the hurdle stiff.
+fold: dev
+window:
+  data_start: "2020-07-01 (BTC: two cm contracts both quoted) / 2020-08-05 (ETH)"
+  data_end: "2026-09-30"   # last complete month of the bulk monthly dumps (2026-10 not yet published)
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (per asset); holdout =
+    last 40%, never read in tune mode.
+data:
+  futures: >-
+    data/crypto/binancefut/cm-{BTC,ETH}-YYMMDD-1d.csv (Binance coin-margined
+    quarterly futures bulk dumps; near = front = smallest expiry trading today,
+    deferred = second).
+signal:
+  spread: "sp(t) = ln(front_close(t)/second_close(t))."
+  zscore: "z(t) = (sp(t) - mean(sp, win)) / std(sp, win), trailing win days."
+  rules: >-
+    z < -z_th -> pos = +1 (bull: long near / short deferred); z > +z_th ->
+    pos = -1 (bear, mode 'both' only); exit |z| < 0.25; forced flat when the
+    near contract is within 1 day of settlement (dte <= 1).
+  grid: >-
+    win in {30, 90} days; z_th in {0.5, 1.0}; mode in {both, bull_only};
+    assets {BTC, ETH}.  Grid = 16 cells (whole preregistered budget).
+costs:
+  fee: >-
+    6 bps per fill per leg; entry/exit charge 12 bps per unit position change
+    (pnl_series fee_bps=12 on the near-minus-deferred leg return).  Funding:
+    none (dated futures).  Margin interest not modeled (conservative).
+  slippage_stress: "G6: 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: >-
+    replay-truncation (5 random cuts, all inputs truncated) + future-peek
+    mutant must FAIL the replay.
+  g2_concentration: "max single-trade share of gross <= 0.25; max calendar-year share of net <= 0.40."
+  g3_regime: ">= 2 of 3 equal thirds of tune net-positive."
+  g4_min_trades: ">= 30 closed episodes on tune (default-60 pass rate also reported)."
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill."
+verdict_policy:
+  - "0 survivors -> KILL at tune (no go ask)."
+  - ">= 1 survivor -> KEEP_TUNE, BLOCKED on standing dev go."

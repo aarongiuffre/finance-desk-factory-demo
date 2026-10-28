@@ -1,0 +1,66 @@
+# PRE-REGISTRATION - W2a_carry_funding (Soper WAVE 2a, book section 8.2).
+# Written 2026-10-28 BEFORE any run.  New family; re-opens nothing.
+#
+# Book 8.2 Carry trade: collect the yield of the high-carry leg against the low-
+# carry leg when the forward premium/deviation from UIRP persists.  Crypto
+# adaptation (Aaron brief): perp funding carry - long spot, short the USDT perp,
+# collect the funding payments (longs pay shorts when funding is positive);
+# hold the position while trailing funding is rich enough to matter.
+# Book has NO backtests.
+hypothesis: W2a_carry_funding
+family: W2a_carry_funding
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies section 8.2 (eq. 440-443): forward
+  discount D = ln(S/F) ~ rf - rd; buy forwards at a forward discount, sell at a
+  premium; the carry is the interest differential not arbitraged away.  Crypto
+  mapping: the perp funding rate IS the periodic interest differential between
+  leveraged longs and holders of cash; short perp + long spot collects it.
+prior: >-
+  SKEPTICAL.  Average Binance BTC funding is small but persistently positive
+  (longs pay), so an always-on version collects a few %/yr gross with full spot-
+  leg beta hedged only approximately (basis risk between spot and perp), and
+  2022-06 style negative-funding spikes punish the position exactly when it is
+  on.  The threshold rule (only hold when trailing funding is rich) trades
+  frequency for quality.
+fold: dev
+window:
+  data_start: "2020-01-01 (spot + um perp + um funding all start 2020-01-01)"   # um funding + um perp + spot common start (2020-01)
+  data_end: "2026-09-30"   # last complete month of the bulk monthly dumps (2026-10 not yet published)
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (per asset); holdout =
+    last 40%, never read in tune mode.
+data:
+  spot: "data/crypto/binance/spot-{BTC,ETH}-1d.csv (Binance spot dumps, 00:00 UTC)"
+  perp: "data/crypto/binancefut/um-perp-{BTC,ETH}-1d.csv (Binance USDT perp dumps)"
+  funding: >-
+    data/crypto/binancefut/um-funding-{BTC,ETH}-8h.csv (Binance um funding dumps,
+    8h rows from 2020-01; daily carry = sum of the day's 3 rates on the short
+    perp leg).
+signal:
+  leg_return: >-
+    r_leg(t) = r_spot(t) - r_perp(t) + f_daily(t), f_daily = sum of the day's
+    8h funding rates (short perp receives +rate when rate > 0).
+  rule: >-
+    hold pos = 1 while trailing mean funding (annualized: lookback-day mean of
+    f_daily x 3 x 365) > theta; flat otherwise.
+  grid: >-
+    lookback in {1, 3, 7, 30} days; theta in {0.0, 0.05, 0.10} annualized;
+    assets {BTC, ETH}.  Grid = 24 cells (whole preregistered budget).
+costs:
+  fee: >-
+    6 bps per fill per leg; entry/exit of the two-leg position charge 12 bps per
+    unit position change (pnl_series fee_bps=12 on the leg-spread return).
+  slippage_stress: "G6: 2x and 3x per-fill fees.  Funding is modeled, not stressed."
+gates:
+  g1_lookahead: >-
+    replay-truncation (5 random cuts, all inputs truncated) + future-peek
+    mutant must FAIL the replay.
+  g2_concentration: "max single-trade share of gross <= 0.25; max calendar-year share of net <= 0.40."
+  g3_regime: ">= 2 of 3 equal thirds of tune net-positive."
+  g4_min_trades: ">= 60 closed episodes on tune (daily-regime strategy; default floor kept)."
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill."
+verdict_policy:
+  - "0 survivors -> KILL at tune (no go ask)."
+  - ">= 1 survivor -> KEEP_TUNE, BLOCKED on standing dev go."

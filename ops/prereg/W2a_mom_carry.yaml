@@ -1,0 +1,74 @@
+# PRE-REGISTRATION - W2a_mom_carry (Soper WAVE 2a, book section 8.4).
+# Written 2026-10-28 BEFORE any run.  New family; re-opens nothing.
+#
+# Book 8.4 Momentum & carry combo: blend a momentum strategy (8.1) and a carry
+# strategy (8.2) with variance-minimizing weights w1, w2 from the sample
+# covariance of the two strategy return series (eq. 445-452).  Crypto adaptation
+# (Aaron brief): trend + funding variance-min - momentum leg = book 8.1-style
+# trend rule on spot; carry leg = W2a_carry_funding base variant (lookback 7,
+# theta 0).  Book has NO backtests.
+hypothesis: W2a_mom_carry
+family: W2a_mom_carry
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies section 8.4 (eq. 445-452): with
+  sigma1^2, sigma2^2 the strategy variances and rho their correlation, the
+  variance-minimizing combo weight is
+  w1 = (sigma2^2 - sigma1*sigma2*rho) / (sigma1^2 + sigma2^2 - 2*sigma1*sigma2*rho),
+  w2 = 1 - w1.
+prior: >-
+  SKEPTICAL.  The momentum leg alone is just beta (H4's lesson: long/flat BTC
+  trend adds nothing over holding BTC and fails concentration), and the carry
+  leg's Sharpe on tune is unlikely to clear 0.8 at 12 bps round trips.  The
+  combo can only help if the two legs' returns are negatively correlated enough
+  for the min-var weights to matter - in crypto they are typically positively
+  correlated (both long-biased in bulls).
+fold: dev
+window:
+  data_start: "2020-01-01 (spot + um perp + um funding all start 2020-01-01)"   # spot + um perp + um funding common start (2020-01)
+  data_end: "2026-09-30"   # last complete month of the bulk monthly dumps (2026-10 not yet published)
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (per asset).  Inside
+    tune: weights fitted on the FIRST 60% of tune (eq. 451/452, frozen), combo
+    evaluated OUT-OF-SAMPLE on the LAST 40% of tune.  Holdout (last 40% of the
+    full tape) never read in tune mode.
+data:
+  spot: "data/crypto/binance/spot-{BTC,ETH}-1d.csv"
+  perp: "data/crypto/binancefut/um-perp-{BTC,ETH}-1d.csv"
+  funding: "data/crypto/binancefut/um-funding-{BTC,ETH}-8h.csv (daily sum of 8h rates)"
+signal:
+  momentum_leg: >-
+    book 8.1 rule on spot: posA = 1 when the trailing lb-day spot return > 0
+    (long_flat) or posA = sign(r) in {-1, +1} (long_short); lb in {30, 90}.
+  carry_leg: >-
+    W2a_carry_funding base variant, FIXED params (lookback 7, theta 0): long
+    spot + short perp collecting funding, per W2a_carry_funding.yaml signal.
+  weights: >-
+    w1, w2 from eq. 451/452 on the two legs' FEE-INCLUSIVE daily pnl over the
+    fit window; frozen thereafter.  No daily re-estimation, no caps: if the
+    fit wants a negative weight the combo shorts that leg (documented).
+  grid: >-
+    mom_lb in {30, 90}; mom_mode in {long_flat, long_short}; carry base fixed;
+    assets {BTC, ETH}.  Grid = 8 cells (whole preregistered budget).
+costs:
+  fee: >-
+    6 bps per fill; momentum leg charges 6 bps per unit |delta pos| on spot;
+    carry leg charges 12 bps per unit |delta pos| (two legs).  Funding on the
+    carry leg at 8h granularity (modeled, not stressed).
+  slippage_stress: "G6: combo re-priced at 2x per-fill fees on both legs."
+gates:
+  g1_lookahead: >-
+    weights are a 2-parameter fit on tune[:60%] only; the eval slice is
+    out-of-sample w.r.t. the weights.  Constituent builders are replay/mutant
+    tested in their own families (cash_carry/carry_funding machinery); the combo
+    adds no new signal computation.
+  g2_concentration: "max calendar-year share of net <= 0.40 on the eval slice (trade-share N/A for a fixed-weight blend)."
+  g3_regime: ">= 2 of 3 equal thirds of the eval slice net-positive."
+  g4_min_trades: >-
+    both LEGS must make >= 60 closed episodes over the full tune window (the
+    blend itself has no per-trade structure).
+  g5_fees: "eval-slice net Sharpe >= 0.8 AND CAGR > 0 at base fees."
+  g6_stress: "eval-slice net CAGR > 0 at 2x fees."
+verdict_policy:
+  - "0 survivors -> KILL at tune (no go ask)."
+  - ">= 1 survivor -> KEEP_TUNE, BLOCKED on standing dev go."

@@ -1,0 +1,77 @@
+# PRE-REGISTRATION - W2a_cross_venue (Soper WAVE 2a, book section 6.4).
+# Written 2026-10-28 BEFORE any run.  New family; re-opens nothing.
+#
+# Book 6.4 Intraday arbitrage between index ETFs: buy the cheap ETF / short the
+# rich ETF when the price ratio crosses a threshold kappa ~ 1.002, liquidate on
+# convergence.  Crypto adaptation (Aaron brief): cross-venue perp spread - the
+# same perp on two venues.  Book 6.4 is an INTRADAY bid/ask strategy; this build
+# is the daily-bar paper version the desk's tape supports (HFT/ms windows are
+# explicitly out of scope per the brief).  On daily bars the rich/cheap
+# dislocations are small and mean-revert in hours, so the prior is that the
+# daily version is dead on arrival - it is built to test that honestly.
+# Book has NO backtests.
+hypothesis: W2a_cross_venue
+family: W2a_cross_venue
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies section 6.4 (eq. 428): buy ETF2 /
+  short ETF1 when P1Bid >= P2Ask * kappa; liquidate when prices re-converge.
+  Crypto mapping: venue A perp vs venue B perp on the same asset; kappa plays
+  the threshold role on the daily close ratio.
+prior: >-
+  KILL-EXPECTED.  Same-asset perp dislocations across Binance and Deribit are
+  arbitraged in seconds; on daily closes the spread is a few bps of noise, so
+  kappa above costs (12 bps per side switch) should almost never trigger, and
+  when it does the convergence has already happened.  This family exists to
+  document that with the gate machinery, not to find an edge.
+fold: dev
+window:
+  data_start: "2020-01-01 (binance um perp + deribit perp + both funding tapes)"   # binance um perp + deribit perp common start (2020-01)
+  data_end: "2026-09-30"   # last complete month of the bulk monthly dumps (2026-10 not yet published)
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (per asset); holdout =
+    last 40%, never read in tune mode.
+data:
+  venue_a: "Binance um USDT perp daily closes (bulk dumps), funding history (8h dumps)"
+  venue_b: >-
+    Deribit BTC-PERPETUAL / ETH-PERPETUAL daily closes (1H candles resampled to
+    00:00 UTC - Deribit 1D candles are not UTC-midnight aligned) and funding
+    history (public get_funding_rate_history, 8h rows).
+  venue_note: >-
+    Deribit perps are USD-quoted inverse; Binance perps USDT-quoted.  USDT
+    treated as USD proxy (same caveat as H7).  OKX BTC-USDT-SWAP 4H candles were
+    pulled for robustness but are NOT used: OKX only serves ~3 months of funding
+    history, and the funding leg must be modeled on both venues.
+signal:
+  spread: "s(t) = px_a(t)/px_b(t) - 1 at the UTC daily close."
+  entry: >-
+    s(t) > kappa -> pos = -1 (short rich venue A, long cheap venue B);
+    s(t) < -kappa -> pos = +1.  Flat otherwise.
+  exit: "|s(t)| <= kappa/2 or after `hold` days in the position."
+  funding: >-
+    r_leg(t) = r_a(t) - r_b(t) + f_net(t), f_net = f_b_daily - f_a_daily; the
+    funding term is linear in pos, so long-A/short-B pays A funding and
+    receives B funding and vice versa.
+  grid: >-
+    kappa in {0.002, 0.005, 0.01}; hold in {3, 10} days; assets {BTC, ETH}.
+    Grid = 12 cells (whole preregistered budget).
+costs:
+  fee: >-
+    6 bps per fill per leg; a position switch charges 12 bps per unit |delta
+    pos| (entry/exit = 2 fills; a flip = 4 fills).  Funding modeled on both
+    legs at 8h granularity.
+  slippage_stress: "G6: 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: >-
+    replay-truncation (5 random cuts, all inputs truncated) + future-peek
+    mutant must FAIL the replay.
+  g2_concentration: "max single-trade share of gross <= 0.25; max calendar-year share of net <= 0.40."
+  g3_regime: ">= 2 of 3 equal thirds of tune net-positive."
+  g4_min_trades: >-
+    >= 30 closed episodes on tune (convergence trades are event-driven;
+    default-60 pass rate also reported).
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill."
+verdict_policy:
+  - "0 survivors -> KILL at tune (no go ask)."
+  - ">= 1 survivor -> KEEP_TUNE, BLOCKED on standing dev go."

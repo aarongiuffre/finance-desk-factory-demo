@@ -1,0 +1,79 @@
+# PRE-REGISTRATION - W2a_cash_carry (Soper WAVE 2a, book section 6.2).
+# Written 2026-10-28 BEFORE any run.  New family; does not re-open any retired name
+# (PRIMARY H4-H7 retired 2026-10-28; old equity names untouched).
+#
+# Book 6.2 Cash-and-carry arbitrage: when the basis B(t,T) = F(t,T)/S(t) - 1 exceeds
+# transaction costs, sell the rich instrument and buy the cheap one; the position
+# earns the basis convergence.  Crypto adaptation (Aaron brief): quarterly BTC/ETH
+# futures basis - long spot, short the dated quarterly future, hold to convergence
+# (settlement) or early exit.  Shorting spot is not paper-practical, so ONLY the
+# positive-basis side (futures rich) is traded; the negative-basis side is NOT
+# built (documented omission, not modeled).  Book has NO backtests.
+#
+# This prereg authorizes TUNE-window work only.  A scored DEV claim additionally
+# requires a code-freeze amendment and a standing dev go signed by Aaron.
+hypothesis: W2a_cash_carry
+family: W2a_cash_carry
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies section 6.2 (eq. 421-422): basis
+  B(t,T) = (F(t,T) - F*(t,T))/S(t) with F* the cost-of-carry fair value; trade
+  when |B| exceeds transaction costs.  Crypto: no dividends, no storage; the
+  raw basis F/S - 1 is the tradeable quantity and convergence at cash settlement
+  (to the exchange index) is the exit.
+prior: >-
+  SKEPTICAL.  Crypto quarterly basis blew out to 50-100%+ annualized in 2020-21
+  and the convergence capture is real, but episodes are rare (a handful per year),
+  fees on 4 legs per round trip are 24 bps, and 2022-style crashes can force exit
+  below entry.  The bet is that a handful of fat-basis episodes survive the gates.
+fold: dev
+window:
+  data_start: "2020-06-11 (BTC: spot + first cm quarterly) / 2020-07-24 (ETH); the runner uses the per-asset intersection of the needed series"
+  data_end: "2026-09-30"   # last complete month of the bulk monthly dumps (2026-10 not yet published)
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (per asset); holdout =
+    last 40%, NEVER read in tune mode.  Selection on tune only.
+data:
+  spot: "data/crypto/binance/spot-{BTC,ETH}-1d.csv (Binance spot dumps, 00:00 UTC)"
+  futures: >-
+    data/crypto/binancefut/cm-{BTC,ETH}-YYMMDD-1d.csv (Binance COIN-margined
+    quarterly futures, bulk S3 dumps data.binance.vision, 00:00 UTC; front =
+    smallest expiry trading today).  cm quarterly kline dumps start 2020-06;
+    um quarterlies (2021-03+) are NOT used here.
+  venue_note: >-
+    cm futures are coin-margined USD-quoted; spot is USDT-quoted.  USDT is
+    treated as a USD proxy (same caveat as H7, documented, not modeled).
+signal:
+  basis: "B(t) = front_quarterly_close(t)/spot_close(t) - 1 at the UTC daily close."
+  entry: "pos 0 -> 1 when B(t) > kappa."
+  exit: >-
+    pos 1 -> 0 when B(t) <= exit_frac*kappa, or forced flat when the front
+    contract is within 1 day of settlement (dte <= 1; convergence exit).
+  grid: >-
+    kappa in {0.005, 0.01, 0.02, 0.03}; exit_frac in {0.0, 0.5};
+    assets {BTC, ETH}.  Grid = 16 cells (whole preregistered budget; no
+    post-hoc cells).
+costs:
+  fee: >-
+    6 bps per fill per leg (0.06%, desk convention).  Entry and exit of the
+    two-leg position charge 12 bps per unit position change each (charged via
+    edge_common.pnl_series on the leg-spread return with fee_bps=12).
+  funding: >-
+    none (dated futures, no funding).  Interest on spot capital NOT credited
+    (conservative; would add several %/yr at 2023-25 rates).
+  slippage_stress: "G6: same pnl at 2x and 3x per-fill fees."
+gates:
+  g1_lookahead: >-
+    replay-truncation on 5 random cuts (positions through D identical when every
+    input tape is cut at D) + future-peek mutant must FAIL the replay.
+  g2_concentration: "max single-trade share of gross <= 0.25; max calendar-year share of net <= 0.40."
+  g3_regime: "at least 2 of 3 equal thirds of the tune window net-positive."
+  g4_min_trades: >-
+    >= 30 closed episodes on the tune window (episode-based carry trades fire a
+    few times a year by nature; floor set from trade-frequency reality BEFORE
+    the run - the default-60 pass rate is also reported).
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill (17 bps reported)."
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune, KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: BLOCKED awaiting standing dev go; holdout unread."
