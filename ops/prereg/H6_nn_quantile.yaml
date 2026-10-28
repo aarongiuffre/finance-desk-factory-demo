@@ -1,0 +1,116 @@
+# PRE-REGISTRATION - H6_nn_quantile (PRIMARY crypto slate, book section 18.2).
+# Written 2026-10-28.  NOT RUN.  New family; does not re-open any retired name.
+#
+# Crypto paper adaptation of Kakushadze & Serur 18.2 (Artificial neural network,
+# BTC): a small MLP with ReLU hidden layer and K=3 softmax head predicts the
+# tercile of the next forward 15m return; long the top class, short the bottom
+# class, hold flat in the middle.  Paper data only via ccxt; no orders, no
+# credentials, no paid APIs.  Venue: Binance US BTC/USD 15m (Binance.com is
+# geo-blocked from this host; Binance US 15m depth starts 2025-02-19).
+#
+# This prereg authorizes TUNE-window work.  The scored DEV claim additionally
+# requires a committed code-freeze amendment and a standing dev go signed by
+# Aaron at logs/approvals/go/H6_nn_quantile.dev.json.  No equity fold_gate read
+# is requested anywhere in H6 code.
+hypothesis: H6_nn_quantile
+family: H6_nn_quantile
+kind: hypothesis
+gate_signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"   # Aaron's signing key (must equal REGISTRY gate.signer_fpr)
+literature: "Kakushadze & Serur 151 Trading Strategies section 18.2 (ANN on
+  BTC 15m with (E)MA/(E)MSD/RSI-style inputs and a K-quantile softmax head,
+  after Nakano, Takahashi & Takahashi 2018).  Book has NO backtests."
+prior: >-
+  STRONGLY SKEPTICAL.  A 4-feature MLP on 15m bars is the canonical
+  overfit-to-noise setup, and 6 bps/side on 15m turnover is a brutal cost
+  bar.  Expect the fees gate to kill every cell; the accuracy gate exists to
+  show whether anything is even predictable before costs.
+fold: dev
+window:
+  data_start: "2025-02-19"          # first Binance US 15m bar available on this host
+  data_end:   "2026-10-28"          # last complete bar at pull time
+  split_rule: >-
+    tape split 60/40 by bar count: tune = first 60% (~12.2 months), holdout =
+    last 40% (~8 months, NEVER read by the tune grid).  Inside the tune window:
+    val = the last 40% of tune bars; the model is RETRAINED DAILY on a trailing
+    window ending at each UTC day boundary - every retrain sees only bars with
+    timestamp < the day boundary and complete label windows, so a val day's
+    predictions never depend on that day's or later bars.
+
+data:
+  prices: data/crypto/binanceus/BTCUSD-15m.csv   # ts_utc, open, high, low, close, volume
+  venue: binanceus (Binance US spot, public ccxt OHLCV, no credentials)
+  bar: UTC 15m bars, close = bar close; forming bar never used
+
+signal:
+  returns: "r(t) = P(t)/P(t-1) - 1 on 15m closes"
+  features: >-
+    m = 4, causal at bar t: for H in {12 (3h), 48 (12h), 96 (24h)} bars,
+    f_H(t) = (r(t) - mean(r over last H bars)) / std(r over last H bars);
+    f_RSI(t) = RSI(14 bars) on closes / 100 (simple mean-gain/loss RSI).
+  standardization: "features standardized with the mean/std of the CURRENT training window only"
+  label: >-
+    tercile class of the forward return R_F(t) = P(t+F)/P(t) - 1, cutoffs =
+    the 33.3/66.7 percentiles of R_F over the CURRENT training window only
+    (past-only quantiles).  Class 2 = long, class 0 = short, class 1 = flat.
+  model: >-
+    numpy MLP: 4 -> 16 ReLU -> 3 softmax, cross-entropy, Adam lr 0.01,
+    30 epochs, batch 256, seed 20261028 (deterministic).
+  retrain: "daily at the UTC day boundary on the trailing W days of bars with complete label windows"
+  execution: >-
+    position decided at bar t earns the 15m return over [t, t+1]; every class
+    change is a fill charged fee_bps per side; the last bar of the tape is
+    left uncharged (same convention as H4/H5).
+
+variants:                                          # the WHOLE budget - no other variant may be run
+  grid: "F in {4 bars (1h), 16 bars (4h)} x W in {60, 120} days = 4 cells"
+  primary: "long/short 3-class rule; selected cell = highest VAL-window net Sharpe among cells passing all gates on VAL"
+  secondary: "long/flat at the same (F, W): class 2 -> long, else flat; no short leg"
+  selection: val-only (inside tune); ties broken by fewer trades then smaller F
+
+costs:
+  fee_bps_per_side: 6                              # 0.06% per unit turnover, charged on each fill
+  slippage_stress: "+5 bps per side on top of the 2x fee stress"
+  funding: "n/a for spot bars; recorded as N/A, not PASS"
+
+six_gates:                                         # adversarial KEEP/KILL, evaluated per cell on VAL
+  G1_lookahead: >-
+    (a) truncated-tape replay: predictions and positions through any date D in
+    val must be identical when the tape is cut at D (5 random cuts);
+    (b) tercile-cutoff leakage test: cutoffs must come from training bars only;
+    (c) mutation kill: a future-peeking mutant (features read bar t+1) MUST fail
+    the replay test.
+  G2_trade_concentration: "no single trade > 25% of gross PnL and no calendar month > 40% of cumulative net PnL over the val window"
+  G3_single_regime: "net PnL > 0 in at least 2 of the 3 equal thirds of the val window"
+  G4_min_trades: ">= 200 completed round trips on the val window (a 3-class 15m rule that cannot manage 200 trades in ~5 months is not trading its signal)"
+  G5_fees: "net Sharpe >= 0.8 and net CAGR > 0 at 6 bps/side; still net CAGR > 0 at 12 bps/side"
+  G6_accuracy_and_slippage: >-
+    out-of-sample 3-class accuracy on val >= 0.36 (chance = 1/3), AND still
+    net CAGR > 0 at 17 bps/side; funding N/A (spot), recorded as such
+
+pass_bar:                                          # scored DEV, both folds reported
+  tune: all six gates KEEP for the selected primary cell on VAL
+  holdout: >-
+    same daily-retrain machinery run through the holdout (no re-estimation of
+    F or W); net CAGR > 0, net Sharpe > 0, G2/G3/G4 KEEP, accuracy >= 0.36
+  decision: >-
+    pass => eligible to ASK for a validation read (Verifier + Aaron steps);
+    fail => retire the H6_nn_quantile family permanently (no re-test under a
+    new name).  WITHOUT a standing dev go there is NO scored claim: BLOCKED,
+    val evidence recorded as diagnostic-only.
+
+metrics: >-
+  CAGR, vol, Sharpe (net), gross Sharpe, max DD, hit rate, trades, fills/day,
+  turnover, cost drag, accuracy (val, 3-class), class distribution of
+  predictions, per-cell gate table, B&H BTC comparison over the same bars
+  (not a gate)
+
+reporting:
+  - "headline: selected cell (F, W), val net Sharpe, accuracy, gate table"
+  - "all 4 cells x 2 direction rules"
+  - "honest caveats: single venue single asset; 20 months of 15m tape only (Binance US depth starts 2025-02) - one regime; tercile cutoffs drift with each daily retrain; numpy MLP is tiny by design - the gate question is cost survivability, not model capacity"
+
+evidence: logs/edge/H6_nn_quantile/h6_summary.json
+runner: scripts/h6nn_run.py (grid + backtest + gates; distinct namespace from the old equity scripts/h6_run.py, which stays untouched)
+signal_module: scripts/h6nn.py (features, past-only terciles, MLP, daily retrain)
+tests: scripts/h6nn_test.py (cutoff leakage, replay truncation, mutant kill, fee recheck)
+python: /data/finance/.venv-crypto/bin/python

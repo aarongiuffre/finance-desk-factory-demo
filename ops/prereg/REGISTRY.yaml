@@ -85,7 +85,15 @@ families:
     kind: hypothesis
     hypotheses: [H5_knn]
   H6_nn_quantile:              # PRIMARY crypto slate: book 18.2 ANN quantile classifier on
-    kind: hypothesis           # BTC 15m, ReLU+softmax K=3, retrain daily; prereg H6_nn_quantile.yaml
+    retired: true              # KILLED at tune 2026-10-28: 0/8 cells pass the six gates - all
+                               # fail G5 fees (net Sharpe -1.07..-1.62 at 6 bps/side, 13-30
+                               # fills/day) with out-of-sample accuracy 0.360-0.373 vs chance
+                               # 1/3. Daily-retrain MLP, cutoff-leakage/replay/mutant tests pass.
+                               # Holdout never read, no go issued. Family retired permanently.
+                               # prereg H6_nn_quantile.yaml; evidence
+                               # logs/edge/H6_nn_quantile/{h6_summary.json,KILL.md};
+                               # namespace scripts/h6nn*.py (old equity scripts/h6_run.py untouched)
+    kind: hypothesis
     hypotheses: [H6_nn_quantile]
   H7_statarb_10coin:           # PRIMARY crypto slate: book 3.18 dollar-neutral stat arb over
     kind: hypothesis           # 10 coins, wi ~ C^-1 E, Ei = d-day MR vs basket; prereg H7_statarb_10coin.yaml
