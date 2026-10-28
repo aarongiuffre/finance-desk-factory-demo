@@ -1,0 +1,124 @@
+# PRE-REGISTRATION - F151_14_2_tips_treasury (Soper 151 Ch14 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_13_* all closed
+# 2026-10-28).  Book section 14.2 TIPS-Treasury arbitrage (Eqs 504-508).
+# The book has NO backtests - no performance claims are attributed to it anywhere below.
+# Paper / Yahoo + free FRED public only; no spend; no CUSIP/STRIPS/swap tape.
+hypothesis: F151_14_2_tips_treasury
+family: F151_14_2_tips_treasury
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 14.2: Treasuries tend to be overvalued relative to TIPS
+  almost all the time (Campbell-Shiller-Viceira 2009; Fleckenstein-Longstaff-
+  Lustig 2013).  Sell the Treasury bond, replicate its coupons+principal
+  synthetically by long TIPS + short n zero-coupon inflation swaps with
+  notionals N_i (Eqs 504-506), top up with small STRIPS positions S(t_i)
+  (Eq 507); the net cash at t=0 is C(0) = P_Treasury - P_TIPS - sum_i S(t_i)
+  (Eq 508), empirically positive even after costs.  This is a REPLICATION
+  arbitrage on the actual bond/CUSIP tape, not a timing signal.
+prior: >-
+  WEAK-PRIOR, two-sided: (a) the static premise cell (always long TIPS vs
+  short Treasuries) is a duration-matched static carry - the same shape that
+  died on G2 concentration for the F151_5_* and F151_13_1 static cells; (b)
+  the breakeven-z cells time the spread: when the breakeven (the market price
+  of inflation protection) is CHEAP vs its own trailing distribution, the
+  TIPS-vs-Treasury spread is locally cheap -> long TIPS/short Treasury.
+  2015-2017 saw the 10Y breakeven compress 2.2 -> 1.9, so z-signal cells will
+  likely spend much of the window short the spread; the gates decide.
+signal: >-
+  Daily, decision at close t-1, pnl day t.  Signal = z-score of the market
+  breakeven BE(t) vs its trailing 252-session mean/std (obs <= t-1 only):
+  z <= -z1 -> LONG TIPS leg / SHORT Treasury leg (spread on); z >= +z1 ->
+  reverse (spread short); else flat.  While on, weights are CONSTANT (no
+  daily rebalance; each change = entry/exit/flip is one trade per leg).
+  BE mapped to ETF sessions by date with ffill <= 5 (FRED daily vs NYSE
+  calendar; Fed-open/NYSE-closed days inherit the prior session's BE).
+cells:
+  z05_tip_ief: "BE = T5YIE, z1 = 0.5, long TIP / short IEF 1:1"
+  z10_tip_ief: "BE = T5YIE, z1 = 1.0, long TIP / short IEF 1:1"
+  z05_schp_ief: "BE = T5YIE, z1 = 0.5, long SCHP / short IEF 1:1"
+  z10_schp_ief: "BE = T5YIE, z1 = 1.0, long SCHP / short IEF 1:1"
+  z05_tip_tlt: "BE = T5YIE, z1 = 0.5, long TIP / short TLT 1:0.45"
+  z10_tip_tlt: "BE = T5YIE, z1 = 1.0, long TIP / short TLT 1:0.45"
+  static_tip_ief: >-
+    always-on long TIP / short IEF 1:1 for the whole tune window (1 fill by
+    construction) - tests the book's "Treasuries overvalued relative to TIPS
+    almost all the time" premise in its tradeable-ETF form.  Preregistered
+    expectation: G2 episode share = 1.0 BY CONSTRUCTION (single episode), so
+    this cell cannot pass G2; it is kept to measure the premise, same rule as
+    the Ch13 static-carry cells.
+total_cells: 7 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 10 position changes for the six z-cells; static cell exempt from G4 (1 fill by construction)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars/BE obs only as the trailing 252-session z window)"
+  data_end: "2017-12-31 tune cap (ETF loaders cap bars at the cap; FRED pulls window-capped at the REQUEST)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31 (36 months).  Dev holdout 2018-01-01..2019-12-31
+    NEVER READ this run (no validation or holdout without go).  ETF loaders
+    cap bars at 2017-12-31; FRED BE pull window cosd/coed capped at the
+    request (T5YIE/T10YIE/T5YIFR pulled 2013-01-01..2017-12-31 2026-10-28 -
+    pre-2015 obs are the trailing z warmup only).
+data:
+  prices: >-
+    raw/price/{TIP,IEF,TLT,SCHP,SPY}.json (Yahoo chart v8; TIP/IEF/TLT/SPY on
+    disk from prior pulls, SCHP pulled 2026-10-28 --backfill max,
+    2010-08-05+).  Total return = adjclose 'a'.  SPY supplies the calendar.
+  breakevens: >-
+    raw/fred/{T5YIE,T10YIE}.json (percent, /100 to decimal), ffill <= 5 on
+    the session calendar.  T5YIFR pulled for the report-only block only.
+universe: >-
+  Fixed: TIP (iShares TIPS, ~7y duration), SCHP (Schwab US TIPS, ~7y),
+  IEF (7-10y Treasury, ~7.5y), TLT (20y+, ~16-17y).  Weights fixed as in
+  cells; TIP/TLT uses 1:0.45 as a partial duration offset (7/16.5 ~ 0.44).
+  Historical ETF durations are not free - weights are FIXED constants, not
+  estimated (documented approximation).
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dW| PER LEG (TIPS and Treasury legs
+  are large-ADV ETFs).  Each position change costs 2 legs x 20 bp.  No cost
+  while the position is unchanged (constant weights).  G6 stress at 2x
+  per-side costs (3x reported).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice
+  (daily pnl, sharpe annualized sqrt(252), cagr 252/n - the F151 daily
+  convention):
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (z computed with BE obs <= t for the day-t decision)
+  must produce a different pnl series.  G2 concentration - max calendar-year
+  share of net pnl <= 0.40 AND max episode share of gross <= 0.25 (episode =
+  one contiguous on-period).  G3 regime - at least 2 of 3 equal thirds of the
+  tune window net-positive.  G4 min trades - >= 10 position changes (z-cells;
+  static exempt).  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market
+  days) AND net CAGR > 0 at base costs.  G6 stress - net CAGR > 0 at 2x all
+  per-side costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+report_only:
+  - >-
+    (a) The book's Eq 508 replication C(0) is NOT measurable on free data
+    (same-maturity Treasury/TIPS CUSIP pairs + STRIPS + ZC inflation swap
+    quotes - all paid/vendor; see data_walls).  The ETF cells express the
+    DIRECTION of the book's short-Treasury/long-TIPS position only.
+  - >-
+    (b) Breakeven z-quintile table: mean forward 21-session TIP-IEF spread
+    return per z-quintile (is the z-signal monotone at all?).
+  - >-
+    (c) T5YIFR (5y5y forward) vs T5YIE level gap over the window - context
+    for the breakeven compression 2015-2017.
+data_walls: >-
+  * Eq 508 replication needs: same-maturity Treasury and TIPS CUSIP prices
+  (paid: Bloomberg/ICE/Treasury direct CUSIP tapes), STRIPS prices (paid /
+  partially free but CUSIP-level), and ZC inflation swap fixed rates at each
+  coupon date (dealer curve, paid).  None free -> the book's arbitrage is
+  NOT runnable; only the directional spread is preregistered.
+  * ETF duration histories are not free -> fixed weights (1:1, 1:0.45) are
+  constants, not estimates.
+  * The ETF spread is NOT the book's replication: it carries ETF-specific
+  basis, fund fees, and a duration mismatch the replication would not have.
+  This is documented as the standing ETF-proxy limitation (same class as the
+  F151_5_* curve families).

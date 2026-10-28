@@ -1,0 +1,45 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_14_4_spark_spread
+# (Soper 151 Ch14 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 14.4 Energy - spark spread (Eqs 516-518).
+hypothesis: F151_14_4_spark_spread
+family: F151_14_4_spark_spread
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 14.4: the spark spread S = PE - H*PF ($/Mwh, Eq 517) is
+  the gross margin of a gas-fired plant (heat rate H = QF/QE, MMBtu/Mwh,
+  Eq 516).  The trade is built with FUTURES: short electricity futures, long
+  the corresponding number of gas futures, hedge ratio h = H*FE/FF with
+  contract sizes FE = 736 Mwh (electricity) and FF = 10,000 MMBtu (gas),
+  approximated as NF/NE whole contracts (Eq 518).
+blocked_reason: >-
+  The trade is a FUTURES spread: short power futures / long gas futures per
+  Eq 518.  One leg is free, the other is not, and no spot proxy expresses
+  the futures position (verified 2026-10-28):
+  (i) FUEL LEG (free): Henry Hub front-month natural gas futures NG=F on
+  Yahoo - bars verified 2014-2017 (904 sessions).
+  (ii) POWER LEG (fatal): the wholesale electricity price leg PE has NO free
+  tape in any tradeable form:
+  - Electricity FUTURES (the book's instrument; ICE/NYMEX hub contracts)
+  are paid-vendor data; Yahoo serves no electricity futures or ETF of any
+  kind (there is no free power-futures ticker on the desk).
+  - EIA wholesale electricity price data is behind its registered-key API
+  (HTTP 403 verified without a key 2026-10-28); FRED serves only RETAIL
+  electricity price (APU000072610, monthly US city average) and PPI indexes
+  - neither is a wholesale hub price and neither is daily.
+  - CAISO OASIS serves only CAISO spot/day-ahead LMPs (not futures) and is
+  rate-limited hostile to bulk pulls (HTTP 429 + INVALID_REQUEST XML on the
+  2026-10-28 probes) - and even a clean LMP series is a SPOT index: the
+  book's position shorts power FUTURES with contract-size hedge ratios
+  (Eq 518), which a spot LMP mark cannot express.
+  (iii) Mechanism transfer fails: S = PE - H*PF with PE = spot LMP and
+  PF = front-month futures is a mixed spot/futures margin series, not the
+  book's futures spread; there is no paper-tradeable instrument pair that
+  expresses it.  No proxy cell is preregistered (standing ETF-proxy rule).
+  Re-opens only with a free historical power FUTURES tape (or an equivalent
+  tradeable power instrument) AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_14_4_spark_spread/BLOCKED.md (this prereg is the record)"

@@ -1,0 +1,47 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_14_3_weather
+# (Soper 151 Ch14 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 14.3 Weather risk - demand hedging (Eqs 509-515).
+hypothesis: F151_14_3_weather
+family: F151_14_3_weather
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 14.3: businesses hedge weather-driven demand with
+  weather derivatives.  Temperature indexes ICDD / IHDD (Eqs 509-511, daily
+  degree-day sums over the contract life, Tbase = 65F).  Heating demand is
+  hedged with a short futures / long put position, cooling demand with a
+  long futures / long call position, hedge ratios (Eqs 512-515) =
+  Cov(q_w, index)/Var(index) and the option-strike analogues, where q_w is
+  the weather-affected portion of DEMAND for the hedged business.
+blocked_reason: >-
+  The strategy is a HEDGE DESIGN: its P&L exists only as (demand exposure)
+  hedged by (weather futures/options positions).  Both legs are walled on
+  free data for the tune window (verified 2026-10-28):
+  (i) TRADEABLE INSTRUMENT (fatal): CME weather futures and options (CDD/HDD
+  contracts on US and international cities) have NO free historical price
+  tape - historical weather derivatives data is CME DataShop
+  subscription-for-fee; cmegroup.com blocks automated access (probe timed
+  out 2026-10-28); Yahoo serves no weather-index instrument of any kind.
+  Without instrument prices the hedge positions (Eqs 512-513) cannot be
+  paper-traded, so no pnl series exists regardless of what else is free.
+  (ii) DEMAND SERIES q_w (also walled for the window): EIA's hourly
+  balancing-authority demand (EIA-930 / Hourly Electric Grid Monitor) begins
+  2018-07-01 - AFTER the tune window (EIA's own documentation; the 2017/2019
+  CSV archive probes return the SPA shell, not data).  The EIA API requires
+  a registered key (HTTP 403 verified without one 2026-10-28).  Business-
+  level demand (the book's q_w) is private to the hedged firm by definition.
+  (iii) What IS free: NOAA GHCN-Daily station temperatures (TMAX/TMIN, e.g.
+  USW00094728 CSV verified 2026-10-28) could build I_HDD/I_CDD (Eqs 509-511)
+  for any city - but a weather INDEX without the tradable instrument and
+  without the demand series is neither leg of the trade.
+  (iv) No proxy transfers: utility/insurance ETF proxies hedge EQUITY VALUE
+  (already priced), not the book's demand volume q_w - the mechanism does
+  not transfer, so no proxy cell is preregistered (standing ETF-proxy rule,
+  same class as F151_11_2/F151_12_1).
+  Re-opens only with a free historical weather futures/options tape AND a
+  free demand series covering 2015-2017 AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_14_3_weather/BLOCKED.md (this prereg is the record)"

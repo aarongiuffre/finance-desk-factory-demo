@@ -1,0 +1,131 @@
+# PRE-REGISTRATION - F151_14_1_inflation_swaps (Soper 151 Ch14 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_13_* all closed
+# 2026-10-28).  Book section 14.1 Inflation hedging - inflation swaps (Eqs 500-503).
+# The book has NO backtests - no performance claims are attributed to it anywhere below.
+# Paper / free FRED public only; no spend; no swap-curve/broker tape.
+hypothesis: F151_14_1_inflation_swaps
+family: F151_14_1_inflation_swaps
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 14.1: buy (sell) inflation swaps to exchange a fixed
+  (floating) rate of inflation for a floating (fixed) rate.  The buyer has a
+  positive return iff realized inflation exceeds the fixed rate K ("breakeven").
+  Zero-coupon (ZC) swap, per $1 notional (Eqs 500-501): Cfixed = (1+K)^T - 1,
+  Cfloating = I(T)/I(0) - 1, single cash flow at maturity T.  Year-on-year
+  (YoY) swap (Eqs 502-503): fixed K per period vs realized YoY inflation
+  I(t)/I(t-1) - 1.  Per the book, K is the TIPS-Treasury yield spread at the
+  swap's own maturity.
+prior: >-
+  WEAK-PRIOR: the book makes no performance claim; the trade's sign depends
+  entirely on whether realized CPI runs above or below the fixed rate.  For
+  the tune window the market K at 1Y is not free (see data_walls), so the
+  K proxy is survey-based expected inflation - 2015-2017 realized CPI YoY ran
+  ~0.1-2.1% while survey expectations held ~2.6-3.3% early in the window, so
+  the static SHORT-swap cells (pay realized, receive fixed) are the ones a
+  prior favors; the long cells test the book's buyer side symmetrically.
+signal: >-
+  1-year ZC inflation swap == 1-year YoY swap with a single annual payment
+  (T = 1 in Eq 500 vs Eq 502-503 with one period).  Entries at MONTH-END t
+  for t = 2014-01..2016-12 (36 entries; 2014 entries are warmup-borne - only
+  their in-window cash flows are scored).  I(0) = CPI index for month t-1
+  (the latest published index at month-end t under the release-lag rule), so
+  the floating leg = CPI(t+11)/CPI(t-1) - 1; the single cash flow (Eq 500 at
+  T = 1) lands at month-end t+12 when CPI(t+11) publishes.  Fixed leg = K.
+  Release-lag rule (causal, loader-enforced): a CPI observation for month m
+  is usable only from month-end m+1 (BLS releases mid-month m+1; month-end
+  is the unambiguous conservative bound).  Survey K obs dated month t are
+  treated as available at month-end t (mid-month release).
+cells:
+  yoy_long_mich: "every entry month: LONG 1Y swap (receive realized, pay fixed K = MICH month-t obs)"
+  yoy_long_expinf: "every entry month: LONG 1Y swap, K = EXPINF1YR month-t obs"
+  yoy_short_mich: "every entry month: SHORT 1Y swap (pay realized, receive fixed K = MICH)"
+  yoy_short_expinf: "every entry month: SHORT 1Y swap, K = EXPINF1YR"
+  yoy_signal_mom: >-
+    two-sided: sign(trailing realized YoY CPI through month t-1 minus K) at
+    entry - long the swap when realized runs ABOVE survey expectations
+    (the book's buyer), short when below.  K = MICH.  Entries 2014-02..2016-12
+    (35): the trailing series needs CPI(t-13), on disk from 2013-01.
+total_cells: 5 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 swap flows (36 static / 35 signal expected)"
+
+fold: dev
+window:
+  data_start: "2013-01-01 disk pull (dev fold; pre-2015 obs are trailing-lookback warmup only: K series, I(0) index for 2014 entries, trailing signal)"
+  data_end: "2017-12-31 tune cap (FRED pulls window-capped at the REQUEST: no obs past 2017-12-31 on disk)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31 scored on the MONTHLY cash-flow series (flows
+    land 2015-01..2017-12, 12/12/12 by construction; flow dates = month-end).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Every flow scored in the tune window uses only CPI
+    obs with publication date <= the flow date under the release-lag rule.
+data:
+  cpi: >-
+    raw/fred/CPIAUCSL.json (US CPI-U index level, NSA, monthly; NOT a percent
+    series - loaded RAW, unlike the desk's rate loaders which /100).  Pulled
+    2026-10-28, window 2013-01-01..2017-12-31 (fred_pull.py).
+  expected: >-
+    raw/fred/{MICH,EXPINF1YR}.json (survey-based 1-year expected inflation,
+    monthly, percent).  Pulled 2026-10-28, window-capped.
+  breakevens_report_only: >-
+    raw/fred/{T5YIE,T10YIE,T5YIFR}.json (market breakevens, daily, percent) -
+    used ONLY for the report-only blocks below; the 5Y/10Y tenors cannot be a
+    1Y swap's K (maturity mismatch).
+universe: >-
+  No ETFs.  Instruments are paper OTC swap positions; notional 1.0 per swap,
+  one swap per entry month, single cash flow at maturity (no marks in between
+  - a ZC swap has no interim cash flow by construction, Eq 500).
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on notional; a swap round trip = 2 sides
+  = 40 bp, charged at each swap's FLOW date (uniform for all entries - this
+  conservatively includes the entry-side cost of 2014 warmup entries whose
+  real-world entry fee predates the tune window).  G6 stress at 2x per-side
+  costs (80 bp round trip reported).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice.
+  Annualization is MONTHLY by construction (flows are monthly events, not
+  daily marks): sharpe = mean/std * sqrt(12); cagr = prod(1+p)^(12/n) - 1
+  (documented deviation from the daily-252 F151 convention).
+  G1 lookahead - replay truncation at 4 flow-slice cuts + the pull-cap cut
+  (flows before the cut identical on a fresh panel) AND a decision-early
+  mutant (K taken from month t+1) must produce a different flow series, AND
+  an availability mutant (I(0) = CPI month t, release lag ignored) must
+  differ.  G2 concentration - max calendar-year share of net flows <= 0.40
+  (three cash-flow years by construction) AND max episode share of gross
+  <= 0.25 (episode = one swap).  G3 regime - at least 2 of 3 equal thirds of
+  the flow series net-positive.  G4 min trades - >= 24 flows.  G5 fees -
+  tune net sharpe >= 0.8 AND net cagr > 0 at base costs.  G6 stress -
+  net cagr > 0 at 2x per-side costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+report_only:
+  - >-
+    (a) The book's premise measured: realized YoY CPI by calendar year vs both
+    survey K series (did realized run above or below expectations?).
+  - >-
+    (b) The book's ACTUAL instrument, 10Y ZC swap (Eq 500): entered
+    2015-01-02 at K = T10YIE, held OPEN, marked at the tune cap with the CPI
+    ratio accrued 2015-01..2017-11 (latest published index at the cap under
+    the release-lag rule) vs the fixed-leg accrual (1+K)^T - 1 at the elapsed
+    T.  No gate - an open 10Y position cannot mature inside the window.
+  - >-
+    (c) K-sensitivity: all 5 cells re-scored with K = T5YIE (maturity-
+    MISMATCHED market rate, 5Y tenor on a 1Y swap - report-only, never a
+    gate cell).
+data_walls: >-
+  * No free market breakeven at the 1Y tenor exists (checked 2026-10-28):
+  FRED serves market breakevens only at 5Y (T5YIE) and 10Y (T10YIE) daily
+  plus the 5y5y forward (T5YIFR).  The book's K = same-maturity (1Y)
+  TIPS-Treasury spread is therefore NOT free; K is proxied by the two
+  survey-based 1Y expected-inflation series (MICH, EXPINF1YR).  Survey K is
+  an approximation of the swap market's fixed rate - the market's inflation
+  risk premium / swap dealer margin is not observable free.
+  * OTC inflation swap quotes (dealer curves, e.g. Bloomberg/ICAP) are paid
+  - not pulled, not modeled.
+  * CPI is published monthly with ~2-3 week lag; the release-lag rule
+  (month-end m+1) is the conservative unambiguous bound and is loader-
+  enforced; no seasonal adjustment applied (CPIAUCSL NSA, as the index swap
+  references).
