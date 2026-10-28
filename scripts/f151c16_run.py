@@ -312,7 +312,14 @@ def run_163(mode="tune"):
     if mode == "scored":
         cells = {k: v for k, v in cells.items()
                  if k in KEEP_TUNE_163}
-    tickers = L.UNIVERSE32 + ["SPY"]
+    if mode == "scored":
+        # Scored cells only: panel = the scored cells' own constituents +
+        # SPY (calendar).  The full UNIVERSE32 is a tune/report-only need;
+        # type_retail's GGP delisted 2018-08-27 mid-scored-window and is NOT
+        # a scored cell, so the preregistered delist treatment never engages.
+        tickers = sorted({t for w in cells.values() for t in w} | {"SPY"})
+    else:
+        tickers = L.UNIVERSE32 + ["SPY"]
     results = {}
     for name, w in cells.items():
         if mode == "scored":

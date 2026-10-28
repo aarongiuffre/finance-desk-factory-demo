@@ -792,28 +792,46 @@ families:
     hypotheses: [F151_9_6_pricing_models]
 
   F151_10_1_hedge:             # Soper FULL-151 Ch10: book 10.1 hedging risk
-    blocked: true              # with futures (unit + 63d-OLS on SPY/ES=F,
+    retired: true              # with futures (unit + 63d-OLS on SPY/ES=F,
                                # USO/CL=F, GLD/GC=F).  KEEP_TUNE 1/6 at tune
-                               # 2026-10-28: unit_spx VR 0.940 residual CAGR
-                               # -0.17%/yr; awaiting standing_dev_go (no
-                               # scored DEV; holdout unread).  WTI cells died
-                               # on residual CAGR -20/-22%/yr (structurally
-                               # short USO roll bleed).  Evidence
-                               # logs/edge/F151_10_1_hedge/.
+                               # 2026-10-28 (unit_spx VR 0.940, residual CAGR
+                               # -0.17%/yr).  SCORED DEV 2026-10-28 via Aaron
+                               # chat-tap GO (auth=chat_tap + .dev.tap.json, no
+                               # .sig, VP widget): unit_spx KILL - VR 0.933,
+                               # residual Sharpe -0.04, res CAGR -0.22%/yr,
+                               # year share 0.71 FAILS G2 (<= 0.40).  WTI cells
+                               # died at tune on USO roll bleed.  Scored window
+                               # 2018-01-01..2019-12-31 (futures/commodity
+                               # tapes extended through 2019-12-31, overlap
+                               # verified zero diff,
+                               # logs/edge/scored_dev_20261028/); fold_gate
+                               # validation/holdout never touched.  Evidence
+                               # logs/edge/F151_10_1_hedge/scored/.
     kind: hypothesis
     hypotheses: [F151_10_1_hedge]
   F151_10_1_1_cross_hedge:     # Soper FULL-151 Ch10: book 10.1.1 cross-hedge
-    blocked: true              # (Eq 463).  KEEP_TUNE 2/6: slv_gc_h63/h126
-                               # VR ~0.49; awaiting standing_dev_go.  Evidence
-                               # logs/edge/F151_10_1_1_cross_hedge/.
+    retired: true              # (Eq 463).  KEEP_TUNE 2/6 at tune (slv_gc VR
+                               # ~0.49).  SCORED DEV 2026-10-28 via Aaron
+                               # chat-tap GO (auth=chat_tap, no .sig): both
+                               # cells KILL - slv_gc_h63 VR 0.509 res Sharpe
+                               # -0.43 res CAGR -6.0%/yr; slv_gc_h126 VR 0.518
+                               # res -0.56 res -7.3%/yr; both FAIL G2+G4+G5
+                               # (silver leg bleeds net of costs on the scored
+                               # window).  Evidence
+                               # logs/edge/F151_10_1_1_cross_hedge/scored/.
     kind: hypothesis
     hypotheses: [F151_10_1_1_cross_hedge]
   F151_10_1_2_ir_hedge:        # Soper FULL-151 Ch10: book 10.1.2 IR hedge
-    blocked: true              # (Eqs 464-468).  KEEP_TUNE 3/6: all three
-                               # IEF/ZN=F cells VR ~0.88; awaiting
-                               # standing_dev_go.  TLT cells died on
-                               # |residual CAGR|<=2% cap.  Evidence
-                               # logs/edge/F151_10_1_2_ir_hedge/.
+    retired: true              # (Eqs 464-468).  KEEP_TUNE 3/6 at tune (all
+                               # three IEF/ZN=F cells VR ~0.88).  SCORED DEV
+                               # 2026-10-28 via Aaron chat-tap GO (auth=
+                               # chat_tap, no .sig): all three KILL on G2 year
+                               # share (dur_b1 0.77, dur_bols 0.53, ief_ols
+                               # 0.62 vs <= 0.40); dur_b1/dur_bols also FAIL
+                               # G4 (5/24 episodes - the IEF vs ZN=F duration
+                               # hedge is near-static); ief_ols residual ~0
+                               # (no edge, no harm).  Evidence
+                               # logs/edge/F151_10_1_2_ir_hedge/scored/.
     kind: hypothesis
     hypotheses: [F151_10_1_2_ir_hedge]
   F151_10_3_contrarian:        # Soper FULL-151 Ch10: book 10.3 contrarian MR
@@ -859,11 +877,17 @@ families:
     kind: blocked_stub
     hypotheses: [F151_11_6_cdo_curve]
   F151_11_7_mbs:               # Soper FULL-151 Ch11: book 11.7 MBS trading
-    blocked: true              # KEEP_TUNE 4/6 at tune 2026-10-28: vmbs_zf_h63/
-                               # h126/h252/dur VR 0.48-0.52, residual CAGR
-                               # +2.0..+2.3%/yr; awaiting standing_dev_go (carry
-                               # on free proxies, not scored-DEV alpha; holdout
-                               # unread).  Evidence logs/edge/F151_11_7_mbs/.
+    retired: true              # KEEP_TUNE 4/6 at tune (vmbs_zf VR 0.48-0.52,
+                               # residual CAGR +2.0..+2.3%/yr).  SCORED DEV
+                               # 2026-10-28 via Aaron chat-tap GO (auth=
+                               # chat_tap, no .sig): all four cells KILL on G2
+                               # year share (0.53-0.73 vs <= 0.40) DESPITE
+                               # positive residual carry (res Sharpe 1.26-1.68,
+                               # res CAGR +2.3%/yr) - the carry concentrates in
+                               # single years; carry on free proxies, not
+                               # scoreable alpha, as flagged at tune; zf_dur
+                               # also FAILS G4 (11/24).  Evidence
+                               # logs/edge/F151_11_7_mbs/scored/.
     kind: hypothesis
     hypotheses: [F151_11_7_mbs]
   F151_12_1_convert_arb:       # Soper FULL-151 Ch12: book 12.1 convertible arb
@@ -1066,57 +1090,37 @@ families:
     kind: hypothesis
     hypotheses: [F151_15_3_1_distress_vol]
   F151_16_2_mixed_asset_re:    # Soper FULL-151 Ch16: book 16.2 mixed-asset
-    blocked: true              # diversification with real estate.  KEEP_TUNE
-                               # at tune 2026-10-28 per the preregistered
-                               # family rule: 1 survivor (re10_xlre, sharpe
-                               # 1.51 vs base 1.06+0.25, vol 6.6% <= 1.05x
-                               # 7.2%) - but flagged: the survivor's edge is
-                               # a WINDOW ARTIFACT (27-month XLRE window
-                               # excludes Aug-Sep 2015; on the common
-                               # post-2015-10 window EVERY sleeve shows
-                               # Sharpe 1.33-1.49 - nothing XLRE-specific).
-                               # All 6 cells FAIL G2 year share (0.53-0.59);
-                               # full-window sleeve economics NEGATIVE
-                               # (10% sleeve Sharpe 0.99-1.00 vs base 1.06 -
-                               # adding RE diluted risk-adjusted return).
-                               # Report-only: REIT-SPY corr 0.63-0.67,
-                               # stress-month corr DROPS (VNQ 0.23 in worst
-                               # SPY decile) - book's stress claim
-                               # directionally consistent in-window.  Always-
-                               # on premise-cell class (G2 episode share 1.0
-                               # by construction, Ch13/14 rule).  Machinery:
-                               # drift-cost bug (daily drift charged as
-                               # trades) caught by selftest BEFORE any tune;
-                               # all tunes re-ran fixed.  BLOCKED awaiting
-                               # standing dev go (no scored DEV run).  Tune
-                               # 2015-01-01..2017-12-31; holdout unread.
-                               # Evidence logs/edge/F151_16_2_mixed_asset_re/.
+    retired: true              # diversification with real estate.  KEEP_TUNE
+                               # at tune (re10_xlre sharpe 1.51, WINDOW-ARTIFACT
+                               # flagged).  SCORED DEV 2026-10-28 via Aaron
+                               # chat-tap GO (auth=chat_tap, no .sig): KILL -
+                               # re10_xlre scored Sharpe 1.073 vs base 1.034,
+                               # rule needs >= 1.284 (base+0.25); the tune edge
+                               # is GONE on the full 2018-19 window, artifact
+                               # CONFIRMED; both cells FAIL G2 year share
+                               # (1.11/1.10 - 2018 negative year).  Evidence
+                               # logs/edge/F151_16_2_mixed_asset_re/scored/.
     kind: hypothesis
     hypotheses: [F151_16_2_mixed_asset_re]
   F151_16_3_intra_re:          # Soper FULL-151 Ch16: book 16.3 intra-asset
-    blocked: true              # diversification (property type / economic /
-                               # type+geo).  KEEP_TUNE at tune 2026-10-28
-                               # per the preregistered family rule: 2
-                               # survivors (type_ind sharpe 0.90 cagr 16.0%,
-                               # type_infra sharpe 1.09 cagr 18.2%, both
-                               # G3+G5+G6 pass) - flagged: always-on SECTOR
-                               # holds in the two strongest REIT sectors of
-                               # 2016-2017; year shares 0.60-0.61 FAIL G2
-                               # (sector cycle, not a timing edge).  All 9
-                               # cells fail G2 or G5 (n_pass 0).  The book's
-                               # risk-reduction claim holds mechanically
-                               # report-only: EW-32 vol 13.3% < every type
-                               # basket (14.6-22.1%), mean type-corr 0.478.
-                               # 16.3.2/16.3.3 regional exposure has NO free
-                               # tradeable form (no regional REIT ETF tape;
-                               # CME housing futures delisted 2011) -
-                               # report-only MSA HPI evidence (region
-                               # persistence 0.14/0.29/0.14/-0.15).
-                               # Universe wall: ex-post REIT list (no PIT
-                               # classification free), dead names
-                               # tape-faithful.  BLOCKED awaiting standing
-                               # dev go.  Evidence
-                               # logs/edge/F151_16_3_intra_re/.
+                               # diversification (property type / economic /
+                               # type+geo).  KEEP_TUNE at tune (type_ind
+                               # sharpe 0.90, type_infra 1.09, G2 flagged).
+                               # SCORED DEV 2026-10-28 via Aaron chat-tap GO
+                               # (auth=chat_tap, no .sig): PASS per the
+                               # preregistered family rule - BOTH cells pass
+                               # G3+G5+G6 (type_ind sharpe 1.015 cagr 17.5%,
+                               # type_infra 1.088 cagr 18.9%); G2 year share
+                               # still FAILS (1.10/0.88 vs <= 0.40, same flag
+                               # as tune: always-on SECTOR holds in strong
+                               # REIT sectors - sector cycle, not timing).
+                               # Survivors stay hypothesis; no further go
+                               # requested this run.  Scored panel = scored
+                               # cells' constituents only (GGP delisted
+                               # 2018-08-27 mid-window is type_retail, NOT a
+                               # scored cell; prereg delist treatment never
+                               # engaged).  Evidence
+                               # logs/edge/F151_16_3_intra_re/scored/.
     kind: hypothesis
     hypotheses: [F151_16_3_intra_re]
   F151_16_4_re_momentum:       # Soper FULL-151 Ch16: book 16.4 regional
