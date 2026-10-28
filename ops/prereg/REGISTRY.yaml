@@ -726,6 +726,70 @@ families:
                                # logs/edge/F151_8_5_triangular_arb/DEFER.md.
     kind: hypothesis
     hypotheses: [F151_8_5_triangular_arb]
+  F151_9_3_diversify:          # Soper FULL-151 Ch9: book 9.3 portfolio
+    retired: true              # diversification w/ commodities (passive 60/40
+                               # SPY / EW 23-vehicle Yahoo commodity-ETF basket
+                               # monthly+annual; + tactical Fed cells on
+                               # FEDFUNDS 3m change - DISCOUNT/MDISCRT
+                               # discontinued pre-window).  KILLED at tune
+                               # 2026-10-28: 0/4 - premise degraded in-window
+                               # (SPY-vs-basket corr +0.324, basket standalone
+                               # Sharpe -0.242 so the blend DILUTES SPY: 0.533
+                               # net Sharpe vs 0.936 for 100% SPY); G2 year-
+                               # concentration fails all 4 (2017 = 0.82-1.05
+                               # vs 0.40 cap; same calm-bull failure as 6_5);
+                               # Fed tactical adds 1.07x/yr turnover + 88bp/yr
+                               # for LESS Sharpe (0.29/0.58).  G1 clean.
+                               # Evidence logs/edge/F151_9_3_diversify/.
+    kind: hypothesis
+    hypotheses: [F151_9_3_diversify]
+  F151_9_4_value:              # Soper FULL-151 Ch9: book 9.4 value (Eq 455
+    retired: true              # v = P5/P0, P5 = mean adjclose 4.5-5.5y back,
+                               # top/bottom tercile L/S monthly, 23-vehicle
+                               # panel + ex-broad robustness).  KILLED at tune
+                               # 2026-10-28: 0/2 - the 5y ratio longs are the
+                               # crashed energy complex (kept crashing to
+                               # Feb-2016), the shorts are bullion/base
+                               # metals (bottomed Dec-2015, rallied): BOTH
+                               # sides lose (net Sharpe -0.51/-0.62, ex-broad
+                               # WORSE); G3 fails (only middle third
+                               # positive), G5/G6 fail on negative CAGR that
+                               # persists at 2x/3x costs.  Report-only
+                               # long-only top tercile also negative
+                               # (-0.235).  G1 clean.  Evidence
+                               # logs/edge/F151_9_4_value/.
+    kind: hypothesis
+    hypotheses: [F151_9_4_value]
+  F151_9_5_skewness:           # Soper FULL-151 Ch9: book 9.5 skewness premium
+    retired: true              # (Eqs 456-458, trailing daily skewness 6/12/
+                               # 24m, bottom/top quintile L/S monthly; 23-
+                               # vehicle panel; DISTINCT from retired W2b_skew
+                               # crypto - nothing reopened).  KILLED at tune
+                               # 2026-10-28: 0/3 - sk12/sk24 wrong sign
+                               # (-0.13/-0.29: at vehicle level left-skew =
+                               # contango bleed, so the long leg replicates
+                               # buying roll-cost bleed; sk24 episode share
+                               # 7.80); sk6 mechanism REAL in the ranks (rank
+                               # IC -0.177, IR -2.07, report-only) but the
+                               # construction untradable: 4.09x/yr turnover,
+                               # 438bp/yr cost, net Sharpe +0.266, 2017 = 1.62
+                               # of pnl, negative CAGR at 2x costs.  G1 clean.
+                               # Evidence logs/edge/F151_9_5_skewness/.
+    kind: hypothesis
+    hypotheses: [F151_9_5_skewness]
+  F151_9_6_pricing_models:     # Soper FULL-151 Ch9: book 9.6 trading with
+    blocked: true              # pricing models (Eqs 459-462 OU futures-curve
+                               # model).  BLOCKED at prereg 2026-10-28: the
+                               # signal needs a multi-maturity futures term
+                               # structure - Yahoo vehicles are single
+                               # blended-roll prices (no delivery dimension),
+                               # FRED has no curves, CME/ICE paid.  Single-
+                               # vehicle substitution would test fund
+                               # mechanics, not the book's model - zero
+                               # cells, zero tune runs.  Evidence
+                               # logs/edge/F151_9_6_pricing_models/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_9_6_pricing_models]
 
 F151_7_6_variance_swaps:
   status: blocked
