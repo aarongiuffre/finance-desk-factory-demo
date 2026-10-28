@@ -219,3 +219,23 @@ families:
                                # logs/edge/W2c_hedging_pressure/.
     kind: hypothesis
     hypotheses: [W2c_hedging_pressure]
+  W2d_vol_rp:                  # WAVE 2d: book 7.4 vol risk premium, DVOL vs realized vol, BTC
+    retired: true              # IV = Deribit DVOL (public API, no auth, 2017 daily bars
+                               # 2021-03-24..2026-09-30); P&L via variance-swap accrual per book
+                               # 7.6 Eqs 434-436.  KILLED at tune 2026-10-28: 0/8 - book-faithful
+                               # A1 (month-start IV - MTD RV, sell-only) is Sharpe 3.25, +12.5%
+                               # CAGR, 61 trades, all thirds positive BUT 47.9% of net pnl in
+                               # calendar 2021 (G2 cap 0.40), decaying monotonically through
+                               # 2024; symmetric band A2 same story (0.669). z/rank cells lose
+                               # hard (-2.9/-2.6). Holdout never read. Evidence
+                               # logs/edge/W2d_vol_rp/.
+    kind: hypothesis
+    hypotheses: [W2d_vol_rp]
+  W2d_skew:                    # WAVE 2d: book 7.5 vol skew - long risk reversal (BTC)
+    blocked: true              # needs historical put/call IV skew; no free public source
+                               # (Deribit serves no chain history; Tardis CSV datasets gone
+                               # 404; CDD options ZIPs paid; Kaiko/Laevitas/Amberdata paid).
+                               # Nothing run, no claim. Unblock condition in the prereg stub
+                               # + logs/edge/W2d_skew/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [W2d_skew]
