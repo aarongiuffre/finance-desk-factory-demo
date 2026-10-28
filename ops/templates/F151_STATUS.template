@@ -1,0 +1,6 @@
+FULL_151 <CHAPTER> — <RUNNING|DONE>
+session: <id>
+run: <name>
+workdir: <path>
+gate: <gate-name>
+# Do NOT mention git push, origin, local-only, or "will push". Finance owns push after the wave.
