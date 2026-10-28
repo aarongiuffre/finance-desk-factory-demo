@@ -1,0 +1,142 @@
+# PRE-REGISTRATION - H3 52-week-high proximity (George & Hwang 2004, JF).
+# Written 2026-10-28 (VP GO H3, ~10:40 ET).  NOT RUN.  Before the first scored
+# run it must be pushed (nightly sync) and its commit verified on the real
+# remote with `git ls-remote` (fold_gate).  This file authorizes DEV-fold work
+# only (2015-2019).  Validation / holdout stay locked behind fold_gate + a
+# signed go file and are NEVER requested by H3 code.
+# H3 is a NEW family: it does not re-open H1_insider, H2_lazy_prices, H4 or
+# H5_rf_change (all retired).  The scored runner mirrors H2: edge_harness +
+# fold_gate + committed code-freeze amendment + standing dev go; the older
+# scripts/h3_dev.py walkforward diagnostic is NOT the scored path.
+hypothesis: H3_52w_high
+family: H3_52w_high
+kind: hypothesis
+gate_signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"   # Aaron's signing key (must equal REGISTRY gate.signer_fpr)
+literature: "George & Hwang (2004, JF): close / 52-week high predicts
+  continuation; investors anchor on the peak.  Long-leg signal, lower crash
+  risk than 12-1 momentum."
+prior: >-
+  SKEPTICAL.  The desk's rs63 tape filter added nothing; momentum-family
+  anomalies have decayed; expect ~0 net alpha after UMD.  (The ungated
+  walkforward diagnostic logs/h3-dev.json already read DEAD on dev:
+  top-20 monthly rel -0.67%/mo vs SPY, -0.74%/mo vs EW, turnover ~85%/mo.)
+fold: dev
+window: {lo: "2015-01-01", hi: "2019-12-31"}     # dev period only.  Price depth
+                                                 # starts ~2014-04 on this stack, so
+                                                 # the 252-bar floor warms up through
+                                                 # ~2015-04 (pools counted, not imputed).
+
+data:
+  prices: edge_harness PRICE_DIRS                # standard dev price tiers on the
+                                                 # fold copy (PIT S&P + exits + dead),
+                                                 # hard-bounded by the verified window hi
+  membership: universe/sp500_ticker_start_end.csv   # PIT S&P members incl. exits (fold copy)
+  factors: raw/ff                                # Kenneth French FF5 + UMD
+  rule: >-
+    all bars come from PriceStore on the DEV fold copy (cutoff 2019-12-31, any
+    frame past the cutoff refuses); the ratio at D reads ONLY bars with date
+    <= D (re-checked in h3_events.ratio_at); membership is point-in-time
+    (members_at on the roster intervals)
+
+signal:
+  definition: >-
+    ratio(D) = close(D) / max(close over the trailing 252 TRADING bars through
+    D inclusive).  close = the as-traded SPLIT-ADJUSTED, dividend-UNadjusted
+    price (the anchoring price of George & Hwang; the harness 'raw' series).
+    Returns stay on the harness adjusted series (a) as everywhere else.
+  floor: ">= 252 bars of history through D (names with less are never eligible)"
+  sanity: >-
+    0 < ratio <= 1.0 (D is inside its own trailing max; anything else is a
+    data error - dropped, counted, never clamped)
+  cross-section: >-
+    monthly; D = the last trading day of each calendar month whose month-end
+    falls inside [lo, hi] (a month truncated by hi yields no event - its
+    month-end bar is after hi and is never read); months with fewer than 100
+    eligible names are skipped (counted) so the quintile is a real cross-section
+
+variants:                                         # the WHOLE budget - no other variant may be run
+  primary_top_quintile: "long the top quintile by ratio (rank-based, the H2/H5 rule family; ~20% of the eligible pool)"
+  secondary_top20: "long the top 20 names by ratio (ties broken by ticker)"
+  note: >-
+    edge_plan notes '~20 names after the price filter'; the top quintile of a
+    ~100+ name filtered pool lands in the same neighborhood, and the top-20
+    secondary pins that reading.  A Q1 (near-the-low) contrast is NOT run.
+
+events:
+  rebalance: >-
+    month-end D of each ranking month; one event per (ticker, month) in the
+    selected set; overlapping holds across months are allowed (monthly
+    re-selection with a 21-bar hold); equal weight per event
+  event_time: >-
+    ts = the month-end date; entry = next regular-session OPEN (same_day_ok
+    false, harness rule); December-2019 events enter after the window hi and
+    are dropped by the harness (counted in no_fill / exit_beyond_window)
+
+universe: >-
+  PIT S&P members at D (roster intervals, exits included); price >= $5
+  (harness-enforced); ADV20 >= $1M at the entry bar (pre-filter with the
+  harness entry helpers, dropped counts reported); EW benchmark =
+  point-in-time S&P membership (harness default) + SPY
+weighting: equal weight per event, long-only
+
+execution:
+  hold_trading_days: 21                           # 1 month
+  direction: long
+  same_day_ok: false
+  min_price: 5.0
+  costs:                                          # edge_plan.md section 6, direction-aware (harness)
+    fee_bps: 15
+    half_spread_bps: {large: 5, mid: 15, small: 40}
+    slip_bps: 10
+    large_adv: 50000000
+    mid_adv: 5000000
+    floor_roundtrip_bps: 40                       # small/mid-cap floor
+    borrow_bps_annual: 0                          # long-only
+  delisting: {perf_base: -0.30, other_base: 0.0}  # base -30%; adverse rerun -100% (harness ADVERSE[long])
+
+benchmarks: >-
+  SPY total return (same fill convention) AND equal-weight PIT universe -
+  beating SPY alone would be 'own the winners'
+metrics: >-
+  CAGR, vol, Sharpe vs SPY, net excess, max DD, hit rate, turnover, cost drag,
+  FF5+UMD alpha with Newey-West t (lag 6), deflated Sharpe on the alpha series
+
+pass_bar:                                         # ALL must hold, per variant, on the DEV fold ONLY this run
+  alpha_t_nw_ge: 3.0                              # FF5+UMD monthly alpha, Newey-West lag 6 (Harvey, Liu & Zhu 2016)
+  dsr_ge: 0.95                                    # deflated Sharpe on the factor-neutral alpha series
+  net_excess_vs_spy_gt: 0
+  net_excess_vs_ew_universe_gt: 0
+  delisting_cases: >-
+    both -30% (base) and -100% (adverse) keep alpha t >= 3
+  cost_stress: 2x all cost components keeps alpha t >= 3
+  era_max_share_le: 0.40                          # no calendar year > 40% of cumulative alpha
+  min_events: 100
+  min_months: 24                                  # edge_plan section 6 (H2/H3); EVALUATED ON DEV ONLY this run -
+                                                  # validation/holdout are locked and never requested
+  holm: adjusted across hypotheses tested (applies once more families run)
+
+decision:
+  pass: >-
+    dev evidence only - eligible to ASK for a validation read, which needs
+    Verifier sign-off, Aaron's steps (ops/edge_threat_model.md) and a frozen,
+    pushed prereg commit
+  fail: >-
+    any pass-bar miss on BOTH variants retires the H3_52w_high family
+    permanently (no re-test under a new name; H4 doctrine)
+
+reporting:
+  - "headline: primary pass/fail with alpha_t, alpha_m, n_events, n_trades, months"
+  - secondary_top20 with the same stats
+  - >-
+    construction outputs (not gated): monthly pool sizes, warm-up profile of
+    the 252-bar floor in 2015, ADV20 / no-fill drop counts, December truncation
+  - era split by calendar year (stability; era_max_share gate)
+  - >-
+    turnover and cost drag (the 2016-19 diagnostic read ~85%/mo - a cost
+    story even if the gross signal were alive)
+  - >-
+    honest caveats: the dev window is entirely POST-publication (JF 2004) -
+    publication decay is IN this window, which is the skeptical prior; price
+    depth starts ~2014-04 so 2015 pools warm up (skipped months counted);
+    div-unadjusted signal vs adjusted returns is the published convention,
+    not a data slip; single-market (S&P) large caps - no small-cap effect
