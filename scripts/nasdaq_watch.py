@@ -6,7 +6,9 @@ Filings (subcommand `filings`, daily):
   2. Refresh EODHD live list (1 req) -> diff vs universe/nasdaq_price_roster.json:
        new listings  -> add to live roster + watchlist + queue-enum + Yahoo 10y init
        delistings    -> move to dead roster + EODHD dead-price pull
-       SKIPPED when env EODHD_DISABLED=1 (Aaron 2026-10-28; unit drop-in).
+       When EODHD_DISABLED=1: same diff via NASDAQ Trader nasdaqlisted.txt
+       (free); new listings still get Yahoo 10y init; delistings get no
+       EODHD dead-tier fill (Aaron 2026-10-28; unit drop-in).
   3. Re-scan CURRENT + PREVIOUS quarter full-index master.idx (2 req) — one
      request each covers EVERY company's new filings (subsumes daily-index).
      Rows append to universe/nasdaq_filing_queue.jsonl (accn-idempotent).
@@ -46,6 +48,51 @@ def _now():
 
 def note(msg):
     print(f"[{_now()}] {msg}", flush=True)
+
+
+def _nasdaqlisted_equity_name(name):
+    """True for common/ordinary/ADR-like names; False for warrant/unit/right/pref/note."""
+    nl = (name or "").lower()
+    for tok in ("warrant", " unit", "- unit", "units of", "units)",
+                "right", "preferred", " note", "bond", "debenture",
+                "depositary share"):  # preferred depositaries (ACGLN etc.)
+        if tok in nl:
+            return False
+    # Require a positive equity marker (drops blank footer / odd rows).
+    return any(k in nl for k in (
+        "common", "ordinary", "american depositary", "ads"))
+
+
+def nasdaqlisted_commons(equity_only=True):
+    """Active NASDAQ names from NASDAQ Trader SymbolDirectory (free FTP).
+
+    Drops test/ETF/defunct statuses (same as nasdaq_bulk.cmd_list). When
+    equity_only=True (default), also drops warrant/unit/right/preferred/note
+    by Security Name so the live price roster stays common-like (EODHD used
+    Type==Common Stock). Used when EODHD_DISABLED so new commons still get
+    Yahoo 10y init without eodhd.com.
+    """
+    import csv
+    import io
+    url = "ftp://ftp.nasdaqtrader.com/SymbolDirectory/nasdaqlisted.txt"
+    raw = urllib.request.urlopen(url, timeout=120).read().decode("utf-8", errors="ignore")
+    bad = {"D", "E", "Q", "H"}
+    live, names = set(), {}
+    for row in csv.DictReader(io.StringIO(raw), delimiter="|"):
+        if (row.get("Test Issue") == "Y" or row.get("ETF") == "Y"
+                or row.get("Financial Status") in bad):
+            continue
+        sym = (row.get("Symbol") or "").strip().upper()
+        # Footer line is "File Creation Time: ..." — not a ticker.
+        if not sym or " " in sym or not all(c.isalnum() or c in ".-" for c in sym):
+            continue
+        nm = (row.get("Security Name") or "").strip()[:80]
+        if equity_only and not _nasdaqlisted_equity_name(nm):
+            continue
+        live.add(sym)
+        names[sym] = nm
+    return live, names
+
 
 def queue_append(rows):
     have = set()
@@ -125,12 +172,65 @@ def cmd_filings():
     eodhd_off = os.environ.get("EODHD_DISABLED", "").strip().lower() in (
         "1", "true", "yes", "on")
     if eodhd_off:
+        # Free roster diff via NASDAQ Trader (no eodhd.com). New listings still
+        # get Yahoo 10y init. Delistings move to dead roster WITHOUT EODHD
+        # dead-tier price fill (documented gap; archive h1_universe stays).
         roster = load_json(ROSTER, [])
+        rost_codes = {x["ticker"] for x in roster}
         dead = load_json(DEAD_ROSTER, [])
-        note("EODHD_DISABLED set — skipping EODHD roster diff "
-             "(no eodhd.com calls; roster left unchanged)")
-        lines.append("eodhd: skipped (EODHD_DISABLED)")
-        note(f"roster: {len(roster)} live, {len(dead)} dead (unchanged)")
+        dead_codes = {x["ticker"] for x in dead}
+        try:
+            live_eq, names = nasdaqlisted_commons(equity_only=True)
+            live_all, _ = nasdaqlisted_commons(equity_only=False)
+        except Exception as e:
+            note(f"NASDAQ listed fetch FAILED ({e}) — leaving roster unchanged")
+            lines.append("eodhd: skipped; nasdaqlisted: FAILED")
+            live_eq, live_all, names = None, None, {}
+        if live_eq is not None and len(live_all) < 2000:
+            note(f"NASDAQ listed suspiciously small ({len(live_all)}) — "
+                 "leaving roster unchanged")
+            lines.append(f"eodhd: skipped; nasdaqlisted: too_small={len(live_all)}")
+            live_eq = None
+        if live_eq is not None:
+            # Add equity-like names not yet on roster/dead.
+            new_listings = sorted(live_eq - rost_codes - dead_codes)
+            for t in new_listings:
+                roster.append({"ticker": t, "symbol": f"{t}.US", "dead": False})
+                dead[:] = [x for x in dead if x["ticker"] != t]
+                if t not in tkset:
+                    tkset.add(t)
+                    tk.append(t)
+                    m.setdefault(t, m.get(t, ""))
+                with open(WATCH, "a") as f:
+                    f.write(t + "\n")
+                note(f"NEW LISTING {t}: added to live roster+watchlist "
+                     f"(10y Yahoo init; source=nasdaqlisted)")
+                os.system(f"cd {ROOT} && python3 scripts/price_pull.py pull {t} "
+                          f"--backfill 10y >> logs/nasdaq-price-new.log 2>&1")
+            # Gone from nasdaqlisted entirely -> dead roster; no EODHD dead pull.
+            # Use live_all (not equity filter) so preferred/warrant roster rows
+            # are not false-delisted by the equity_only name filter.
+            delist = sorted(rost_codes - live_all)
+            for t in delist:
+                ci = m.get(t, "")
+                dead.append({"ticker": t, "symbol": f"{t}.US", "dead": True,
+                             "cik": ci, "name": names.get(t, "")[:80],
+                             "last_filing": _now()[:10],
+                             "dead_price": "none_eodhd_disabled"})
+                roster[:] = [x for x in roster if x["ticker"] != t]
+                note(f"DELISTED {t}: moved to dead roster "
+                     "(no EODHD dead-tier fill; EODHD_DISABLED)")
+            save_json(ROSTER, roster)
+            save_json(DEAD_ROSTER, dead)
+            lines.append(
+                f"eodhd: skipped; nasdaqlisted new={len(new_listings)} "
+                f"delisted={len(delist)} (no dead-tier EODHD)")
+            note(f"roster: {len(roster)} live, {len(dead)} dead "
+                 f"(via nasdaqlisted; EODHD_DISABLED)")
+        else:
+            roster = load_json(ROSTER, [])
+            dead = load_json(DEAD_ROSTER, [])
+            note(f"roster: {len(roster)} live, {len(dead)} dead (unchanged)")
     else:
         key = open(os.path.join(ROOT, ".eodhd_key")).read().strip().split("=", 1)[-1].strip()
         dl_live = json.loads(urllib.request.urlopen(  # sec-throttle: non-SEC (EODHD)

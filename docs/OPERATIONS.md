@@ -291,9 +291,16 @@ final pull. Do not change the subscription from the box.
 Aaron: EODHD not needed — backtest data already collected; do not renew `.eodhd_key`.
 `nasdaq-watch-filings.service` sets `Environment=EODHD_DISABLED=1` via drop-in
 `~/.config/systemd/user/nasdaq-watch-filings.service.d/20-eodhd-disabled.conf`.
-`nasdaq_watch.py filings` then skips the EODHD roster-diff branch (no `eodhd.com`
-calls) and still runs CIK-map refresh, quarter master.idx re-scan, drain, parse.
-Yahoo price watch (`nasdaq-watch-price`) was never on EODHD. Manual EODHD scripts
-are unchanged but will 401 until a key is restored (do not restore without Aaron).
+`nasdaq_watch.py filings` then **skips eodhd.com** and diffs the live roster against
+**NASDAQ Trader** `ftp://ftp.nasdaqtrader.com/SymbolDirectory/nasdaqlisted.txt`
+(free; same source as `nasdaq_bulk.py list`). New commons still get Yahoo
+`--backfill 10y` init into `raw/price/<T>.json`. Delistings move to
+`nasdaq_dead_roster.json` **without** an EODHD dead-tier price fill (gap).
+CIK-map refresh, quarter master.idx re-scan, drain, and parse still run.
+Yahoo grow-forward (`nasdaq-watch-price`, Mon–Fri 18:30) was never on EODHD.
+Pinned archive: `raw/price/EODHD_MANIFEST.json` + `raw/price/h1_universe/` +
+`ops/data/EODHD_MANIFEST.sha256` — do not delete. Health:
+`ops/checks/check_price_compile.py`. Manual EODHD scripts unchanged but will 401
+until a key is restored (do not restore without Aaron).
 Revert: remove the drop-in and `systemctl --user daemon-reload`.
 

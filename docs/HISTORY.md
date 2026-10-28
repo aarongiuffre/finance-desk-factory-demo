@@ -158,4 +158,4 @@ One-liners with commit hashes; deep dives live where noted.
 
 ## 2026-10-28 — EODHD dropped from nightly nasdaq-watch-filings
 
-Aaron via VP: do not renew EODHD. Gate `EODHD_DISABLED=1` in unit drop-in; `nasdaq_watch.py` skips roster diff. CIK + quarter scan + drain remain. Evidence: `/workspace/finance/desk-status-20261028/eodhd-drop/` on Finance Bot box.
+Aaron via VP: do not renew EODHD. Gate `EODHD_DISABLED=1` in unit drop-in; roster diff via NASDAQ Trader nasdaqlisted.txt (Yahoo 10y init for new listings); no EODHD dead-tier fill on delist. CIK + quarter scan + drain remain. Archive h1_universe + EODHD_MANIFEST kept. Evidence: `/workspace/finance/desk-status-20261028/eodhd-drop/`.
