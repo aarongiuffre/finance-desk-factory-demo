@@ -1,0 +1,77 @@
+# PRE-REGISTRATION - EW3_ch2_skew_smoke (thin Ch2 smoke, IV/skew cells).
+# Written 2026-10-28 BEFORE any tune run.  Per the brief: at most 2-3 SIMPLE
+# Ch2-style cells that need IV/skew, SPY only; inventory-only Ch2 families
+# that need full OPRA stay BLOCKED stubs and are NOT invented here.  Does not
+# re-open any retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, prior F151_*).
+hypothesis: EW3_ch2_skew_smoke
+family: EW3_ch2_skew_smoke
+kind: hypothesis
+literature: >-
+  Ch2-style IV/skew smoke cells (risk-reversal / skew-timing family): the
+  25-delta risk reversal as a STATE variable - steep skew (very negative rr)
+  as a risk-off/timing signal, and mean-reversion of the rr level around its
+  trailing norm.  These are smoke cells: the question is whether SPY skew
+  state has ANY timing value on this tape, not a full strategy build.
+prior: >-
+  SKEPTICAL.  (a) Skew-timing literature is mixed: steep equity skew
+  coincides with elevated IV and drawdowns, but as a daily timing state it
+  is slow-moving and often LATE (steep after the fall).  (b) rr mean
+  reversion fights the persistent negative skew level; the z-band book
+  spends most days flat (few trades - G4 risk).  (c) Both cells share the
+  same rr z signal - they are smoke of ONE idea, not independent evidence.
+fold: dev
+window:
+  data_start: "2015-01-01 tune start; surface warmup reads 2013-12-01.. (trailing history only)"
+  data_end: "2017-12-31 tune cap (parquet loader HARD-FILTERS date <= cap)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this
+    run.  Same DQ guard, surface, costs and gates as EW3_w2d_skew (shared
+    definitions, NOT shared cells).
+data:
+  options: raw/options/spy/options.parquet (same tape as EW3_w2d_skew)
+  underlying: raw/options/spy/underlying.parquet
+  prices: >-
+    skew_timing uses the DESK SPY and AGG fold tapes via ew3_lib loaders
+    (same tier order and 2017-12-31 cap as EW3_etf_premium).
+signal:
+  z: >-
+    z_t = (rr_t - mean252(rr)) / sd252(rr), min_periods 200, on the daily
+    surface rr; decision at close t-1 (early mutant uses day t).
+data_quality_guard: shared with EW3_w2d_skew (same DQ1-DQ4, tune window only).
+cells:
+  rr_z_meanrev: >-
+    State-driven delta-hedged RR: state +1 when z <= -1 (skew rich/steep ->
+    long RR, expecting rr mean reversion toward the trailing norm), -1 when
+    z >= +1 (skew flat/rich on the call side -> short RR), 0 else.  Enter at
+    the close when the state becomes nonzero; exit when the state returns to
+    0 or flips sign; force-exit at dte <= 2 of the held expiration (re-entry
+    allowed the next session if the state persists).  Delta-hedged daily
+    (same hedge/cost model as EW3_w2d_skew).  Returns per unit notional =
+    SPY close at entry.  G4 floor 8 positions.
+  skew_timing: >-
+    Exposure switch: hold SPY while z > -1, switch the WHOLE book to AGG
+    while z <= -1 (steep skew = defensive).  Decision at close t-1 (early
+    mutant day t); 20 bps/side on switch days (mirrors EW3_etf_premium
+    z_timing).  G4 floor 8 switch days.
+total_cells: 2 (whole preregistered budget; no post-hoc cells)
+costs: shared with EW3_w2d_skew (half-spread fills + 20 bps/side hedge
+  turnover; skew_timing 20 bps/side switches).  G6 stress = 2x all costs.
+gates: shared with EW3_w2d_skew (G1 replay cuts + early mutant; G2 year share
+  <= 0.40 AND episode share <= 0.25 - rr_z_meanrev episode = one position,
+  skew_timing episode = one contiguous in-SPY span; G3 2/3 thirds; G4 floors;
+  G5 Sharpe >= 0.8 AND CAGR > 0; G6 2x-costs CAGR > 0).
+family_decision_rule: >-
+  Shared DQ guard fails -> BLOCKED at tune, no cells.  DQ passes -> KEEP_TUNE
+  iff AT LEAST ONE cell passes G1-G6; otherwise KILL at tune (smoke result:
+  the skew state has no tradeable timing value on this tape).
+verdict_policy:
+  - "DQ fail -> BLOCKED.md + dq_guard.json; no cells, no go ask."
+  - "0 survivors (DQ pass) -> KILL at tune; holdout unread."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing
+    dev go before any scored DEV run; SURVIVORS.md updated."
+data_walls: >-
+  * Inventory-only Ch2 families that need full OPRA (intraday chains, gamma
+  scalping, order-book strategies) stay BLOCKED stubs - this prereg adds
+  NOTHING for them and invents no data.
+  * Both cells share one signal (rr z) - the family is a smoke test of a
+  single idea and is labeled as such.

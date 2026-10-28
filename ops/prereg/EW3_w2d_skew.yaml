@@ -1,0 +1,106 @@
+# PRE-REGISTRATION - EW3_w2d_skew (rebuild of W2d_skew, book section 7.5).
+# Written 2026-10-28 BEFORE any tune run.  This replaces the BLOCKED stub
+# ops/prereg/W2d_skew.yaml (Deribit path, data-starved 2026-10-28) with a
+# runnable equity/ETF-IV version on the FREE MIT options parquet (Aaron
+# chat-tap via VP 2026-10-28; GitHub mirror of philippdubach data; QC PASS at
+# raw/options/QC.md).  It does NOT re-open the WAVE2 Deribit path and does not
+# re-open any retired name (H1-H3, PRIMARY H4-H9, W2a-W2c, Eq_*, prior F151_*;
+# W2d_vol_rp stays KILLed - a different mechanism, DVOL variance accrual).
+hypothesis: EW3_w2d_skew
+family: EW3_w2d_skew
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies 7.5 (volatility skew - long risk
+  reversal: buy the OTM call, sell the equidistant OTM put, capturing put IV >
+  call IV).  Book 7.5 has NO backtests; none are invented here - the prereg
+  tests the literal mechanism on listed SPY options IV.
+prior: >-
+  SKEPTICAL, honestly two-sided.  (a) The 25-delta skew IS persistently
+  negative on SPY (probe 2013-12..2017-12: rr median -5.9 vol pts), so a long
+  RR book collects it only if the skew PERSISTS or mean-reverts from rich
+  levels - it is a vol-surface bet, not a free lunch.  (b) The unhedged cell
+  is mostly long-delta beta (RR net delta ~ +0.5); the delta-hedged cell is
+  the clean test and option-hedged skew capture historically earns little
+  after costs.  (c) Tape spreads are real: median relative spread ~4.2%
+  (call) / 2.8% (put) - a monthly round trip pays ~2 half-spreads per leg,
+  roughly 8-10 bp of notional per cycle before the hedge.  (d) Window is
+  3y and calm-regime-heavy (G2 risk).
+fold: dev
+window:
+  data_start: "2015-01-01 tune start; surface warmup reads 2013-12-01.. (trailing history only)"
+  data_end: "2017-12-31 tune cap (parquet loader HARD-FILTERS date <= cap; 2018+ row groups never decompressed)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this run.
+    G1 replay truncation recomputes the surface from a date-capped read at
+    4 fraction cuts + the loader-cap cut.
+data:
+  options: >-
+    raw/options/spy/options.parquet (daily per-contract snapshots: bid/ask,
+    mark, IV, delta, volume, OI; QC PASS raw/options/QC.md, sha256-verified).
+    SPY only this run - QQQ/IWM cells intentionally omitted to keep the
+    preregistered cell budget tight (tape exists if a later prereg wants it).
+  underlying: raw/options/spy/underlying.parquet (as-traded close + dividend
+    amount; SPY has no splits in-window).
+signal:
+  surface: >-
+    Per snapshot date: the expiration with DTE in [25, 45] calendar days
+    closest to 35; the CALL strike whose delta is nearest +0.25 and the PUT
+    strike whose delta is nearest -0.25; rr = IV_call - IV_put (put IV > call
+    IV -> rr negative).  Days with no eligible expiration are absent (DQ
+    counts them).
+data_quality_guard: &dq >-
+  Evaluated BEFORE any cell runs, on the tune window only.  If ANY fails ->
+  family verdict BLOCKED at tune (data wall documented), NO cells run:
+  DQ1 coverage: >= 99% of tune sessions have a surface row; max consecutive
+      missing run <= 5 sessions.
+  DQ2 delta-band hit: nearest-strike delta within 0.05 of +0.25 (call) and
+      -0.25 (put) on >= 90% of surface rows.
+  DQ3 IV sanity: both selected-leg IVs in [0.01, 3.0] on >= 99.5% of rows;
+      rr finite everywhere.
+  DQ4 quote sanity: ask >= bid >= 0 and mid > 0 on >= 99.5% of selected
+      legs; median relative spread <= 10% per leg.
+cells:
+  rr_static_dh: >-
+    UNCONDITIONAL long 25-delta risk reversal, delta-hedged: cycles start
+    every 21 sessions of the tune calendar; at the entry close buy 1 call /
+    sell 1 put at the preselected strikes (mid), hold exactly 21 sessions,
+    exit at mid.  Daily delta hedge h = -(delta_call - delta_put) shares
+    rebalanced at close (desk 20 bps/side on turnover notional); hedge
+    dividends credited/paid on ex-div sessions.  Returns per unit notional =
+    SPY close at entry.  G4 floor 24 cycles.
+  rr_static_unhedged: >-
+    Identical to rr_static_dh with h = 0 (no hedge, no hedge costs) - the
+    literal book-7.5 directional flavor.  G4 floor 24 cycles.
+total_cells: 2 (whole preregistered budget; no post-hoc cells)
+costs: &costs >-
+  Entry/exit at mid; execution cost = half-spread per leg per fill from the
+  tape (4 half-spread fills per closed cycle).  Hedge turnover 20 bps/side
+  on spot notional.  NO margin interest, NO borrow fee on the short put leg,
+  NO early-exercise modeling (paper limitations, disclosed).  G6 stress = 2x
+  ALL costs (option half-spreads AND hedge turnover).
+gates: &gates >-
+  Standard six gates per cell: G1 lookahead - replay truncation at 4 slice
+  cuts + loader-cap cut (pnl through the cut identical) AND a decision-early
+  mutant (strike selection from the last surface row strictly before the
+  entry session, within 12 calendar days; book must DIFFER).  G2 - max
+  calendar-year share of net pnl <= 0.40 AND max episode share of gross
+  <= 0.25 (episode = one RR cycle).  G3 - 2 of 3 thirds net-positive.  G4 -
+  per-cell floors above.  G5 - net Sharpe >= 0.8 AND net CAGR > 0.  G6
+  stress - net CAGR > 0 at 2x costs.
+family_decision_rule: >-
+  DQ guard fails -> BLOCKED at tune (data wall), no cells.  DQ passes ->
+  KEEP_TUNE iff AT LEAST ONE cell passes G1-G6; otherwise KILL at tune.
+  Tape-quality failure MID-RUN -> STOP, BLOCKED.md, escalate VP (no spend
+  ask).
+verdict_policy:
+  - "DQ fail -> BLOCKED.md + dq_guard.json; no cells, no go ask."
+  - "0 survivors (DQ pass) -> KILL at tune; holdout unread."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing
+    dev go before any scored DEV run; SURVIVORS.md updated."
+data_walls: >-
+  * The tape is ONE daily snapshot per contract (no intraday) - fills are
+  modeled at the daily mid with half-spread cost; intraday path and pin risk
+  at expiration are NOT modeled (disclosed).
+  * No American-exercise modeling on the short put (SPY options are American;
+  early exercise on a 25-delta put over 21 sessions is rare but nonzero).
+  * QQQ/IWM not run (preregistered omission, see data).
