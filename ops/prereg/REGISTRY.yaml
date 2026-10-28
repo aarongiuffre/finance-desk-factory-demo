@@ -55,9 +55,9 @@ families:
                                  # quintiles, 63d hold); scored DEV KILLED 2026-10-28
     hypotheses: [H2_lazy_prices]
   H3_52w_high:
+    retired: true                # failed its pre-registered scored DEV 2026-10-28 (primary top_quintile alpha_t_nw -3.42, secondary top20 -5.49; pass bar needs >= 3; trial under freeze 80697f97)
     kind: hypothesis             # registered 2026-10-28 (VP GO H3, ~10:40 ET); dev-only;
                                  # prereg H3_52w_high.yaml - George & Hwang (2004, JF)
                                  # close/52w-high proximity, monthly top-quintile + top-20,
-                                 # 21d hold, PIT S&P universe; scored run NOT YET RUN
-                                 # (needs a standing dev go naming the code freeze)
+                                 # 21d hold, PIT S&P universe; scored DEV KILLED 2026-10-28
     hypotheses: [H3_52w_high]

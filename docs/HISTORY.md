@@ -21,6 +21,18 @@ One-liners with commit hashes; deep dives live where noted.
 
 ## 2026-10
 
+- 2026-10-28 — H3_52w_high KILLED at its pre-registered scored DEV (standing
+  go signed finance-go, freeze 80697f97…, max_dev_trials 3). Primary
+  top_quintile: alpha_t_nw −3.42, alpha_m −0.59%, 5,600 events / 59 months;
+  secondary top20: alpha_t_nw −5.49, alpha_m −0.87%, 1,175 events. Both miss
+  alpha_t>=3 and every other pass-bar check except min_events (net excess vs
+  SPY/EW failed; significantly negative). Kill doctrine: H3_52w_high family
+  retired permanently, no re-test. Evidence:
+  logs/edge/h3_52w_high/{h3_summary.json,KILL.md};
+  logs/edge/20261028T1051*-h3_*/; go at
+  logs/approvals/go/H3_52w_high.dev.json(+.sig). Edge plan H1→H2→H3 closed
+  (all KILL on DEV).
+
 - 2026-10-28 — H2_lazy_prices KILLED at its pre-registered scored DEV (standing
   go signed finance-go, freeze 370d41f3…, max_dev_trials 3). Primary
   full_cos_q5: alpha_t_nw 1.16, alpha_m +0.29%, 11,213 events / 58 months;
