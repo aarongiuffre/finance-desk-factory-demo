@@ -1476,3 +1476,46 @@ families:
     kind: hypothesis
     hypotheses: [F151_20_3_cashflow_brownfield]
 
+  EW3_gap_fade:                # NEW EDGE WAVE A/B/C (Aaron GO via VP 2026-10-28):
+    kind: hypothesis           # Track A event/microstructure friction.  Overnight
+                               # gap fade on SPY daily OHLC (down-gap long fade /
+                               # up-gap short fade, 1%/2% thresholds, h1/h5 holds,
+                               # 1/5 book per event, max 5 concurrent).  FREE tape
+                               # only; prereg committed BEFORE any run; tune
+                               # 2015-01-01..2017-12-31; holdout unread.
+    hypotheses: [EW3_gap_fade]
+  EW3_etf_premium:             # NEW EDGE WAVE A/B/C: Track A ETF premium/discount
+    kind: hypothesis           # vs NAV proxy (SPY close vs ^GSPC/10 ratio; no
+                               # free NAV feed - preregistered DATA-QUALITY
+                               # GUARD decides BLOCKED-at-tune vs cells).  FREE
+                               # tape only; prereg BEFORE any run; tune
+                               # 2015-01-01..2017-12-31; holdout unread.
+    hypotheses: [EW3_etf_premium]
+  EW3_earn_drift:              # NEW EDGE WAVE A/B/C: Track A earnings drift (PEAD)
+    blocked: true              # COVERED STUB at prereg (0 cells, no run): the
+                               # same mechanism is F151_3_2_earnings_mom
+                               # (retired: true, KILL 0/4 at tune 2026-10-28 -
+                               # PIT EDGAR SUE decile DN, best net Sharpe -0.42).
+                               # Re-testing a retired family under a new name is
+                               # forbidden; unblock ONLY via rewriting THIS prereg
+                               # in place if a genuinely different mechanism +
+                               # data layer appears (e.g. free PIT calendar with
+                               # announcement time).  Evidence
+                               # logs/edge/EW3_earn_drift/BLOCKED.md (cross-ref).
+    kind: covered_stub
+    covered_by: F151_3_2_earnings_mom
+    hypotheses: [EW3_earn_drift]
+  EW3_reit_time_rs:            # NEW EDGE WAVE A/B/C: Track B REIT sector-timing
+    kind: hypothesis           # (F151_16_3 lesson - timing, NOT always-on).
+                               # Industrial/infra baskets when RS63 vs SPY > 0,
+                               # else SPY/AGG; monthly decisions; G2 year share
+                               # <= 0.40 HARD (no exemption - the 16_3 skeptic
+                               # gate).  Paper only; prereg BEFORE any run; tune
+                               # 2015-01-01..2017-12-31; holdout unread.
+    hypotheses: [EW3_reit_time_rs]
+  EW3_reit_time_trend:         # NEW EDGE WAVE A/B/C: Track B REIT sector-timing,
+    kind: hypothesis           # absolute-trend state (basket vs own 200s SMA,
+                               # else AGG).  Same G2-hard skeptic gate.  Paper
+                               # only; prereg BEFORE any run; tune
+                               # 2015-01-01..2017-12-31; holdout unread.
+    hypotheses: [EW3_reit_time_trend]

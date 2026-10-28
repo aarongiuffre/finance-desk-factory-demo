@@ -1,0 +1,84 @@
+# PRE-REGISTRATION - EW3_gap_fade (NEW EDGE WAVE A/B/C, Aaron GO via VP 2026-10-28).
+# Written 2026-10-28 BEFORE any tune run.  New EW3_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, prior F151_* all closed).
+# Track A candidate (event / microstructure friction).  FREE Yahoo daily bars only;
+# paper only; no spend.  The book/source has no performance claims attributed below.
+hypothesis: EW3_gap_fade
+family: EW3_gap_fade
+kind: hypothesis
+literature: >-
+  Overnight-gap fade: the classic microstructure observation that large opening
+  gaps partially retrace by the close (order-book / dealer inventory rebalancing
+  after the overnight information shock).  No named paper is being tested; the
+  family tests the MECHANISM on the only free tape (daily OHLC).
+prior: >-
+  SKEPTICAL, two-sided.  Down-gap fade is the documented direction (gap-down days
+  partially recover); up-gap fade (shorting gap-ups) fights next-day momentum and
+  is expected weaker/negative.  Desk cost floor 20 bps/side makes a same-day
+  round trip 40 bps - a small mean-reversion edge may be cost-dead by construction.
+  Whole tune window is post-publication for gap phenomena (decay is IN the test).
+signal: >-
+  gap_t = open_t / close_{t-1} - 1 on SPY daily bars (close = 'c' raw close;
+  SPY has NO splits in the window - verified against raw/splits/SPY.json at
+  pull; preregistered BLOCKED if a split exists in-window since 'o'/'c' would
+  be basis-mixed).  A gap event fires when |gap_t| >= threshold (1% cells) or
+  the tighter 2% threshold (2% cells).  DOWN cells: gap <= -thr -> LONG at the
+  open (fade up).  UP cells: gap >= +thr -> SHORT at the open (fade down).
+  Holds: h1 = exit at the SAME session close; h5 = exit at the close 4 sessions
+  later (5-session hold).  Total-return accounting: entry TR price =
+  o_t * (a_t/c_t), exit TR price = a_{t+k} (a = adjclose total return), so
+  h1 = c_t/o_t - 1 exactly and h5 carries dividends.
+book_accounting: >-
+  Each event sized at 1/5 of book (w = 0.20); deterministic chronological
+  queue: an event is SKIPPED if 5 events are already active (max 5 concurrent,
+  book fully invested at most).  Daily book pnl = sum of active events'
+  w * event_return(d).  Costs: 20 bps/side (desk large-bucket floor, SPY is the
+  most liquid tape on the desk - floor is conservative-HIGH, documented) on
+  entry notional at the entry day and exit notional at the exit day.
+cells:
+  down1_h1: "gap <= -1%, long, hold to close"
+  down1_h5: "gap <= -1%, long, hold 5 sessions"
+  up1_h1: "gap >= +1%, short, hold to close"
+  up1_h5: "gap >= +1%, short, hold 5 sessions"
+  down2_h1: "gap <= -2%, long, hold to close"
+  up2_h1: "gap >= +2%, short, hold to close"
+total_cells: 6 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 60 gap events per cell over the tune window (entries + exits are 2x that)"
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing history)"
+  data_end: "2017-12-31 tune cap (loaders cap bars at the cap)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this run.
+    Loader tier order folds/dev/raw/price/sp_exits > folds/dev/raw/price >
+    raw/price; every loader caps bars at 2017-12-31.
+data:
+  prices: >-
+    SPY daily bars from the fold tier order (Yahoo chart v8 desk pulls).  Fields
+    used: o (open), c (raw close), a (adjclose total return).  SPY no-split
+    in-window verified at pull; the raw close 'c' equals the as-traded close.
+costs: &costs >-
+  20 bps/side on event notional (entry day + exit day).  G6 stress at 2x
+  per-side costs (40 bps/side).
+gates: &gates >-
+  Standard F151 daily gates per cell: G1 lookahead - replay truncation at 4
+  slice cuts + loader-cap cut (pnl through the cut identical) AND a
+  decision-early mutant (signal = previous session's gap; book must DIFFER).
+  G2 - max calendar-year share of net pnl <= 0.40 AND max per-event share of
+  gross <= 0.25.  G3 - 2 of 3 thirds net-positive.  G4 - >= 60 events per cell.
+  G5 - net Sharpe >= 0.8 AND net CAGR > 0.  G6 stress - net CAGR > 0 at 2x
+  per-side costs.
+family_decision_rule: >-
+  KEEP_TUNE iff AT LEAST ONE cell passes G1-G6 on the tune slice.  Otherwise
+  KILL at tune (KILL.md + REGISTRY retired: true, no go ask).
+verdict_policy:
+  - "0 survivors -> KILL at tune; holdout unread."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev
+    go (chat-tap or .sig) before any scored DEV run."
+data_walls: >-
+  * Daily OHLC only - the TRUE intraday fade mechanic (open-to-close path,
+  VWAP fills) is not observable free; the open fill is optimistic and is paid
+  for via the conservative-HIGH 20 bps/side floor.
+  * Single instrument (SPY): the family tests the index-ETF gap mechanic, not
+  single-name gap behavior (single-name shorts add borrow + locate walls).
+  * No splits in-window is a data precondition (preregistered BLOCKED if false).

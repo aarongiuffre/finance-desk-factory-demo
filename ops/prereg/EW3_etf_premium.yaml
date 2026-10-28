@@ -1,0 +1,89 @@
+# PRE-REGISTRATION - EW3_etf_premium (NEW EDGE WAVE A/B/C, Aaron GO via VP 2026-10-28).
+# Written 2026-10-28 BEFORE any tune run.  New EW3_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, prior F151_* all closed).
+# Track A candidate (ETF premium/discount vs NAV proxy).  FREE Yahoo daily bars
+# only (SPY + ^GSPC); paper only; no spend, no paid NAV feeds.
+hypothesis: EW3_etf_premium
+family: EW3_etf_premium
+kind: hypothesis
+literature: >-
+  ETF premium/discount: when an ETF's close deviates from its NAV, creation /
+  redemption arbitrage is expected to pull the premium back (bounded by the
+  creation-unit cost).  True NAV history is NOT free; the preregistered proxy
+  is the index ratio: prem_t = SPY_close_t / (SPX_close_t / 10) - 1.  SPY is
+  constructed so NAV ~ SPX/10 (fee drag ~9.5 bp/yr, a slow deterministic trend
+  absorbed by trailing z-scores).  SPX close = price index (no dividends);
+  SPY raw close 'c' is also ex-dividend - the ratio carries NO dividend drift.
+prior: >-
+  VERY SKEPTICAL, honestly two-sided.  (a) True SPY premium is normally a few
+  bp - at or below the quote granularity of the free tape (SPY prints $0.01 on
+  ~$200 = ~5 bp; Yahoo index closes carry their own rounding).  (b) What the
+  proxy measures may be dominated by tape artifacts, not real premia.  The
+  preregistered DATA-QUALITY GUARD below decides whether ANY cell runs: if the
+  free proxy cannot resolve a premium at its own noise floor, the family is
+  BLOCKED at tune (data wall documented), not run with a fake signal.
+data_quality_guard: &dq >-
+  Evaluated BEFORE any cell runs, on the tune window only:
+  DQ1 tape completeness: the ^GSPC tape covers >= 99% of SPY sessions in-window
+      (gaps > 5 sessions on either leg = hard error).
+  DQ2 no split basis-mixing: SPY has NO splits in-window (raw/splits/SPY.json
+      empty of in-window effects) - 'c' is the true as-traded close.
+  DQ3 noise floor: trailing-252-session z of prem is computed on a series whose
+      daily sd >= 3x the 5 bp quote-granularity floor (sd >= 15 bp) AND
+      median |prem| <= 50 bp (the series is a premium, not a diverging ratio).
+  If DQ1-DQ3 all pass -> run the cells.  If ANY fails -> family verdict BLOCKED
+  at tune with probes.txt evidence; NO cells run, no gates, no go ask.
+signal: >-
+  Decision daily at close t-1 (z shifted one session; decision-early mutant
+  uses day t).  z_t = (prem_t - mean252(prem)) / sd252(prem), min_periods 200.
+  Timing cells: hold SPY while z <= +z1 (default long), switch the WHOLE book
+  to AGG while z > +z1 (rich premium -> underweight).  Band cell: pos = +1 when
+  z <= -1, -1 when z >= +1, 0 else (premium mean-reversion, single instrument,
+  net exposure varies).  Drift between decisions; costs on |dW| at decision
+  days only.
+cells:
+  z_timing_1: "SPY/AGG switch at z1 = +1.0"
+  z_timing_2: "SPY/AGG switch at z1 = +2.0"
+  band_mr: "band position on SPY: +1 / -1 / 0 at |z| >= 1"
+total_cells: 3 (whole preregistered budget; no post-hoc cells)
+g4_floor: "band_mr >= 24 position-change days; z_timing cells >= 8 change days (switches only)"
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing history)"
+  data_end: "2017-12-31 tune cap (loaders cap bars at the cap)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this run.
+    Loader tier order folds/dev/raw/price/sp_exits > folds/dev/raw/price >
+    raw/price; every loader caps bars at 2017-12-31.
+data:
+  prices: >-
+    SPY (existing fold tape) + ^GSPC pulled ONCE, request-capped period2 =
+    2017-12-31 AT PULL TIME, stored raw/price/GSPC.json (Yahoo chart v8, desk
+    puller).  The index tape is never re-pulled past the cap this run.
+costs: &costs >-
+  20 bps/side on |dW| per decision day (SPY/AGG switch = full turn = 2x20bp;
+  band cell dpos * 20bp).  G6 stress at 2x per-side costs.
+gates: &gates >-
+  Standard F151 daily gates per cell: G1 lookahead - replay truncation at 4
+  slice cuts + loader-cap cut (pnl through the cut identical) AND a
+  decision-early mutant (z from day t; book must DIFFER).  G2 - max calendar-
+  year share of net pnl <= 0.40 AND max episode share of gross <= 0.25
+  (episodes = calendar months for the band cell; z_timing cells are
+  always-long-with-switches, episode = calendar month).  G3 - 2 of 3 thirds
+  net-positive.  G4 - per-cell floors above.  G5 - net Sharpe >= 0.8 AND net
+  CAGR > 0.  G6 stress - net CAGR > 0 at 2x per-side costs.
+family_decision_rule: >-
+  DQ guard fails -> BLOCKED at tune (data wall), no cells.  DQ passes ->
+  KEEP_TUNE iff AT LEAST ONE cell passes G1-G6; otherwise KILL at tune.
+verdict_policy:
+  - "DQ fail -> BLOCKED.md + probes.txt; no cells, no go ask."
+  - "0 survivors (DQ pass) -> KILL at tune; holdout unread."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev
+    go before any scored DEV run."
+data_walls: >-
+  * No free historical NAV feed: the proxy is the index ratio, so the family
+  tests SPY-vs-SPX tape dislocations, not certified NAV premia.  DQ3 is the
+  honest guard against running on tape noise.
+  * The one-instrument band cell cannot separate premium reversion from SPY
+  intraday-to-close drift - preregistered limitation; the z_timing cells are
+  the cleaner (exposure-switch) test.

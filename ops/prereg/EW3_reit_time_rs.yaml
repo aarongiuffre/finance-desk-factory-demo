@@ -1,0 +1,85 @@
+# PRE-REGISTRATION - EW3_reit_time_rs (NEW EDGE WAVE A/B/C, Aaron GO via VP 2026-10-28).
+# Written 2026-10-28 BEFORE any tune run.  New EW3_ family (Track B, REIT
+# sector-timing from the F151_16_3 lesson): does NOT re-open F151_16_3 or any
+# retired name.  The 16_3 survivors (type_ind / type_infra) PASSED G3+G5+G6 but
+# FAILED G2 year share (1.10 / 0.88 vs <= 0.40) because they are ALWAYS-ON
+# sector holds - a sector-cycle bet, not a timing edge.  THIS family is the
+# honest fix: time the same industrial / infra baskets, and G2 has NO exemption.
+# Paper / free public only; no spend.
+hypothesis: EW3_reit_time_rs
+family: EW3_reit_time_rs
+kind: hypothesis
+literature: >-
+  Sector-timing via relative strength: hold a sector basket only while it
+  outperforms the broad market over a trailing window, rotate to the broad
+  bond ETF otherwise.  Dual-momentum family (Antonacci-style absolute+relative)
+  applied to REIT property-type baskets.  No named book section is being
+  tested; the family tests whether TIMING fixes the 16_3 sector-cycle problem.
+prior: >-
+  SKEPTICAL with the 16_3 lesson preregistered as the skeptic gate: the failure
+  mode to guard is a rule that stays in the basket nearly always in 2016-17
+  (the industrial/tower boom years) and collects the same sector beta - it
+  would then fail G2 year share exactly like always-on 16_3.  A REAL timing
+  edge must (a) spend material time out of the basket, (b) spread net pnl
+  across years (G2 <= 0.40 hard), (c) still clear G5 Sharpe 0.8 net.  The
+  2015-2017 window contains a full REIT drawdown (late 2015 / early 2016) -
+  the timing rule has room to prove itself.
+signal: >-
+  Monthly decision at the last SPY session of each month (close t-1): RS63 =
+  (EW basket 63-session total return) - (SPY 63-session total return), computed
+  on the extended calendar.  If RS63 > 0 -> hold the EW basket (equal-weight,
+  drift between decisions); else -> hold the alternative leg (cell-defined:
+  SPY or AGG).  Decision at close t-1 earns day-t return.  Drift weights
+  between decisions; costs 20 bps/side on |dW| at decision days ONLY.
+cells:
+  ind_rs63_spy: "ind basket {PLD,STAG,FR} when RS63>0 else SPY"
+  ind_rs63_agg: "ind basket {PLD,STAG,FR} when RS63>0 else AGG"
+  infra_rs63_spy: "infra basket {AMT,CCI,SBAC,DLR} when RS63>0 else SPY"
+  infra_rs63_agg: "infra basket {AMT,CCI,SBAC,DLR} when RS63>0 else AGG"
+total_cells: 4 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 8 decision-change days per cell over the 36 monthly decisions
+  (a change day = decision day where the target leg differs from the current
+  holding; 16_3's 24/36 floor was for monthly EW rebalances where every month
+  is a trade - a bimodal timing state trades only on flips)"
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing history)"
+  data_end: "2017-12-31 tune cap (loaders cap bars at the cap)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this run.
+    Loader tier order folds/dev/raw/price/sp_exits > folds/dev/raw/price >
+    raw/price; every loader caps bars at 2017-12-31.
+data:
+  prices: >-
+    Fold/raw/price Yahoo chart v8 adjclose 'a' (total return) for PLD, STAG,
+    FR, AMT, CCI, SBAC, DLR (all on the desk tape through 2017-12-29, verified
+    2026-10-28), SPY (calendar), AGG.  Same loaders as f151c16_lib (NOT
+    reopened - shared infrastructure only).
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dW| per name at each decision day
+  where the book changes legs; no cost between decisions.  G6 stress at 2x
+  per-side costs.
+gates: &gates >-
+  Standard F151 daily gates per cell: G1 lookahead - replay truncation at 4
+  slice cuts + loader-cap cut (pnl through the cut identical) AND a
+  decision-early mutant (RS63 computed including day t; book must DIFFER).
+  G2 - max calendar-year share of net pnl <= 0.40 AND max episode share of
+  gross <= 0.25 - NO EXEMPTION (the 16_3 skeptic gate; episode = one
+  holding-period leg, i.e. contiguous basket-on or alt-on span).  G3 - 2 of 3
+  thirds net-positive.  G4 - >= 8 decision-change days.  G5 - net Sharpe >= 0.8
+  AND net CAGR > 0.  G6 stress - net CAGR > 0 at 2x costs.
+family_decision_rule: >-
+  KEEP_TUNE iff AT LEAST ONE cell passes G1-G6 on the tune slice.  Otherwise
+  KILL at tune (KILL.md + REGISTRY retired: true, no go ask).  A cell that
+  holds the basket >= ~85% of sessions AND fails G2 is preregistered as the
+  16_3 pattern recurring (report it as such - sector beta, not timing).
+verdict_policy:
+  - "0 survivors -> KILL at tune; holdout unread."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev
+    go before any scored DEV run."
+data_walls: >-
+  * Same ex-post-basket caveat as 16_3 (no PIT REIT classification tape) -
+  documented bias toward survivors, tape-faithful delist handling (none of the
+  7 names delisted in-window).
+  * RS63 on 3-4 name baskets is noisy relative to sector ETFs - accepted
+  because the family must test the 16_3 constituent baskets themselves.

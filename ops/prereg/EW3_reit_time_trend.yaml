@@ -1,0 +1,71 @@
+# PRE-REGISTRATION - EW3_reit_time_trend (NEW EDGE WAVE A/B/C, Aaron GO via VP
+# 2026-10-28).  Written 2026-10-28 BEFORE any tune run.  New EW3_ family (Track
+# B, REIT sector-timing from the F151_16_3 lesson): does NOT re-open F151_16_3
+# or any retired name.  Companion to EW3_reit_time_rs with an ABSOLUTE trend
+# state instead of relative strength.  Paper / free public only; no spend.
+hypothesis: EW3_reit_time_trend
+family: EW3_reit_time_trend
+kind: hypothesis
+literature: >-
+  Absolute-trend timing: hold a sector basket only while it trades above its
+  own trailing 200-session moving average (the desk's standing regime variable),
+  rotate to the broad bond ETF otherwise.  The 200d SMA regime is the desk's
+  existing tape-confirmation lens (ta.py), here tested as a REIT basket TIMER.
+prior: >-
+  SKEPTICAL with the same preregistered 16_3 skeptic gate as EW3_reit_time_rs:
+  G2 year share <= 0.40 hard, no exemption.  Risk preregistered: 200d trend
+  rules are slow - in a 3-year window with one 2015-16 REIT drawdown the rule
+  may (a) whipsaw the crossing (cost death) or (b) barely leave the basket
+  (fails G2/G4 like always-on).  Both failure modes are informative.
+signal: >-
+  Monthly decision at the last SPY session of each month (close t-1): state =
+  (EW basket rebased adjclose at t-1) > (its own trailing 200-session SMA).
+  If state true -> hold the EW basket (equal-weight, drift between decisions);
+  else -> hold AGG.  Decision at close t-1 earns day-t return.  Costs 20 bps/
+  side on |dW| at decision days ONLY.
+cells:
+  ind_sma200_agg: "ind basket {PLD,STAG,FR} when above its 200s SMA else AGG"
+  infra_sma200_agg: "infra basket {AMT,CCI,SBAC,DLR} when above its 200s SMA else AGG"
+total_cells: 2 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 8 decision-change days per cell over the 36 monthly decisions"
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing history)"
+  data_end: "2017-12-31 tune cap (loaders cap bars at the cap)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this run.
+    Loader tier order folds/dev/raw/price/sp_exits > folds/dev/raw/price >
+    raw/price; every loader caps bars at 2017-12-31.
+data:
+  prices: >-
+    Fold/raw/price Yahoo chart v8 adjclose 'a' (total return) for PLD, STAG,
+    FR, AMT, CCI, SBAC, DLR, SPY (calendar), AGG.  Same loaders as f151c16_lib
+    (NOT reopened - shared infrastructure only).
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dW| per name at each decision day
+  where the book changes legs; no cost between decisions.  G6 stress at 2x
+  per-side costs.
+gates: &gates >-
+  Standard F151 daily gates per cell: G1 lookahead - replay truncation at 4
+  slice cuts + loader-cap cut (pnl through the cut identical) AND a
+  decision-early mutant (state computed including day t; book must DIFFER).
+  G2 - max calendar-year share of net pnl <= 0.40 AND max episode share of
+  gross <= 0.25 - NO EXEMPTION (the 16_3 skeptic gate; episode = one
+  holding-period leg).  G3 - 2 of 3 thirds net-positive.  G4 - >= 8
+  decision-change days.  G5 - net Sharpe >= 0.8 AND net CAGR > 0.  G6 stress -
+  net CAGR > 0 at 2x costs.
+family_decision_rule: >-
+  KEEP_TUNE iff AT LEAST ONE cell passes G1-G6 on the tune slice.  Otherwise
+  KILL at tune (KILL.md + REGISTRY retired: true, no go ask).  A cell that
+  holds the basket >= ~85% of sessions AND fails G2 is preregistered as the
+  16_3 pattern recurring (report it as such - sector beta, not timing).
+verdict_policy:
+  - "0 survivors -> KILL at tune; holdout unread."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev
+    go before any scored DEV run."
+data_walls: >-
+  * Same ex-post-basket caveat as 16_3 (no PIT REIT classification tape) -
+  documented bias toward survivors; all 7 names on tape through the window.
+  * 200s SMA needs 200 warmup sessions - the state is NaN until the extended
+  calendar covers it; the first decisions in early 2015 come from the
+  pre-2015 warmup bars (trailing history, no lookahead).

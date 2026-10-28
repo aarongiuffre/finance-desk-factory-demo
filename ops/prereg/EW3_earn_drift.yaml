@@ -1,0 +1,35 @@
+# PRE-REGISTRATION - EW3_earn_drift (NEW EDGE WAVE A/B/C, Aaron GO via VP 2026-10-28).
+# Written 2026-10-28 BEFORE any tune run.  Track A candidate: earnings drift /
+# PEAD.  REGISTERED AS A COVERED STUB BEFORE ANY RUN - no cells, no tune, no
+# gates, no go ask, no data pull.
+hypothesis: EW3_earn_drift
+family: EW3_earn_drift
+kind: covered_stub
+covered_by: F151_3_2_earnings_mom
+covered_verdict: >-
+  F151_3_2_earnings_mom (Soper FULL-151 Ch3, book 3.2) is the SAME MECHANISM
+  and is retired: true - KILLED at tune 2026-10-28 (prereg 7d573f9 committed
+  BEFORE any run): PIT EDGAR EPS layer (first-filed 10-Q quarters, Q4 derived
+  at the 10-K date, announcement date = filed), SUE = (E - E')/sigma with
+  E' = 4 quarters earlier, sigma over the last 8 differences, decile/quintile
+  dollar-neutral L/S, monthly + 3/6-month holds on the PIT S&P universe.
+  0/4 cells pass the six gates - best net Sharpe -0.42 (sue_decile_m); hold
+  cells die G4 too.  Evidence logs/edge/F151_3_2_earnings_mom/.
+why_covered: >-
+  "Earnings drift" as a Track A candidate IS the post-announcement (PEAD)
+  mechanism.  On this desk's free data the PIT announcement tape is the EDGAR
+  `filed` date of 10-Q/10-K rows - exactly the layer 3_2 already preregistered,
+  ran, and killed.  Re-registering SUE selection or event-timed post-filing
+  drift under a new name would re-test a retired family, forbidden by standing
+  policy (REGISTRY header: renaming does not reset anything; the family is the
+  key; no re-test under a new name unless Aaron explicitly re-opens).
+unblock_condition: >-
+  ONLY if a genuinely different mechanism + data layer appears that F151_3_2
+  never touched - e.g. a free PIT earnings CALENDAR with time-of-announcement
+  (BMO/AMC) enabling intraday announcement-window trading, which daily-bar
+  SUE drift cannot express - and ONLY by rewriting THIS prereg in place,
+  never by opening cells under a new name.  A free PIT earnings calendar with
+  announcement-time does not exist today (free calendars are non-PIT
+  scrapes; paid = BriefingClass/StreetAccount/Wall Street Horizon class).
+evidence: logs/edge/EW3_earn_drift/BLOCKED.md (cross-ref; actual evidence
+  logs/edge/F151_3_2_earnings_mom/).
