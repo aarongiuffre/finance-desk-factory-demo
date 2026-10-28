@@ -1,0 +1,5 @@
+family: F151_7_6_variance_swaps
+book_section: "7.6"
+status: BLOCKED
+blocked_reason: "no free variance-swap tape for 2015-2017; paid data needs Aaron go"
+cells: []

@@ -648,3 +648,7 @@ families:
                                # logs/edge/F151_7_3_1_vxx_futures_basket/BLOCKED.md.
     kind: hypothesis
     hypotheses: [F151_7_3_1_vxx_futures_basket]
+
+F151_7_6_variance_swaps:
+  status: blocked
+  reason: no free variance-swap tape
