@@ -1,5 +1,5 @@
 FULL_151 <CHAPTER> — <RUNNING|DONE>
-session: <id>
+session: <hermes-session-id>   # e.g. 20261028_152426_b9c78b — NOT the workdir basename
 run: <name>
 workdir: <path>
 gate: <gate-name>
