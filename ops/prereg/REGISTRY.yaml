@@ -598,3 +598,53 @@ families:
                                # run.  Evidence logs/edge/F151_6_4_etf_arb/BLOCKED.md.
     kind: hypothesis
     hypotheses: [F151_6_4_etf_arb]
+  F151_7_2_vix_basis:          # Soper FULL-151 Ch7: book 7.2 VIX futures basis
+    retired: true              # trading.  Free-proxy adaptation (UX1 futures not
+                               # free: delisted VXX/VXZ originals serve only
+                               # 2018-01-25+ on Yahoo; VIXY front leg vs ^VIX
+                               # spot; RELATIVE basis ln[VIX/VIXY] detrended -
+                               # the absolute D of Eqs 429-430 is not recoverable,
+                               # VIXY tape is reverse-split-adjusted).  KILLED at
+                               # tune 2026-10-28: 0/8 - G2 concentration fails
+                               # all 8 (signal > 0 on 75-94% of tune days =
+                               # degenerate short-VIXY carry; 2016+2017 carry
+                               # 0.83-0.95 of net pnl; one open->close cycle =
+                               # 1.0-1.3x tune gross); G4 fails wide thresholds
+                               # (3-8 opens in 3y); literal raw-basis control is
+                               # ONE permanent short (data wall in-measurement);
+                               # SPY-hedged cell -0.043 net Sharpe (bull-tape
+                               # hedge cost).  Even constant short VIXY (Sharpe
+                               # 1.214) fails G2 (2017 = 52%).  Evidence
+                               # logs/edge/F151_7_2_vix_basis/.
+    kind: hypothesis
+    hypotheses: [F151_7_2_vix_basis]
+  F151_7_3_vol_carry_etn:      # Soper FULL-151 Ch7: book 7.3 vol carry two ETNs
+    retired: true              # (short VXX / long VXZ, regression hedge ratio).
+                               # Free-proxy adaptation (VXX/VXZ originals
+                               # delisted; VIXY/VIXM ETFs, same indices).  KILLED
+                               # at tune 2026-10-28: 0/7 - all six h-cells fail
+                               # G5 (net Sharpe 0.31-0.47 vs 0.8) AND G3 (2017
+                               # third negative: h~1.7-2.5 makes the mid-term
+                               # long a carry drag, VIXM -50% in 2017) AND G2;
+                               # control c_h1_m (fixed dollar-neutral 1:1) is the
+                               # batch near-miss: Sharpe +1.142, zero turnover,
+                               # passes G1/G3/G4/G5/G6 but 2016 = 0.553 of net
+                               # pnl vs 0.40 cap - the pnl is short-front-ETN
+                               # carry, not the book's hedge.  Evidence
+                               # logs/edge/F151_7_3_vol_carry_etn/.
+    kind: hypothesis
+    hypotheses: [F151_7_3_vol_carry_etn]
+  F151_7_3_1_vxx_futures_basket:  # Soper FULL-151 Ch7: book 7.3.1 hedge short
+    blocked: true              # VXX with a BASKET of individual medium-maturity
+                               # VIX futures (weights via Eq 432-433 covariance
+                               # construction).  BLOCKED 2026-10-28: no free tape
+                               # of individual VIX futures contracts (CBOE
+                               # futures history not in the free allowlist;
+                               # DataShop paid); VIXM IS the months 4-7 basket,
+                               # so the N-futures covariance is not estimable
+                               # from one pre-packaged basket.  The packaged-
+                               # basket version of the same hedge IS F151_7_3
+                               # (KILL).  Nothing run.  Evidence
+                               # logs/edge/F151_7_3_1_vxx_futures_basket/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_7_3_1_vxx_futures_basket]
