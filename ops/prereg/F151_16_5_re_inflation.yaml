@@ -1,0 +1,101 @@
+# PRE-REGISTRATION - F151_16_5_re_inflation (Soper FULL-151 Ch16 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_15_* all closed
+# 2026-10-28).  Book 16.5 inflation hedging with real estate.
+# The book has NO backtests and NO equations - no performance claims attributed
+# below.  Paper / free public only; no spend.
+hypothesis: F151_16_5_re_inflation
+family: F151_16_5_re_inflation
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 16.5: real estate returns are strongly related to inflation,
+  so real estate hedges inflation; commercial property (adjusting faster to
+  inflationary price increases) hedges better than others.  The tradeable form:
+  when inflation protection is being REPRICED UP (market breakeven rich vs its
+  own history), hold real estate against nominal bonds.
+prior: >-
+  WEAK-PRIOR, two-sided.  (a) The hedge premise is measurable report-only (REIT
+  vs realized CPI and vs breakeven CHANGES).  (b) The timing cells reuse the
+  F151_14_2 breakeven-z machinery with the SIGN FLIPPED to the hedge direction:
+  2015-2017 breakevens COMPRESSED (10Y 2.2 -> 1.9), so z-cells spend much of the
+  window long bonds / short REITs - a hostile regime for the hedge leg, and the
+  same breakeven-z timing shape that died 0/7 in Ch14.  (c) REIT ETFs are not
+  direct property - the inflation pass-through the book describes (lease
+  escalators) is not measurable free (NCREIF/PFI paid) - standing proxy wall.
+signal: >-
+  Daily, decision at close t-1, pnl day t.  Signal = z-score of the market
+  breakeven BE(t) vs its trailing 252-session mean/std (obs <= t-1 only):
+  z >= +z1 -> LONG REIT leg / SHORT bond leg (inflation repricing up - the
+  hedge on); z <= -z1 -> REVERSE (long bond / short REIT); else flat.  While
+  on, weights CONSTANT; each change = one trade per leg.  BE mapped to ETF
+  sessions by date with ffill <= 5.  (Ch14 direction mirrored: there cheap
+  breakeven meant long TIPS; here RICH breakeven means long REIT vs bonds.)
+cells:
+  z05_vnq_agg: "BE = T10YIE, z1 = 0.5, long VNQ / short AGG 1:1"
+  z10_vnq_agg: "BE = T10YIE, z1 = 1.0, long VNQ / short AGG 1:1"
+  z05_vnq_ief: "BE = T10YIE, z1 = 0.5, long VNQ / short IEF 1:1"
+  z10_vnq_ief: "BE = T10YIE, z1 = 1.0, long VNQ / short IEF 1:1"
+  z05_iyr_agg: "BE = T10YIE, z1 = 0.5, long IYR / short AGG 1:1"
+  static_vnq_agg: >-
+    always-on long VNQ / short AGG 1:1 for the whole tune window (1 fill by
+    construction) - the premise cell: does the REIT-vs-nominal-bond spread carry
+    the inflation hedge at all?  Preregistered expectation: G2 episode share 1.0
+    BY CONSTRUCTION (single episode) so this cell cannot pass G2; kept to
+    measure the premise, same rule as the Ch13/Ch14 static cells.
+total_cells: 6 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 10 position changes for the five z-cells; static cell exempt from
+  G4 (1 fill by construction)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars/BE obs only as
+    the trailing 252-session z window)"
+  data_end: "2017-12-31 tune cap (ETF loaders cap bars at the cap; FRED BE pull
+    already window-capped at 2017-12-31 from the Ch14 pull 2026-10-28)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31 (36 months).  Dev holdout 2018-2019 NEVER
+    READ this run.  T10YIE on disk is the Ch14 pull (request-capped 2017-12-31,
+    2013+); loaders cap bars at TUNE_HI.
+data:
+  prices: >-
+    raw/price/{VNQ,IYR,AGG,IEF,SPY}.json (Yahoo chart v8; VNQ/IYR pulled
+    --backfill max 2026-10-28).  Total return = adjclose 'a'.  SPY calendar.
+  breakevens: >-
+    raw/fred/T10YIE.json (decimal /100), ffill <= 5 on the session calendar.
+universe: >-
+  Fixed: VNQ (broad REIT), IYR (REIT small/mid tilt), AGG (aggregate bond),
+  IEF (7-10y Treasury).  Weights 1:1 fixed constants.
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dW| PER LEG at each position change
+  (2 legs per change).  No cost while unchanged.  No borrow charged (ETF pairs,
+  same convention as Ch14).  G6 stress at 2x per-side costs.
+gates: &gates >-
+  Standard F151 daily gates per cell: G1 lookahead - replay truncation at 4
+  slice cuts + loader-cap cut (weights through the cut identical) AND the
+  decision-early mutant (z computed with BE obs <= t) must differ.  G2 -
+  max calendar-year share of net pnl <= 0.40 AND max episode share of gross
+  <= 0.25 (episode = one contiguous on-period).  G3 - 2 of 3 equal thirds
+  net-positive.  G4 - >= 10 position changes (z-cells; static exempt).  G5 -
+  net Sharpe >= 0.8 AND net CAGR > 0.  G6 stress - net CAGR > 0 at 2x costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py) before any scored DEV run."
+report_only:
+  - >-
+    (a) Hedge-premise check: monthly corr(VNQ total return, CPI YoY level) and
+    corr(VNQ return, delta-T10YIE) over the window - does the REIT proxy even
+    co-move with inflation measures in the right direction?
+  - >-
+    (b) Breakeven z-quintile table: mean fwd-21-session VNQ-AGG spread return
+    per z-quintile (is the hedge timing monotone at all?).
+  - >-
+    (c) T5YIE z variant of z05_vnq_agg as a report-only sensitivity (tenor
+    check; never a gate cell).
+data_walls: >-
+  * The book's hedge claim is about DIRECT property returns with lease
+  escalators; REIT ETFs carry equity beta and duration exposure the private
+  story does not.  NCREIF/PFI property-level income/return series are paid -
+  preregistered standing proxy wall.
+  * ETF durations not free -> 1:1 weights are constants, not duration-matched
+  (documented approximation, same class as Ch14).

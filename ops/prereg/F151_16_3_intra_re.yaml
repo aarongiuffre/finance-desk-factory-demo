@@ -1,0 +1,117 @@
+# PRE-REGISTRATION - F151_16_3_intra_re (Soper FULL-151 Ch16 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_15_* all closed
+# 2026-10-28).  Book 16.3 intra-asset diversification within real estate
+# (16.3.1 property type / 16.3.2 economic / 16.3.3 type+geographic).
+# The book has NO backtests and NO equations - no performance claims attributed
+# below.  Paper / free public only; no spend.
+hypothesis: F151_16_3_intra_re
+family: F151_16_3_intra_re
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 16.3 (+16.3.1/2/3): diversifying real estate holdings across
+  PROPERTY TYPE (apartments, offices, industrial, retail...), economic region and
+  type+geography reduces NON-SYSTEMATIC RISK after transaction costs.  The book
+  frames one tradeable rule: hold a DIVERSIFIED set of real estate assets instead
+  of a concentrated one (16.3.3's 16-group type-by-region grid is its extreme
+  form).  No allocation mechanism is specified.
+prior: >-
+  WEAK-PRIOR, two-sided.  (a) The risk-reduction premise is measurable report-only
+  (basket vols, type correlations).  (b) Type baskets are always-on allocations -
+  they cannot pass G2 episode-share BY CONSTRUCTION (same premise-cell class as
+  16_2/Ch13/Ch14 static cells), so the family decision keys on the preregistered
+  comparison rule below.  (c) Listed REIT baskets carry equity beta and REIT-
+  sector common factors the book's private-property diversification story does
+  not include - the diversification benefit will be understated.
+signal: >-
+  No timing signal - equal-weight (EW) basket of each property type, rebalanced
+  to EW on the LAST SPY session of each calendar month.  Universe: 32 large-cap
+  US REITs on the desk tape (incl. 4 that delisted/renamed inside the window -
+  GGP delisted 2018-08, MAC, HCP renamed WELL - tape-faithful; HCP excluded as
+  the SAME ISSUER as WELL, not double-counted).
+cells:
+  type_resi: "EW {AVB,EQR,ESS,UDR,MAA,CPT} monthly"
+  type_ind: "EW {PLD,STAG,FR} monthly"
+  type_office: "EW {BXP,SLG,VNO,CUZ,HIW,ARE} monthly"
+  type_retail: "EW {SPG,O,REG,KIM,FRT,MAC,GGP} monthly"
+  type_storage: "EW {PSA,EXR,CUBE} monthly"
+  type_infra: "EW {AMT,CCI,SBAC,DLR} monthly"
+  type_health: "EW {VTR,WELL} monthly"
+  type_lodging: "EW {HST} monthly (single name - G4 fails by construction,
+    preregistered premise cell like the static cells)"
+  diversify_all: "EW across ALL 32 names monthly - the book's diversified holding"
+total_cells: 9 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 position-change days per multi-name basket (monthly EW
+  rebalances); type_lodging preregistered G4-exempt (1 holding, drift-only
+  changes; kept to measure a concentrated single-type hold)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing history)"
+  data_end: "2017-12-31 tune cap (loaders cap bars at the cap)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this run.
+    Fold tier order: sp_exits (AVB, EQR, SLG, VNO, MAC, GGP full-history copies)
+    > folds/dev/raw/price > raw/price; every loader caps bars at 2017-12-31.
+data:
+  prices: >-
+    Fold/raw/price Yahoo chart v8 adjclose 'a' (total return) for the 32 names +
+    SPY (calendar).  STAG/CUBE/CUZ/HIW/FR pulled --backfill max 2026-10-28;
+    AVB/EQR sp_exits copies end 2019-12-31 (fold cutoff) - correct for the tune
+    window.
+universe: >-
+  Fixed 32-name large-cap REIT list assembled 2026-10-28 (documented wall: the
+  desk has no PIT REIT-classification tape - EDGAR companyfacts carry no SIC,
+  the S&P roster carries no sector; GICS moved REITs out of Financials only in
+  2016-09).  List includes 4 names that delisted/renamed in-window (GGP, MAC,
+  HCP->WELL handled) - selection is ex-post toward survivors and is preregistered
+  as a documented bias (mitigated: dead names carried tape-faithfully to their
+  last bar, weight released with no trade cost).
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dW| PER NAME at each monthly rebalance
+  (large-cap REITs; a few names are mid-ADV so the floor is conservative-HIGH -
+  documented).  No cost between rebalances.  Delisting: weight released the day
+  after the last bar, no trade cost (tape-faithful).  G6 stress at 2x per-side
+  costs.
+gates: &gates >-
+  Standard F151 daily gates per cell: G1 lookahead - replay truncation at 4
+  slice cuts + loader-cap cut (weights through the cut identical) AND a
+  decision-early mutant (rebalance one session early) must differ.  G2 - year
+  share <= 0.40; episode share preregistered BY-CONSTRUCTION exemption (all
+  cells always-on).  G3 - 2 of 3 thirds net-positive.  G4 - >= 24 change days
+  (type_lodging exempt, preregistered).  G5 - net Sharpe >= 0.8 AND net CAGR >
+  0.  G6 stress - net CAGR > 0 at 2x costs.
+family_decision_rule: >-
+  PREMISE-CELL CLASS (same rule as 16_2): KEEP_TUNE iff AT LEAST ONE multi-name
+  basket cell passes G3, G5 AND G6.  Otherwise KILL.  The book's actual claim -
+  DIVERSIFICATION REDUCES RISK - is adjudicated report-only (a)/(b), not by
+  return gates.
+verdict_policy:
+  - "Family decision rule above -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py) before any scored DEV run."
+report_only:
+  - >-
+    (a) Diversification table (the book's core claim): annualized vol of each
+    type basket vs vol(diversify_all) vs mean type vol; avg pairwise corr of
+    type-basket monthly returns; is vol(all) < mean vol(types) by a margin that
+    survives the REIT common factor?
+  - >-
+    (b) 16.3.2 economic / 16.3.3 type+geo, REPORT-ONLY (no free tradeable
+    instrument expresses regional property exposure): S&P Case-Shiller MSA HPIs
+    (18 metros, FRED, monthly 2012-2017) grouped into 4 census regions (West:
+    LV/LA/SD/SF/SEA/POR/PHX/DEN; South: ATL/DAL/MIA/TPA/CHAR; Midwest:
+    CHI/MIN; Northeast: BOS/NY/WDC) - region-EW HPI portfolio vols vs all-EW,
+    and region momentum persistence (corr past-12m vs fwd-12m region return).
+    Paper indices, NOT tradeable - honest report-only, preregistered.
+  - >-
+    (c) Per-type basket calendar-year returns - which type drove what in-window.
+data_walls: >-
+  * Regional (16.3.2) and type+geo (16.3.3) exposure is NOT tradeable free:
+  regional REIT ETFs do not exist with pre-2018 tapes, single-name REITs map to
+  property geography only loosely (HQ != asset location), and CME Case-Shiller
+  housing futures/options were delisted in 2011.  Only report-only HPI evidence.
+  * Universe selection is ex-post (no PIT REIT classification free) - documented
+  bias toward survivors; delisted names carried tape-faithfully.
+  * REIT baskets are listed equity proxies for private property portfolios -
+  standing ETF-proxy limitation preregistered.

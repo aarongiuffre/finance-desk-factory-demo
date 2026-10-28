@@ -1,0 +1,114 @@
+# PRE-REGISTRATION - F151_16_2_mixed_asset_re (Soper FULL-151 Ch16 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_15_* all closed
+# 2026-10-28).  Book section 16.2 mixed-asset diversification with real estate.
+# The book has NO backtests and NO equations for this section - no performance
+# claims are attributed to it anywhere below.  Paper / free public only; no spend.
+hypothesis: F151_16_2_mixed_asset_re
+family: F151_16_2_mixed_asset_re
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 16.2: real estate's correlation with stocks/bonds is low and
+  stays low through crises, so a long-term investor improves risk-adjusted returns
+  by buying and holding real estate assets within a traditional portfolio.  The
+  book frames exactly one tradeable rule: buy-and-hold a RE allocation inside a
+  bonds+equities mix ("a simple strategy amounts to buying and holding real
+  estate assets within a traditional portfolio"); the optimal sizing is left to
+  mean-variance/VAR preferences - NOT specified as a rule.
+prior: >-
+  WEAK-PRIOR, two-sided.  (a) The diversification premise (low corr, corr stable
+  in stress) is measurable report-only.  (b) The tradeable form - a fixed REIT-ETF
+  sleeve in a 60/40 mix - is an always-on allocation: it cannot pass G2's
+  episode-share test BY CONSTRUCTION (single episode, same class as the Ch13
+  static-carry and Ch14 static premise cells), so the family decision keys on the
+  preregistered comparison rule below, not on gate survival alone.  2015-2017 saw
+  a strong equity tape (SPY +1.4%/+11%/+21.8% calendar) with REITs roughly flat in
+  2015 and 2017 - the sleeve plausibly DILUTES the mix's return more than its risk.
+signal: >-
+  No timing signal - fixed-weight mixes rebalanced to target on the LAST SPY
+  session of each calendar month (decision at that close, weights active the next
+  session).  All legs total-return adjclose.  This is the book's buy-and-hold rule
+  in its tradeable-ETF form.
+cells:
+  mix_6040_base: "60% SPY / 40% AGG, monthly rebalance - the no-RE benchmark cell"
+  re10_vnq: "54% SPY / 36% AGG / 10% VNQ, monthly rebalance"
+  re20_vnq: "48% SPY / 32% AGG / 20% VNQ, monthly rebalance"
+  re10_iyr: "54% SPY / 36% AGG / 10% IYR, monthly rebalance"
+  re10_schh: "54% SPY / 36% AGG / 10% SCHH, monthly rebalance"
+  re10_xlre: "54% SPY / 36% AGG / 10% XLRE, monthly rebalance (XLRE tape starts
+    2015-10; cell pnl starts at the first session all three legs trade - shorter
+    window documented, not a gate exemption)"
+total_cells: 6 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 position-change days for every cell (monthly rebalances of a
+  2-3 asset mix exceed this only via drift; preregistered floor 24)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing history)"
+  data_end: "2017-12-31 tune cap (ETF loaders cap bars at the cap)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31 (36 months).  Dev holdout 2018-01-01..2019-12-31
+    NEVER READ this run (no validation or holdout without go).  Loaders cap bars
+    at 2017-12-31; VNQ pulled --backfill max 2026-10-28 covers 2004+.
+data:
+  prices: >-
+    raw/price/{VNQ,IYR,SCHH,XLRE,SPY,AGG}.json (Yahoo chart v8; VNQ/IYR/SCHH
+    pulled --backfill max 2026-10-28, XLRE/SPY/AGG on disk).  Total return =
+    adjclose 'a'.  SPY supplies the session calendar.
+universe: >-
+  Fixed ETF proxies for the book's "real estate assets": VNQ (broad REIT),
+  IYR (REIT, small/mid tilt), SCHH (REIT, ex-financials tilt), XLRE (GICS real
+  estate sector).  Benchmark legs SPY / AGG.
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dW| PER LEG at each monthly rebalance
+  (all legs large-ADV ETFs).  No cost between rebalances (weights held, no drift
+  rebalancing).  G6 stress at 2x per-side costs (cagr reported).
+gates: &gates >-
+  Standard F151 daily gates per cell (sharpe sqrt(252), cagr 252/n):
+  G1 lookahead - replay truncation at 4 slice cuts + loader-cap cut (weights
+  through the cut identical) AND a decision-early mutant (rebalance executed one
+  session EARLY, i.e. weights active from the rebalance close itself) must
+  produce a different pnl series.  G2 concentration - max calendar-year share of
+  net pnl <= 0.40; episode share: preregistered BY-CONSTRUCTION exemption for
+  this family (every cell is always-on: exactly one episode, share 1.0 - same
+  rule as the Ch13/Ch14 static premise cells).  G3 regime - at least 2 of 3
+  equal thirds of the cell's own tune window net-positive.  G4 min trades >= 24
+  position-change days.  G5 fees - net Sharpe >= 0.8 AND net CAGR > 0 at base
+  costs.  G6 stress - net CAGR > 0 at 2x costs.
+family_decision_rule: >-
+  PREMISE-CELL CLASS: every 16_2 cell is an always-on allocation, so gate
+  survival alone cannot decide the book's claim.  Preregistered family decision:
+  KEEP_TUNE iff AT LEAST ONE RE-sleeve cell (re10_*/re20_*) passes G3, G5 AND G6
+  AND has net Sharpe >= (mix_6040_base net Sharpe + 0.25) AND annualized vol <=
+  1.05 x mix_6040_base annualized vol.  Otherwise KILL.  The diversification
+  PREMISE itself is adjudicated in report-only blocks (a)-(c), not by gates.
+verdict_policy:
+  - "Family decision rule above -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor per the rule -> KEEP_TUNE: holdout unread; BLOCKED awaiting
+    standing dev go (ops/offbox/aaron_sign_dev_go.py; go file names the code
+    freeze sha and max_dev_trials) before any scored DEV run."
+report_only:
+  - >-
+    (a) Correlation matrix: monthly returns VNQ/IYR/SCHH/XLRE vs SPY/AGG over the
+    tune window - is the "low correlation" premise true in-window at all?
+  - >-
+    (b) Crisis-correlation claim: mean pairwise corr of each REIT proxy vs SPY
+    over the worst-decile SPY months vs all months - does REIT corr RISE in
+    equity stress (the book says it stays low)?
+  - >-
+    (c) Sleeve economics: net Sharpe / vol / CAGR / maxDD of each RE-sleeve cell
+    MINUS mix_6040_base - does the sleeve improve risk-adjusted return after
+    costs at 10% and 20% sizing?
+  - >-
+    (d) Rolling 60-session corr(VNQ, SPY) and corr(VNQ, AGG) path - horizon
+    dependence the book appeals to ("lower at longer horizons").
+data_walls: >-
+  * The book's premise is about PRIVATE real estate returns (appraisal-smoothed,
+  NCREIF/NAREIT-class series).  REIT ETFs are listed equity - they carry equity
+  beta the book's diversification story partly denies.  A free private-property
+  return index (NCREIF NPI, transaction-based) does NOT exist; FRED/Case-Shiller
+  HPIs are house prices, not income-property total returns.  This is the standing
+  ETF-proxy limitation, preregistered.
+  * Optimal allocation (mean-variance/VAR per the book) is NOT estimated: the
+  book specifies no rule, and estimated weights on 3y windows would be noise.
+  Fixed 10%/20% sleeves are the preregistered sizing.

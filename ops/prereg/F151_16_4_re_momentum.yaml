@@ -1,0 +1,106 @@
+# PRE-REGISTRATION - F151_16_4_re_momentum (Soper FULL-151 Ch16 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_15_* all closed
+# 2026-10-28).  Book 16.4 real estate momentum - regional approach.
+# The book has NO backtests and NO equations - no performance claims attributed
+# below.  Paper / free public only; no spend.
+hypothesis: F151_16_4_re_momentum
+family: F151_16_4_re_momentum
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 16.4: momentum across U.S. metropolitan statistical areas -
+  MSAs with higher (lower) past returns keep delivering higher (lower) returns
+  (Beracha-Downs 2015, Beracha-Skiba 2011).  The book explicitly says a zero-cost
+  version "can be constructed by using alternative real estate vehicles such as
+  REITs, and futures and options on U.S. housing indices based on different
+  geographical areas."
+prior: >-
+  WEAK-PRIOR, two-sided.  (a) The regional momentum PREMISE (MSA home-price
+  momentum persistence) is measurable REPORT-ONLY on free FRED Case-Shiller MSA
+  indices - there is NO free tradeable MSA housing instrument (CME housing
+  futures delisted 2011; preregistered wall).  (b) The tradeable form the book
+  names - REIT vehicles - is run as cross-sectional momentum L/S on the 32-name
+  REIT universe; REIT momentum is an EQUITY momentum signal, NOT MSA home-price
+  momentum, and the two are preregistered as different objects (report-only (c)
+  measures their in-window agreement).  Equity momentum 2015-2017 was hostile
+  (2016 Q1 value rotation) - cells may well die on G5.
+signal: >-
+  Monthly, decided at the LAST SPY session of calendar month m (close), active
+  from the next session: rank eligible names by trailing total return over the
+  lookback (skip-1-month form: months m-L..m-1), ELIGIBLE = >= L*21 sessions of
+  history at the decision date.  Quintile baskets EW (ceil(N/5) names per side);
+  LS cells long top quintile / short bottom quintile (gross 1.0 split 0.5/0.5);
+  LO cells long top quintile only (1.0).  Rebalance to target monthly.
+cells:
+  mom12_q_ls: "L=12m skip-1, quintile LS, monthly"
+  mom6_q_ls: "L=6m skip-1, quintile LS, monthly"
+  mom3_q_ls: "L=3m skip-1, quintile LS, monthly"
+  mom12_q_lo: "L=12m skip-1, quintile long-only, monthly"
+  mom6_q_lo: "L=6m skip-1, quintile long-only, monthly"
+total_cells: 5 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 position-change days (monthly rebalance of always-on LS/LO
+  books; ties/zeros handled: an LS cell's change count = rebalance days with
+  any nonzero |dW|)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars as trailing
+    momentum history - main-tape names start 2014-04-21 so mom12 eligibility
+    begins mid-2015; documented, not a bug)"
+  data_end: "2017-12-31 tune cap (loaders cap bars at the cap)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ.  Fold
+    tier order sp_exits > folds/dev/raw/price > raw/price, all capped 2017-12-31.
+data:
+  prices: >-
+    Fold/raw/price Yahoo adjclose 'a' (total return) for the SAME fixed 32-name
+    REIT universe as F151_16_3 (incl. tape-faithful GGP/MAC delist handling) +
+    SPY calendar.  FRED MSA HPIs for report-only (a)/(b): 18 metros
+    {ATXRSA,BOSXRSA,CHXRSA,CRXRSA,DAXRSA,DNXRSA,LVXRSA,LXXRSA,MIXRSA,MNXRSA,
+    NYXRSA,PHXRSA,POXRSA,SDXRSA,SFXRSA,SEXRSA,TPXRSA,WDXRSA} + CSUSHPISA +
+    SPCS20RSA, pulled 2012-01-01..2017-12-31 window-capped AT THE REQUEST.
+universe: >-
+  Same 32-name list and walls as F151_16_3 (ex-post selection documented;
+  delisted names tape-faithful).  Momentum on REIT EQUITIES, not on MSA
+  home prices - preregistered proxy gap, adjudicated by report-only (c).
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dW| per name at each monthly
+  rebalance; BORROW 100 bps/yr on short notional for LS cells (single-name
+  shorts; eq_lib convention).  G6 stress at 2x per-side costs.
+gates: &gates >-
+  Standard F151 daily gates per cell: G1 lookahead - replay truncation at 4
+  slice cuts + loader-cap cut (ranks/weights through the cut identical when
+  computed on capped data) AND a decision-early mutant (momentum computed
+  INCLUDING month m's own return) must differ.  G2 - year share <= 0.40 AND
+  max monthly-episode share of gross <= 0.25 (episode = one calendar month's
+  gross book pnl - 36 episodes).  G3 - 2 of 3 thirds net-positive.  G4 - >= 24
+  change days.  G5 - net Sharpe >= 0.8 AND net CAGR > 0.  G6 stress - net
+  CAGR > 0 at 2x costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py) before any scored DEV run."
+report_only:
+  - >-
+    (a) Regional momentum persistence (the book's actual mechanism, paper):
+    for each of the 4 census regions (EW of its MSAs), corr(past-12m region HPI
+    return, fwd-12m region HPI return) over rolling 12m windows 2013-2017, plus
+    the pooled scatter - is MSA home-price momentum positive in-window?
+  - >-
+    (b) MSA quintile table: metros bucketed by past-12m HPI return (quintiles,
+    month-end), mean fwd-12m HPI return per quintile - monotone or not.
+  - >-
+    (c) REIT momentum vs MSA momentum agreement: corr(monthly REIT momentum
+    spread (mom12_q_ls gross), monthly EW MSA momentum spread) - do the two
+    objects even co-move in-window?
+  - >-
+    (d) REIT momentum decay: mean fwd-1m return by momentum quintile (is the
+    REIT cross-section momentum-ordered at all in-window?).
+data_walls: >-
+  * NO free tradeable MSA housing instrument: CME Case-Shiller futures/options
+  delisted 2011; regional REIT ETFs do not exist with pre-2018 tape.  The book's
+  regional zero-cost book is NOT runnable - only the REIT-vehicle leg is scored,
+  and only the HPI persistence blocks can speak to the book's regional premise.
+  * Universe ex-post selection (no PIT REIT classification free) - documented.
+  * Warmup: main-tape names start 2014-04-21, so 12m-momentum cells start
+  mid-2015 (shorter effective window documented; sp_exits names start 2008).
