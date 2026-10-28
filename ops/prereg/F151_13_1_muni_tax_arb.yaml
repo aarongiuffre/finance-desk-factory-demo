@@ -1,0 +1,108 @@
+# PRE-REGISTRATION - F151_13_1_muni_tax_arb (Soper 151 Ch13 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY, W2a-W2d, Eq_*, F151_3_*..F151_12_* all closed).
+# Book section 13.1 Municipal bond tax arbitrage (Eq 495).  The book has NO
+# backtests - no performance claims are attributed to it anywhere below.
+# Paper / Yahoo + free FRED public only; no spend; no paid tax/withholding feeds.
+hypothesis: F151_13_1_muni_tax_arb
+family: F151_13_1_muni_tax_arb
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 13.1: borrow money and buy tax-exempt municipal bonds.
+  Strategy return R = r_long - r_short * (1 - tau)  (Eq 495), where r_long is
+  the muni interest rate, r_short the loan rate, tau the corporate tax rate.
+  The book states the trade is attractive to companies in jurisdictions where
+  tax rules allow buying tax-exempt munis while deducting interest expense
+  (the "tax shield").  Real-world caveat noted: US IRC 265 disallows the
+  interest deduction when proceeds finance tax-exempt purchases - the book's
+  premise is jurisdiction-dependent; we implement Eq 495 AS WRITTEN (shield
+  applies) and document the caveat.
+prior: >-
+  WEAK-PRIOR carry structure, not a signal: the trade is a static levered
+  carry (muni yield vs after-tax funding) with the muni book's duration risk
+  on top.  2015-2017 muni yields ~2-3% vs fed funds 0.06-1.4%: the after-tax
+  funding leg (1-tau)*r_short at tau=0.35 is ~0.1-0.9%, so the raw Eq 495
+  spread is plausibly positive ~1.5-2.5%/yr - but the ETF total-return leg
+  adds duration P&L (2015 rate selloff) and the G2 year-concentration gate is
+  the realistic failure mode for a static single-leg carry (same shape as the
+  F151_5_* and F151_7_3 static-carry KILLs).
+signal: >-
+  Hold 1.0 notional of ONE muni-ETF (total return, adjclose) for the whole
+  tune window, funded 1.0 at a cash rate with the Eq 495 tax shield: daily
+  pnl_t = TR_t - (1 - tau) * r_f(t-1) / 252.  tau = 0.35 fixed (statutory US
+  corporate rate through 2017; TCJA 21% effective 2018 is OUTSIDE the tune
+  window; tau = 0.21 sensitivity is REPORT-ONLY).  No signal, no timing:
+  the family tests the book's carry mechanism itself.  Funding rate is the
+  PRIOR day's observation (causal; DFF is published with a lag anyway).
+cells:
+  mub_dff: "long MUB TR funded at FRED DFF (overnight fed funds), tau=0.35"
+  mub_dgs3mo: "long MUB TR funded at FRED DGS3MO (3M bill), tau=0.35"
+  tfi_dff: "long TFI TR funded at FRED DFF, tau=0.35"
+  tfi_dgs3mo: "long TFI TR funded at FRED DGS3MO, tau=0.35"
+  shm_dff: "long SHM TR funded at FRED DFF, tau=0.35"
+  shm_dgs3mo: "long SHM TR funded at FRED DGS3MO, tau=0.35"
+total_cells: 6 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 monthly funding episodes (static hold: episodes = months in market; 36 expected)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars/obs only as trailing lookback)"
+  data_end: "2017-12-31 tune cap (ETF files loader-capped at the cap; FRED pulls window-capped at the REQUEST)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31 (36 months).  Dev holdout 2018-01-01..2019-12-31
+    NEVER READ this run (no validation or holdout without go).  ETF loader caps
+    bars at 2017-12-31; FRED pull windows cosd/coed capped at the request
+    (DFF pulled 2014-11-01..2017-12-31 2026-10-28; DGS3MO stored window ends
+    2017-12-31 from the Ch5 pull).
+data:
+  prices: >-
+    raw/price/{MUB,TFI,SHM}.json (Yahoo chart v8, price_pull.py --backfill max,
+    pulled 2026-10-28; MUB 2007-09-10+, TFI 2007-09-13+, SHM 2007-10-18+; total
+    return = adjclose 'a', which carries the monthly/quarterly tax-exempt
+    distributions).  SPY fold tape supplies the calendar.
+  rates: >-
+    raw/fred/{DFF,DGS3MO}.json, decimal %/100, ffilled <= 5 business days.
+universe: >-
+  Fixed: MUB (iShares National Muni Bond, intermediate), TFI (SPDR Nuveen
+  Bloomberg short-term muni), SHM (SPDR S&P muni, intermediate).  One leg per
+  cell, eligible iff its tape covers the tune window (all three do, verified
+  at pull).
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dW| (muni ETFs are large-ADV).
+  Entry = one 20 bp charge at the first in-market day; the position is static
+  thereafter (monthly funding-rate reset does NOT change weights -> no fill).
+  The funding leg IS the interest accrual (no separate borrow fee).  G6 stress
+  at 2x per-side costs (3x reported).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t funding rate used for day-t pnl) must produce
+  a different pnl series.  G2 concentration - max calendar-year share of net
+  pnl <= 0.40 AND max episode share of gross <= 0.25 (episode = one monthly
+  funding period).  G3 regime - at least 2 of 3 equal thirds of the tune
+  window net-positive.  G4 min trades - >= 24 monthly funding episodes.
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.  G6 stress - net CAGR > 0 at 2x all per-side costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+report_only: >-
+  (a) Pure Eq 495 carry spread, yield terms: each ETF's trailing-12m
+  distribution yield (from the tape's dividend events, causal: only past
+  distributions and current price) minus (1-tau)*r_f - the book's spread with
+  duration risk stripped; (b) tau = 0.21 sensitivity on all 6 cells; (c) IRC
+  265 caveat documented (premise-conditional trade).
+data_walls: >-
+  * No free historical muni YIELD index for 2015-2017 was found on FRED
+  (checked 2026-10-28); r_long is proxied by ETF total return (yield + duration).
+  The report-only (a) leg recovers the yield component from the tape's own
+  distribution events.
+  * 3M LIBOR (USD3MTD156N) 404s on fredgraph.csv (vintage series not served,
+  verified 2026-10-28) - the corporate loan-rate proxy is DGS3MO (unsecured
+  proxy at bill level, GENEROUS to the trade: flat LIBOR-level funding with
+  no corporate spread charged).
+  * IRC 265 disallowance ignored BY DESIGN per the book's Eq 495 premise
+  (documented, not simulated).

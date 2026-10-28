@@ -1,0 +1,106 @@
+# PRE-REGISTRATION - F151_13_2_cross_border (Soper 151 Ch13 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY, W2a-W2d, Eq_*, F151_3_*..F151_12_* all closed).
+# Book section 13.2 Cross-border tax arbitrage (Eq 496 context).  The book has
+# NO backtests - no performance claims attributed to it anywhere below.
+# Paper / Yahoo public only; no spend; no paid tax/withholding/franking feeds.
+hypothesis: F151_13_2_cross_border
+family: F151_13_2_cross_border
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 13.2: under dividend-imputation systems (e.g. Australia),
+  domestic shareholders receive tax credits attached to dividends
+  (C = D * tau_c / (1 - tau_c)); foreign investors generally do not.  If the
+  cum-to-ex-dividend price drop fully reflects the credit, it is D * (1 + kappa)
+  with 1 + kappa = 1 / (1 - tau_c), so a foreign holder is penalized D * kappa.
+  The book's arb: the foreign investor SELLS the stock cum-dividend and buys
+  it back ex-dividend (stock loan / swap equivalents achieve the same).
+prior: >-
+  WEAK-PRIOR event-trade: the gross edge per event is the excess drop
+  Delta - D (the credit priced into the drop, kappa * D at full imputation).
+  Australian ex-day literature and our own probe (CBA.AX 2015-2017: drops
+  0.6x-1.4x the dividend, average ~1.2x) suggest the credit is NOT fully
+  priced, so the expected per-event edge is small versus a 40 bp round trip
+  on ~1.5-2.5% dividends - and one-session market noise (~0.7%/day on ASX
+  large caps) dominates per-event pnl, which is why the hedged cell and the
+  G2/G3 gates do the work.  Honest possibility: the raw drop itself IS the
+  trade's pnl, so a KILL here is a measurement of the credit not being
+  capturable net of costs - exactly what the book's "assuming no restrictions
+  ... transaction costs not prohibitively high" caveat is about.
+signal: >-
+  Event trade at each dividend event of an eligible ASX name: SELL at the
+  last cum-session close (bar before the ex-date), BUY BACK at the ex-date
+  close.  Decision at close t-1, pnl earned day t = Delta = S_cum - S_ex
+  (unadjusted closes; the trade holds no other session).  Equal notional per
+  event.  The Yahoo dividend event date IS the ex-date: verified on CBA.AX -
+  the price drop lands on the event date in all 6 tune-window events
+  (alignment validated per event in the runner; misaligned events excluded
+  and counted).
+cells:
+  unhedged: "all eligible events, equal notional, pnl = Delta per event, no hedge"
+  hedged: "per event pnl = Delta - beta_i * r_mkt over the same session, beta_i
+           = trailing 252d OLS of stock daily returns on STW.AX total return,
+           estimated on data ending at t-1 (min 126 obs; events without a
+           sufficient beta window are excluded and counted)"
+total_cells: 2 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 60 funded events over the tune window (17-name panel x ~6 events, ~96 expected)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 tune start; 2014 bars on disk as the trailing beta lookback ONLY (warmup, never scored)"
+  data_end: "2017-12-31 tune cap (ASX pull period2 capped at the REQUEST - no post-2017 bar or dividend event on disk)"
+  split_rule: >-
+    tune = events with ex-date 2015-01-01..2017-12-31.  Dev holdout 2018-2019
+    NEVER READ (no events pulled past 2017-12-31 by construction).
+data:
+  prices: >-
+    raw/ax/<SYM>.json (Yahoo chart v8, scripts/f151c13_pull.py, pulled
+    2026-10-28, window 2014-01-01..2017-12-31 enforced at the request; bars
+    carry unadjusted close 'c' and dividend-adjusted 'a'; ASX session dates
+    fixed as UTC(ts+11h) - verified weekday-aligned and drop-day aligned).
+  market: "STW.AX (SPDR S&P/ASX 200 ETF) as the tradable market leg: adjclose TR for beta and hedge returns."
+universe: >-
+  Fixed 17-ticker panel with FULL Yahoo dividend-event coverage verified at
+  pull 2026-10-28 (16 payers + STW market proxy): AMC ANZ BEN BHP CBA CSL GMG
+  IAG MQG NAB RIO SUN TCL TLS WBC WES WOW (.AX).  An event is ELIGIBLE iff:
+  amount > 0; ex-date inside the tune window; ex-date is a bar date; the
+  prior bar exists.  Ineligible events are excluded AND COUNTED in evidence.
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side x 2 sides per event = 40 bp round trip
+  (ASX large caps, conservative ~2x real institutional dealing).  G6 stress
+  at 2x (80 bp round trip, 3x reported).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 event-slice cuts (events after the cut
+  dropped; earlier events' pnl identical) + a decision-early mutant (using the
+  event-date close as the SELL price) must produce a different pnl series.
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max event
+  share of gross <= 0.25.  G3 regime - at least 2 of 3 equal thirds of the
+  tune window net-positive.  G4 min trades - >= 60 funded events.  G5 fees -
+  tune net Sharpe >= 0.8 (annualized 252 over ALL tune days; flat on
+  non-event days - honest capital deployment) AND net CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x per-side costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    before any scored DEV run on the full dev window."
+report_only: >-
+  (a) Per-event drop decomposition: mean Delta, mean D, mean Delta/D, and the
+  full-imputation benchmark D * (1 + kappa), kappa = tau_c/(1-tau_c) with
+  tau_c = 0.30 (Australia's corporate rate 2015-2017 -> kappa = 0.4286 upper
+  bound under FULL franking).  (b) Counterfactual comparison for the foreign
+  holder: trade pnl vs holding through the ex-date net of 15% treaty
+  withholding on the UNFRANKED portion (full-franking upper bound assumed for
+  the benchmark; see data_walls).  (c) Drop-alignment audit: for each event,
+  the max abs daily move in a +-3-session window and whether it lands on the
+  ex-date.
+data_walls: >-
+  * Per-dividend FRANKING PERCENTAGE (fully vs partially franked) is not
+  carried by Yahoo and is paid-vendor data (S&P Capital IQ / Morningstar
+  security masters) - the D*(1+kappa) benchmark is therefore an UPPER BOUND
+  under full franking; the measured Delta itself is assumption-free.
+  * Foreign-investor withholding detail (15% treaty rate on unfranked
+  amounts) is public law, used only in the report-only counterfactual.
+  * Stock-loan / swap implementation (the book's other two routes) needs a
+  securities-lending fee tape - not free for 2015-2017; the direct
+  sell-cum/buy-ex route is the preregistered implementation.

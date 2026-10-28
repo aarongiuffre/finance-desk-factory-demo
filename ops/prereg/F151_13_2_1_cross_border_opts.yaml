@@ -1,0 +1,44 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_13_2_1_cross_border_opts
+# (Soper 151 Ch13 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 13.2.1: Cross-border tax arbitrage with options (Eqs 497-499).
+hypothesis: F151_13_2_1_cross_border_opts
+family: F151_13_2_1_cross_border_opts
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 13.2.1: absent a tax credit, an American put satisfies
+  Vput <= Vcall - S0 + K + D (Eq 497).  With imputation credits, put prices
+  should reflect the credit (puts written and optimally exercised ex-dividend):
+  Vput = K - [S0 - D(1 + kappa)] (Eq 498), giving the foreign investor
+  P&L = S0 + Vput - K = D(1 + kappa) (Eq 499) - the same economics as the
+  stock-loan/swap route of 13.2, executed by selling the stock cum-dividend
+  and WRITING a deep-ITM American put that is exercised ex-dividend.
+blocked_reason: >-
+  The trade REQUIRES historical listed-option quotes on the imputation-market
+  stocks around each ex-dividend date - specifically deep-ITM American puts
+  near expiry - plus the per-dividend tax-credit rate kappa.  Neither is free:
+  (i) no free HISTORICAL option chain exists for ASX-listed (or any) names;
+  Yahoo serves only CURRENT chains (the F151_3_5_iv wall, verified again
+  2026-10-28), and ASX options market data (daily series, open interest,
+  settlements) is paid (ASX data products, IRESS, Bloomberg/Refinitiv).
+  A free historical per-stock IV tape was already ruled out for the US tape
+  in F151_3_5_iv; the ASX tape is strictly worse.
+  (ii) kappa per dividend needs the per-dividend franking percentage - paid
+  vendor data (S&P Capital IQ / Morningstar security masters), same wall as
+  F151_13_2's report-only benchmark.
+  (iii) Even the Eq 497 no-credit bound needs call AND put prices on the same
+  strike/expiry through the window - same paid-tape wall.
+  No free-data proxy can express the structure: the P&L (Eq 499) is the
+  option's own market price vs its intrinsic value at the ex-date - an
+  options-tape quantity by construction.  ETF/fund substitutions are different
+  trades (no single-name deep-ITM put exists in fund form) and are NOT
+  preregistered, per the standing ETF-proxy rule (F151_11_2..11_6, F151_12_*).
+  Same standing wall class as F151_3_5_iv (no free per-name IV/chain tape).
+  Zero cells, zero tune runs, no go ask.  Re-opens only with a free historical
+  single-name options tape covering the imputation market AND per-dividend
+  franking data AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_13_2_1_cross_border_opts/BLOCKED.md (this prereg is the record)"
