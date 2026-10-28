@@ -28,13 +28,19 @@ signal: >-
   CI_YoY(t) = CPILFESL(t)/CPILFESL(t-12) - 1 on the latest fully-published
   CPI month = m-1 (period rule: CPI month m publishes mid m+1, so at a
   month-end decision of m the latest published month is m-1).  CA =
-  max(0, min((HI_YoY - CI_YoY)/HI_YoY, 1)) computed on that m-1 pair.
-  Weights: commodity basket CA, base portfolio (1-CA), rebalanced monthly
-  to the new CA (weights drift intra-month, Ch16 convention).  Base
-  portfolio = 60/40 SPY/AGG (the book's portfolio is unspecified;
-  preregistered as the desk's standard 60/40, same class as the Ch16
-  mixes).  CA is IDENTICAL across basket cells by construction - only the
-  commodity leg differs.
+  max(0, min((HI_YoY - CI_YoY)/HI_YoY, 1)) computed on that m-1 pair, with
+  the preregistered HI <= 0 GUARD: CA = 0 when HI_YoY <= 0.  (Amendment in
+  the runner-fix commit BEFORE the verdict, tune re-run from scratch: Eq 547
+  is ill-defined for non-positive headline inflation - the first tune run
+  exposed that 2015's negative headline YoY flips the ratio's sign and clips
+  CA to 1.0, i.e. deflation months read as "100% commodities", the OPPOSITE
+  of the book's mechanism, where commodity shocks pass through to POSITIVE
+  headline inflation.)  Weights: commodity basket CA, base portfolio (1-CA),
+  rebalanced monthly to the new CA (weights drift intra-month, Ch16
+  convention).  Base portfolio = 60/40 SPY/AGG (the book's portfolio is
+  unspecified; preregistered as the desk's standard 60/40, same class as the
+  Ch16 mixes).  CA is IDENTICAL across basket cells by construction - only
+  the commodity leg differs.
 cells:
   ca_dbc: "CA weight in DBC, rest 60/40 SPY/AGG (scaled by 1-CA)"
   ca_gsg: "CA weight in GSG, rest 60/40"

@@ -284,7 +284,13 @@ def ca_at(hi, ci, d, early=False):
         return None, None, None
     hi_yoy = hi.iloc[pos] / hi.iloc[pos - 12] - 1.0
     ci_yoy = ci.iloc[pos] / ci.iloc[pos - 12] - 1.0
-    if abs(hi_yoy) < 1e-12:
+    if hi_yoy <= 0:
+        # Eq 547 is ill-defined for HI_YoY <= 0: the ratio (HI-CI)/HI flips
+        # sign when HI < 0 and clips to 1 - deflation months would read as
+        # "100% commodities", the OPPOSITE of the book's mechanism (commodity
+        # shocks pass through to POSITIVE headline inflation).  Preregistered
+        # interpretation (amendment in the runner-fix commit BEFORE the
+        # verdict): CA = 0 when headline inflation is not positive.
         return 0.0, hi_yoy, ci_yoy
     ca = float(np.clip((hi_yoy - ci_yoy) / hi_yoy, 0.0, 1.0))
     return ca, hi_yoy, ci_yoy

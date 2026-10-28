@@ -186,19 +186,19 @@ def report_193(panel, base_ca):
     corr(commodity TR, HI-CI spread) and corr(commodity TR, HI YoY)."""
     ca = pd.Series(base_ca["ca_at"]).sort_index()
     hy = pd.Series(base_ca["hi_yoy"]).sort_index()
-    spy = panel["adj"]["SPY"]
-    dbc = panel["adj"]["DBC"]
-    m = panel["cal"].to_period("M").unique()
-    dbc_m = pd.Series({p: float(dbc[panel["cal"][panel["cal"].to_period("M") == p].iloc[-1]]
-                               / dbc[panel["cal"][panel["cal"].to_period("M") == p].iloc[0]] - 1.0)
-                       for p in m})
+    ca.index = ca.index.to_period("M")
+    hy.index = hy.index.to_period("M")
+    cal = panel["cal"]
+    r = panel["adj"].pct_change().reindex(cal).fillna(0.0)
+    dbc_m = (1.0 + r["DBC"]).groupby(cal.to_period("M")).prod() - 1.0
     df = pd.DataFrame({"dbc_m": dbc_m}).join(ca.rename("ca")).join(hy.rename("hi_yoy"))
-    df["spread"] = df["hi_yoy"]  # placeholder, replaced below with HI-CI
     hi = L.month_end_index(L.load_fred_raw("CPIAUCSL"))
     ci = L.month_end_index(L.load_fred_raw("CPILFESL"))
     spread_m = {}
-    for d in ca.index:
-        p = hi.index.get_loc(d)
+    for d, v in ca.items():
+        m_used = d - 1                    # decision month used m-1's CPI
+        key = m_used.to_timestamp() + pd.offsets.MonthEnd(0)   # month-END key
+        p = hi.index.get_loc(key)
         if p >= 12:
             h = hi.iloc[p] / hi.iloc[p - 12] - 1.0
             c = ci.iloc[p] / ci.iloc[p - 12] - 1.0
@@ -208,7 +208,7 @@ def report_193(panel, base_ca):
          "activation_months": int((ca > 1e-9).sum()),
          "activation_share": float((ca > 1e-9).mean()),
          "ca_mean": float(ca.mean()), "ca_max": float(ca.max()),
-         "ca_path": {str(k.date()): round(float(v), 4) for k, v in ca.items()}}
+         "ca_path": {str(k): round(float(v), 4) for k, v in ca.items()}}
     sub = df.dropna()
     b = {"corr_dbc_m_vs_HI-CI_spread": float(sub["dbc_m"].corr(sub["spread"])),
          "corr_dbc_m_vs_HI_yoy": float(sub["dbc_m"].corr(sub["hi_yoy"])),

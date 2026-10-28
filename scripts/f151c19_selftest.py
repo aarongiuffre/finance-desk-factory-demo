@@ -94,6 +94,8 @@ def t_ca_clip():
     assert ca2 == 0.0
     ca3, _, _ = run(100.0, 90.0)        # HI YoY = 0 -> guard -> 0
     assert ca3 == 0.0
+    ca4, _, _ = run(99.0, 102.0)        # HI YoY NEGATIVE (deflation): Eq 547
+    assert ca4 == 0.0, ca4              # ill-defined (sign flip) -> guard -> 0
 
 
 def t_ca_lag():
@@ -185,7 +187,7 @@ def t_ca_engine_identity():
         p = hi.index.get_loc(m_prev)
         h = hi.iloc[p] / hi.iloc[p - 12] - 1.0
         c = ci.iloc[p] / ci.iloc[p - 12] - 1.0
-        ca = float(np.clip((h - c) / h, 0.0, 1.0)) if abs(h) > 1e-12 else 0.0
+        ca = (float(np.clip((h - c) / h, 0.0, 1.0)) if h > 0 else 0.0)
         n += 1 if ca > 1e-9 else 0
     assert n == act, (n, act)
     mut = L.ca_engine(panel, basket=["DBC"], early=True)
