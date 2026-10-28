@@ -31,14 +31,19 @@ ADIR = os.path.join(ROOT, "raw", "ax")
 UA = "Mozilla/5.0 (compatible; finance-desk/0.1; +https://localhost)"
 
 UNIVERSE = [
-    # 16 ASX large caps with FULL Yahoo dividend-event coverage 2015-2017
-    # (6 events each, verified 2026-10-28) + STW.AX market proxy (hedge leg,
+    # 17 ASX large caps with FULL Yahoo dividend-event coverage 2014-2017
+    # (verified 2026-10-28) + STW.AX market proxy (hedge leg,
     # its own distributions irrelevant: hedge leg uses adjclose total return).
-    "AMC.AX", "ANZ.AX", "BEN.AX", "BHP.AX", "CBA.AX", "CSL.AX", "GMG.AX", "IAG.AX",
-    "MQG.AX", "NAB.AX", "RIO.AX", "SUN.AX", "TCL.AX", "TLS.AX", "WBC.AX",
-    "WES.AX", "WOW.AX", "STW.AX",
+    "AMC.AX", "ANZ.AX", "BEN.AX", "BHP.AX", "CBA.AX", "CSL.AX", "GMG.AX",
+    "IAG.AX", "MQG.AX", "NAB.AX", "RIO.AX", "SUN.AX", "TCL.AX", "TLS.AX",
+    "WBC.AX", "WES.AX", "WOW.AX", "STW.AX",
+    # US muni ETFs for F151_13_1: bars are duplicated from raw/price (there
+    # pulled full-history by price_pull.py); the raw/ax copies exist for the
+    # DIVIDEND EVENTS (report-only trailing-12m distribution yield).
+    "MUB", "TFI", "SHM",
 ]
 COSD, COED = "2014-01-01", "2017-12-31"
+COSD_OVERRIDE = {"MUB": "2013-10-01", "TFI": "2013-10-01", "SHM": "2013-10-01"}
 
 
 def path(sym):
@@ -125,8 +130,9 @@ def main():
     if args.cmd == "pull":
         ok = 0
         for s in syms:
+            cosd = COSD_OVERRIDE.get(s, COSD)
             try:
-                doc = fetch(s, COSD, COED)
+                doc = fetch(s, cosd, COED)
                 probs = validate(doc)
                 if probs:
                     print(f"{s}: VALIDATE {probs}", file=sys.stderr)
