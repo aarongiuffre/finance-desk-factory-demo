@@ -209,6 +209,7 @@ def run_mom_carry(g, data, mode_label):
     remaining 40% of tune.  Holdout never read in tune mode."""
     from edge_common import pnl_series, cagr, sharpe, max_dd
     cells = []
+    tune_windows = {}
     for ccy in g["assets"]:
         d = data[ccy]
         for lb in g["mom_lb"]:
@@ -225,23 +226,29 @@ def run_mom_carry(g, data, mode_label):
                 split_i = int(np.floor(0.6 * n))
                 fit_i = int(np.floor(0.6 * split_i))
                 idx_fit, idx_ev = common[:fit_i], common[split_i:]
+                tune_windows[ccy] = dict(tune_start=str(common[0].date()),
+                                         tune_end=str(common[split_i - 1].date()),
+                                         fit_end=str(common[fit_i - 1].date()),
+                                         eval_start=str(common[split_i].date()),
+                                         holdout_start=str(common[int(np.floor(0.6 * n))].date()),
+                                         bars=n)
                 closes = d["spot"].reindex(common)
                 spreadB = L.spread_price(legB.reindex(common))
                 pnlA_fit = pnl_series(posA.reindex(common).to_numpy()[:fit_i],
                                       closes.to_numpy()[:fit_i], fee_bps=FEE_BPS)
                 pnlB_fit = pnl_series(posB.reindex(common).to_numpy()[:fit_i],
-                                      spreadB.to_numpy()[:fit_i], fee_bps=2 * FEE_BPS)
+                                      spreadB[:fit_i], fee_bps=2 * FEE_BPS)
                 w1, w2, rho = minvar_weights(pnlA_fit[1:], pnlB_fit[1:])
                 # frozen weights -> out-of-sample eval slice
                 pnlA_ev = pnl_series(posA.reindex(common).to_numpy()[split_i - 1:],
                                      closes.to_numpy()[split_i - 1:], fee_bps=FEE_BPS)
                 pnlB_ev = pnl_series(posB.reindex(common).to_numpy()[split_i - 1:],
-                                     spreadB.to_numpy()[split_i - 1:], fee_bps=2 * FEE_BPS)
+                                     spreadB[split_i - 1:], fee_bps=2 * FEE_BPS)
                 combo = w1 * pnlA_ev + w2 * pnlB_ev
                 combo = combo[1:]  # first bar of the slice is warmup for costs
                 ev = dict(sharpe=float(sharpe(combo)), cagr=float(cagr(combo)),
                           max_dd=float(max_dd(combo)), net_pnl=float(np.nansum(combo)))
-                years = pd.Series(idx_ev[1:]).dt.year.to_numpy()
+                years = pd.Series(common[split_i:]).dt.year.to_numpy()
                 yr = {int(y): float(np.nansum(combo[years == y])) for y in np.unique(years)}
                 tot = ev["net_pnl"]
                 ev["max_year_share"] = (max((abs(v) for v in yr.values()), default=0.0) / abs(tot)) if tot else None
@@ -258,13 +265,13 @@ def run_mom_carry(g, data, mode_label):
                 from edge_common import trade_segments
                 n_trA = len(trade_segments(posA_t.to_numpy()))
                 posB_t = posB.reindex(common[:split_i])
-                pnlB_t = pnl_series(posB_t.to_numpy(), spreadB.to_numpy()[:split_i], fee_bps=2 * FEE_BPS)
+                pnlB_t = pnl_series(posB_t.to_numpy(), spreadB[:split_i], fee_bps=2 * FEE_BPS)
                 n_trB = len(trade_segments(posB_t.to_numpy()))
                 gg["G4_min_trades_legs"] = n_trA >= g["floor"] and n_trB >= g["floor"]
                 pnlA_s = pnl_series(posA.reindex(common).to_numpy()[split_i - 1:],
                                     closes.to_numpy()[split_i - 1:], fee_bps=2 * FEE_BPS)
                 pnlB_s = pnl_series(posB.reindex(common).to_numpy()[split_i - 1:],
-                                    spreadB.to_numpy()[split_i - 1:], fee_bps=4 * FEE_BPS)
+                                    spreadB[split_i - 1:], fee_bps=4 * FEE_BPS)
                 combo_s = (w1 * pnlA_s + w2 * pnlB_s)[1:]
                 gg["G6_stress"] = float(cagr(combo_s)) > 0
                 cells.append(dict(asset=ccy, params=dict(mom_lb=lb, mom_mode=mm,
@@ -288,6 +295,7 @@ def run_mom_carry(g, data, mode_label):
     summary = dict(family="W2a_mom_carry", mode=mode_label, grid_size=len(cells),
                    split_rule="tune = first 60% of common bars; weights fitted on tune[:60%], "
                               "combo evaluated on tune[60%:]; holdout never read in tune mode",
+                   tune_windows=tune_windows,
                    tests=tests, benchmark_bh=bh, cells=cells,
                    survivors=[dict(asset=c["asset"], params=c["params"], weights=c["weights"],
                                    sharpe=c["eval_metrics"]["sharpe"], cagr=c["eval_metrics"]["cagr"])
@@ -326,6 +334,7 @@ def main():
         run_mom_carry(g, data, a.mode)
         return
     cells = []
+    tune_windows = {}
     for ccy in g["assets"]:
         d = data[ccy]
         if family == "W2a_roll_yield":
@@ -351,6 +360,10 @@ def main():
             n = len(common)
             split_i = int(np.floor(0.6 * n))
             tune_idx = common[:split_i]
+            tune_windows[ccy] = dict(tune_start=str(tune_idx[0].date()),
+                                     tune_end=str(tune_idx[-1].date()),
+                                     holdout_start=str(common[split_i].date()),
+                                     bars=n, tune_bars=split_i)
             pos_t = pos.reindex(tune_idx)
             leg_t = legret.reindex(tune_idx)
             ev = eval_cell(pos_t, leg_t, fee, tune_idx)
@@ -371,16 +384,19 @@ def main():
                  "mutant_killed": mutant_killed(family, data, best["asset"], best["params"]),
                  "probed_cell": dict(asset=best["asset"], params=best["params"])}
     bh = {}
+    from edge_common import cagr as _cagr, sharpe as _sharpe
     for ccy in g["assets"]:
-        sp = data[ccy]["spot"].dropna()
+        key = "a" if family == "W2a_cross_venue" else "spot"
+        sp = data[ccy][key].dropna()
         r = sp.pct_change().dropna()
-        bh[ccy] = dict(sharpe=float(L.sharpe(r.to_numpy())), cagr=float(L.cagr(r.to_numpy())),
+        bh[ccy] = dict(sharpe=float(_sharpe(r.to_numpy())), cagr=float(_cagr(r.to_numpy())),
                        bars=len(r))
     survivors = [c for c in ok_cells if tests.get("replay_truncation_pass") and tests.get("mutant_killed")] \
         if tests else []
     verdict = "KEEP_TUNE" if survivors else "KILL"
     summary = dict(family=family, mode=a.mode, grid_size=len(cells),
                    split_rule="first 60% of the family's common daily bars = tune; holdout never read in tune mode",
+                   tune_windows=tune_windows,
                    tests=tests, benchmark_bh=bh, cells=cells,
                    survivors=[dict(asset=c["asset"], params=c["params"],
                                    sharpe=c["eval_metrics"]["sharpe"],

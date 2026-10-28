@@ -115,24 +115,46 @@ families:
     kind: hypothesis           # variant alphas from the H4-H7 grids; gated on those grids existing.
                                # prereg H9_alpha_combo.yaml written when variants exist
     hypotheses: [H9_alpha_combo]
-  W2a_cash_carry:              # WAVE 2a: book 6.2 quarterly futures basis (long spot /
-    kind: hypothesis           # short dated future when basis > kappa, converge at settlement).
-                               # prereg W2a_cash_carry.yaml written+committed BEFORE any run
-                               # 2026-10-28. Data: binance.vision bulk dumps (cm quarterlies
-                               # 2020-06+, spot); tune/holdout 60/40; holdout unread at tune.
+  W2a_cash_carry:              # WAVE 2a: book 6.2 quarterly basis (long spot / short cm
+    retired: true              # quarterly when basis > kappa). KILLED at tune 2026-10-28:
+                               # 0/16 cells pass - G4 trade floor (8-13 episodes vs 30) kills
+                               # all, but 12/16 pass G5 fees and 9/16 pass G2 (best cell
+                               # Sharpe 1.12, CAGR 5.3%): real carry, too rare to certify.
+                               # Holdout never read, no go issued. prereg W2a_cash_carry.yaml;
+                               # evidence logs/edge/W2a_cash_carry/{summary,KILL.md}.
+    kind: hypothesis
     hypotheses: [W2a_cash_carry]
-  W2a_roll_yield:              # WAVE 2a: book 9.1 rolled front/second quarterly curve, phi =
-    kind: hypothesis           # P1/P2 rule. prereg W2a_roll_yield.yaml committed before run.
+  W2a_roll_yield:              # WAVE 2a: book 9.1 phi=P1/P2 rolled-quarterly rule. KILLED at
+    retired: true              # tune 2026-10-28: 0/36 pass - G2 concentration 0/36 (best cell
+                               # puts 99% of net pnl in 2022: the rule is a 2022-regime bet,
+                               # not a roll premium). Holdout never read. Evidence
+                               # logs/edge/W2a_roll_yield/.
+    kind: hypothesis
     hypotheses: [W2a_roll_yield]
-  W2a_carry_funding:           # WAVE 2a: book 8.2 perp funding carry (long spot + short perp).
-    kind: hypothesis           # prereg W2a_carry_funding.yaml committed before run.
+  W2a_carry_funding:           # WAVE 2a: book 8.2 perp funding carry. KILLED at tune
+    retired: true              # 2026-10-28: 0/24 pass - G2 0/24. Best cell Sharpe 8.9 with 59%
+                               # of pnl in ONE trade / 52% in one year: the 2020-21 funding
+                               # era is one regime, not a persistent edge (G5 24/24 pass -
+                               # the kill is concentration, the economically right one).
+                               # Evidence logs/edge/W2a_carry_funding/.
+    kind: hypothesis
     hypotheses: [W2a_carry_funding]
-  W2a_mom_carry:               # WAVE 2a: book 8.4 momentum + funding-carry min-var combo.
-    kind: hypothesis           # prereg W2a_mom_carry.yaml committed before run.
+  W2a_mom_carry:               # WAVE 2a: book 8.4 momentum+carry min-var combo. KILLED at
+    retired: true              # tune 2026-10-28: 0/8 pass - min-var weights collapse onto the
+                               # carry leg (w_mom ~ 0.000-0.006), combo = concentrated carry;
+                               # G2 0/8, G4 legs 0/8. Evidence logs/edge/W2a_mom_carry/.
+    kind: hypothesis
     hypotheses: [W2a_mom_carry]
   W2a_cross_venue:             # WAVE 2a: book 6.4 same-perp cross-venue spread (binance um vs
-    kind: hypothesis           # deribit), daily-bar paper version. prereg committed before run.
+    retired: true              # deribit), daily-bar version. KILLED at tune 2026-10-28:
+                               # 0/12 pass - G5 fees 0/12 (best Sharpe 0.48); daily closes
+                               # never show persistent >cost dislocations; intraday edge is
+                               # out of scope (DEFER). Evidence logs/edge/W2a_cross_venue/.
+    kind: hypothesis
     hypotheses: [W2a_cross_venue]
   W2a_calendar:                # WAVE 2a: book 10.2 near/deferred quarterly calendar spread.
-    kind: hypothesis           # prereg W2a_calendar.yaml committed before run.
+    retired: true              # KILLED at tune 2026-10-28: 0/16 pass - G5 0/16, G6 0/16
+                               # (best cell Sharpe -0.13, negative expectancy after fees).
+                               # Evidence logs/edge/W2a_calendar/.
+    kind: hypothesis
     hypotheses: [W2a_calendar]
