@@ -112,7 +112,7 @@ def run_141():
     yoy = yoy[yoy.index >= pd.Period("2015-01")]
     ro_a = {}
     for y in sorted({p.year for p in yoy.index}):
-        m = yoy.index == y
+        m = yoy.index.year == y
         ro_a[str(y)] = {
             "realized_yoy_mean": float(yoy[m].mean()),
             "mich_mean": float(k_monthly["MICH"]
@@ -218,13 +218,15 @@ def run_142():
     adj = panel["adj"].reindex(cal)
     r_spread = adj["TIP"].pct_change() - adj["IEF"].pct_change()
     z = L.be_z(be_sess["T5YIE"].reindex(cal).ffill(limit=5))
-    fwd = r_spread.shift(-21).rolling(21).sum().shift(-21)  # 21d forward sum
-    qb = pd.qcut(z.dropna(), 5, labels=False, duplicates="drop")
+    fwd = r_spread.rolling(21).sum().shift(-21)  # sum of returns t+1..t+21
+    zv = z.dropna()
+    qb = pd.qcut(zv, 5, labels=False, duplicates="drop")
     ro_b = {}
     for q in sorted(qb.unique()):
         m = qb == q
-        ro_b[f"q{q + 1}"] = {"mean_z": float(z[m].mean()),
-                             "fwd21_spread_mean": float(fwd[m].mean()),
+        ro_b[f"q{q + 1}"] = {"mean_z": float(zv[m].mean()),
+                             "fwd21_spread_mean":
+                                 float(fwd.reindex(zv.index)[m].mean()),
                              "n": int(m.sum())}
     # report-only (c): T5YIFR vs T5YIE gap over the window
     f5 = L.load_fred_pct("T5YIFR")
