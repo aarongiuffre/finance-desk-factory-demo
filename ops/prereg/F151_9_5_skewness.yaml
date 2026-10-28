@@ -1,0 +1,76 @@
+# PRE-REGISTRATION - F151_9_5_skewness (Soper 151 Ch9 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing.
+# Book section 9.5: Skewness premium (Eqs 456-458).  Commodity/ETF panel;
+# DISTINCT from the retired W2b_skew (crypto funding skewness) - nothing is
+# reopened, no W2 file or cell is touched.
+hypothesis: F151_9_5_skewness
+family: F151_9_5_skewness
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 9.5: negative correlation between the skewness of
+  historical returns and future expected returns (Fernandez-Perez et al
+  2018).  Skewness S_i = (1/(sigma_i^3 T)) sum_s (R_is - R_i)^3 (Eq 456)
+  with R_i the mean (Eq 457) and sigma_i^2 the sample variance (Eq 458)
+  over T observations.  Zero-cost strategy: BUY the futures in the BOTTOM
+  quintile by skewness, SELL the top quintile.  The book does NOT name T -
+  preregistered windows below (6m is the Fernandez-Perez et al monthly
+  scale; 12m/24m the standard alternates).
+prior: >-
+  MILD PRIOR FOR the mechanism on commodities (the published result is a
+  CROSS-SECTIONAL commodity-futures result and 2015-2017 has live skew
+  dispersion: energy heavily left-skewed into the Feb-2016 bottom, natgas
+  UNG persistently left-skewed, bullion mildly right-skewed), but the ETF
+  proxy dilutes it: vehicle-level skewness embeds fund mechanics (contango
+  bleed makes USO/UNG left-skewed for NON-behavioral reasons - shorting
+  high-skew vehicles is partly shorting roll yield, which is W2c territory
+  by construction here) and quintile buckets on 15-23 names are 3-4
+  vehicles wide.  Costs modest (monthly, ~3-8 names/side).
+  Tested as the book states it; not salvaged.
+signal: >-
+  Panel = the 23 preregistered Yahoo commodity vehicles (see
+  F151_9_3_diversify for the panel/walls).  At the last trading day D of
+  month M (position active from the next bar, held one month):
+  eligibility_i = ticker i has >= 90% of the expected trading days of the
+  trailing window W as RAW bars (no ffill before first bar; ffill max 5
+  weekdays inside the window); S_i = sample skewness of DAILY adjclose
+  returns over the trailing W business days ending at D (population
+  moment about the sample mean per Eqs 456-458, T = window length in
+  observed days).  Requires >= 9 eligible names, else flat.  k = N // 5;
+  long the BOTTOM k by S (+1/(2k) each), short the TOP k (-1/(2k) each),
+  dollar-neutral, monthly rebalance (book construction).
+cells:
+  sk6_m: "6-month (126 obs) trailing daily skewness, bottom/top quintile, monthly"
+  sk12_m: "12-month (252 obs) trailing daily skewness, bottom/top quintile, monthly"
+  sk24_m: "24-month (504 obs) trailing daily skewness, bottom/top quintile, monthly"
+total_cells: 3 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes"
+
+fold: dev
+window:
+  data_start: "2009-01-01 (warmup: sk24 needs 2y before its first tune decision)"
+  data_end: "2017-12-31 tune cap (disk pull cap AND loader cap both 2017-12-31)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this
+    run.  Loader hard-caps every series at 2017-12-31.
+data:
+  commodities: "23-ticker panel (F151_9_3_diversify), raw/commodities/<T>.json adjclose"
+universe: "Panel membership per decision by the eligibility rule above (sk24: 15 core names only until late entrants age in 2012+; all 23 eligible well before 2015); ties broken by ticker (deterministic)."
+costs: &costs >-
+  Engine side cost by REAL dollar-ADV bucket; engine-default borrow
+  100bp/yr on short notional.  No funding/carry accrual (pure price rule).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune
+  slice: G1 lookahead (4 row-slice cuts + loader cut + decision-early
+  mutant must differ); G2 concentration (max year share of net pnl <=
+  0.40 AND max episode share of gross <= 0.25); G3 regime (>= 2 of 3
+  thirds net-positive); G4 min trades (floor above); G5 fees (net Sharpe
+  >= 0.8 AND net CAGR > 0); G6 stress (net CAGR > 0 at 2x costs).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, avg gross"
+  - "report-only: bucket mean S at last 6 rebalances; skew-vs-next-month cross-sectional rank IC on the tune slice (mechanism evidence); per-cell long-bucket vs short-bucket pnl split"
+  - "benchmarks reported ungated: equal-weight commodity basket"
+  - "honest caveats: whole window POST-publication; vehicle-level skewness is NOT futures-level skewness (contango bleed + fund fees load the left tail of energy vehicles mechanically); survivorship wall (see 9_3); book names no T (6/12/24m preregistered); W2b_skew (crypto) remains retired - no data or cell shared"

@@ -1,0 +1,91 @@
+# PRE-REGISTRATION - F151_9_3_diversify (Soper 151 Ch9 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing.
+# Book section 9.3: Portfolio diversification with commodities.  Commodity
+# exposure proxied by a free Yahoo commodity-ETF/ETN panel; equity leg SPY.
+# SKIP-note: 9.1 = W2a_roll_yield, 9.2 = W2c_hedging_pressure (LOCKED, retired).
+hypothesis: F151_9_3_diversify
+family: F151_9_3_diversify
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 9.3: commodity markets have low equity correlation that
+  can improve an equity portfolio.  Passive approach = fixed allocation to
+  commodities rebalanced with some periodicity (monthly or annually).  Active
+  approach = tactical allocation, increasing/decreasing commodity exposure
+  with the Fed discount rate (cited literature: Conover et al 2010 - commodity
+  returns correlate with Fed TIGHTENING cycles).
+prior: >-
+  WEAK PRIOR FOR the diversification MECHANISM (equity/commodity correlation
+  is genuinely low, esp. 2015-16 when commodities sold off while equities
+  ground higher), but the tune window is a calm equity bull (SPY 2015-2017
+  Sharpe ~1.2, positive all three years), so a long-only blend inherits
+  SPY's up-year concentration: the G2 year-share cap (0.40) is expected to
+  be the binding failure for the passive cells, exactly as it was for
+  F151_6_5 vol targeting.  Tactical Fed-direction cells add turnover without
+  a documented edge.  Tested as the book states it; not salvaged.
+signal: >-
+  Decision at the last trading day D of month M; position active from the
+  next bar; SPY returns from the desk tape raw/price/SPY.json adjusted
+  close ('a'), commodity returns from raw/commodities/<T>.json adjclose.
+  PANEL (23 Yahoo commodity ETFs/ETNs, all pulled 2026-10-28, disk-capped
+  2017-12-31): broad DBC GSG DJP GCC; energy USO BNO UNG UGA DBE DBO;
+  agriculture DBA WEAT CORN SOYB CANE; metals DBB DBP GLD IAU SLV CPER
+  PALL PPLT.  COMT/PDBC (2014-10 starts) EXCLUDED - no value-scale history
+  and < 3y at tune start.  Basket membership at a decision = names with
+  >= 126 trading days of history; w_com split equally among members.
+  PASSIVE cells: 60% SPY / 40% equal-weight commodity basket (book's
+  "preset portion"), rebalanced monthly (passive_6040_m) or annually
+  at the first trading day of each year (passive_6040_a).
+  TACTICAL cells (monthly): fed direction = FEDFUNDS month M-1 minus
+  month M-4 (completed months only - no same-month lookahead);
+  tactical_tighten_m holds w_com = 0.6 when the Fed rate ROSE over the
+  trailing 3 months else 0.2 (Conover 2010 tightening direction);
+  tactical_ease_m holds the mirror rule (w_com = 0.6 when it FELL).
+  Equity weight = 1 - w_com in every cell; total weight sums to 1
+  (no leverage, no shorts, no borrow).
+cells:
+  passive_6040_m: "60% SPY / 40% EW commodity basket, monthly rebalance"
+  passive_6040_a: "60% SPY / 40% EW commodity basket, annual rebalance"
+  tactical_tighten_m: "w_com 0.6 when Fed rate rose over trailing 3m, else 0.2, monthly"
+  tactical_ease_m: "w_com 0.6 when Fed rate fell over trailing 3m, else 0.2, monthly"
+total_cells: 4 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes (monthly cells); >= 2 (annual cell)"
+
+fold: dev
+window:
+  data_start: "2009-01-01 (warmup only; basket members need >= 126d history)"
+  data_end: "2017-12-31 tune cap (disk pull cap AND loader cap both 2017-12-31)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this
+    run.  SPY.json on disk runs past the split - the loader HARD-CAPS every
+    series at 2017-12-31 (loader-level lookahead bound).
+data:
+  equity: "SPY raw/price/SPY.json adjusted close, loader-capped 2017-12-31"
+  commodities: "23-ticker panel above, raw/commodities/<T>.json adjclose, 2009-01-02..2017-12-29"
+  fed: "FRED FEDFUNDS monthly (free); the book's Fed DISCOUNT rate series is discontinued in FRED before the window - FEDFUNDS is the documented proxy"
+universe: "Fixed 23-name panel; membership per decision by history rule; missing bars ffilled (max 5 weekdays)."
+costs: &costs >-
+  Engine side cost by REAL dollar-ADV bucket (v*c): fee 15bp + half-spread
+  5/15/40bp (large/mid/small) + slip 10bp, floor 20bp/side.  ETF shorts
+  none (no short legs in this family).  No borrow term.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune
+  slice (standing F151 discipline):
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  AND decision-early mutant must differ (all cells signal-varying).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25 (monthly cells) / <= 0.50 (annual cell,
+  preregistered deviation: 3 annual episodes make the monthly 0.25 cap
+  unpassable by construction; 1/3 baseline + slack).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 AND net CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, avg gross"
+  - "mechanism evidence report-only: SPY vs commodity-basket daily correlation on the tune slice (the diversification claim IS the correlation); standalone SPY and standalone commodity-basket Sharpe/CAGR"
+  - "benchmarks reported ungated: 100% SPY buy-hold, 100% commodity basket"
+  - "honest caveats: whole window POST-publication (decay IN the test); ETF/ETN vehicles are not spot/futures commodities (roll costs and fund fees embedded); panel carries a survivorship wall (delisted-on-Yahoo vehicles RJI UHN COW JJG JJA JJC DGL have no free tape and are excluded); GLD/IAU double-count gold bullion, DBC/GSG/DJP/GCC double-count the broad complex, USO/DBO double-count WTI - the basket is vehicle-weighted, not commodity-weighted"

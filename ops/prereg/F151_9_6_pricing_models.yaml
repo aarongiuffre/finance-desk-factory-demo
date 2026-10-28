@@ -1,0 +1,41 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_9_6_pricing_models
+# (Soper 151 Ch9 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 9.6: Trading with pricing models (Eqs 459-462).
+hypothesis: F151_9_6_pricing_models
+family: F151_9_6_pricing_models
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 9.6: model the commodity futures term structure with an
+  Ornstein-Uhlenbeck process dX = kappa(a - X)dt + sigma dW (Eq 459, X =
+  ln spot); the Q-measure pricing argument gives the model futures curve
+  ln F(t,T) = exp(-kappa(T-t)) X(t) + a[1 - exp(-kappa(T-t))] +
+  (sigma^2/4kappa)[1 - exp(-2kappa(T-t))] (Eq 462).  Fit kappa/a/sigma on
+  history, compare model price to MARKET futures prices per maturity, and
+  trade rich/cheap against the model curve.
+blocked_reason: >-
+  The signal REQUIRES a multi-maturity futures term structure (market
+  futures prices F(t,T) at several delivery dates per commodity, plus a
+  spot proxy).  Free sources available to this desk provide NONE:
+  Yahoo serves single-vehicle ETF prices (no delivery-date dimension -
+  USO is one blended roll vehicle, not a curve); FRED has no commodity
+  futures curve series; CME/ICE historical curve data is paid.  The
+  desk's free FRED/Yahoo constraint (wave BRIEF) therefore blocks the
+  model's core input.  A single-vehicle ETF price CANNOT substitute: the
+  book's rich/cheap comparison is model-vs-MARKET-CURVE, and fitting OU
+  parameters to one blended vehicle and calling the residual "rich/cheap"
+  would test fund mechanics, not the book's pricing model.
+standing_hft_note: >-
+  Same class of wall as F151_8_5 triangular arb (standing HFT, no free
+  tick FX tape) and F151_7_3_1 (no free individual VIX futures tape):
+  the input is a PAID market-data product, not a methodology choice.
+  If a free term-structure tape ever lands on the desk, this stub re-opens
+  as a preregistered family with cells fit per Eqs 459-462; until then it
+  stays BLOCKED with zero cells and zero tune runs.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+  - "No scored DEV ever without a standing dev go AND a free curve tape."
+reporting:
+  - "stub evidence in logs/edge/F151_9_6_pricing_models/ BLOCKED.md (this prereg is the record)"
+  - "honest caveat: 9.6 is the ONLY Ch9 section requiring paid data; the other three Ch9 families run free (Yahoo ETF panel + FRED)"

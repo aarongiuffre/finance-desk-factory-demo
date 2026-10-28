@@ -1,0 +1,71 @@
+# PRE-REGISTRATION - F151_9_4_value (Soper 151 Ch9 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing.
+# Book section 9.4: Value (Eq 455, Asness-Moskowitz-Pedersen style).
+hypothesis: F151_9_4_value
+family: F151_9_4_value
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 9.4: value for commodities v = P5 / P0 (Eq 455) where
+  P5 is the spot price 5 years ago (footnote: or the average spot price
+  between 5.5 and 4.5 years ago) and P0 the current spot.  Build a zero-cost
+  portfolio buying the top tercile by value and selling the bottom tercile,
+  rebalanced monthly.
+prior: >-
+  MILD PRIOR AGAINST on this tape: 2015-2017 commodity value (5y price
+  ratio) put longs in whatever crashed hardest 2010-2015 - chiefly the
+  energy complex, which kept crashing through 2015-16 before the 2016
+  bottom - while 5y-high metals (gold/silver off their 2011 peak had mean-
+  reverted by 2015) sit mid-rank.  AMP-style value works cross-sectionally
+  on long futures panels; the ETF proxy adds fund-level drift (contango
+  bleed in USO/UNG) that contaminates a PRICE-RATIO signal.  Tercile sorts
+  on a 15-23 name vehicle panel are also concentrated (4-5 names/side).
+  Tested as the book states it; not salvaged.
+signal: >-
+  Panel = the 23 preregistered Yahoo commodity vehicles (see
+  F151_9_3_diversify for the panel/walls).  At the last trading day D of
+  month M (position active from the next bar, held one month):
+  eligibility_i = D - 5.5y inside ticker i's history (raw bars, no ffill
+  past the start); P5_i = mean adjclose over [D-5.5y, D-4.5y]; P0_i =
+  adjclose at D; v_i = P5_i / P0_i.  Requires >= 9 eligible names, else
+  flat that month.  Sort eligible names by v descending; k = N // 3;
+  long the top k (+1/(2k) each), short the bottom k (-1/(2k) each),
+  dollar-neutral zero-cost, monthly rebalance (book: monthly).
+  value_tercile_m_ex repeats the sort EXCLUDING the four broad baskets
+  (DBC GSG DJP GCC) - preregistered robustness: the broad baskets are
+  four vehicles of the same index family and can dominate both terciles.
+cells:
+  value_tercile_m: "P5/P0 tercile L/S, full panel, monthly"
+  value_tercile_m_ex: "same excluding the 4 broad baskets, monthly"
+total_cells: 2 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes"
+
+fold: dev
+window:
+  data_start: "2009-01-01 (warmup: the 5.5y value lookback needs 2009-07+ for the full-coverage names)"
+  data_end: "2017-12-31 tune cap (disk pull cap AND loader cap both 2017-12-31)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this
+    run.  Loader hard-caps every series at 2017-12-31.
+data:
+  commodities: "23-ticker panel (F151_9_3_diversify), raw/commodities/<T>.json adjclose; eligibility counts RAW history only (no ffill before first bar)"
+universe: "Panel grows 15 -> 23 names across the tune window as late-2010/2011 entrants (BNO PALL PPLT CORN CPER WEAT SOYB CANE) reach the 5.5y lookback; ties broken by ticker (deterministic)."
+costs: &costs >-
+  Engine side cost by REAL dollar-ADV bucket; engine-default borrow
+  100bp/yr on short notional (conservative for bullion ETFs).  No funding
+  accrual (spot-price-ratio construction, no carry term in the book).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune
+  slice: G1 lookahead (4 row-slice cuts + loader cut + decision-early
+  mutant must differ); G2 concentration (max year share of net pnl <=
+  0.40 AND max episode share of gross <= 0.25); G3 regime (>= 2 of 3
+  thirds net-positive); G4 min trades (floor above); G5 fees (net Sharpe
+  >= 0.8 AND net CAGR > 0); G6 stress (net CAGR > 0 at 2x costs).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, avg gross"
+  - "report-only: mean v of the long and short buckets at each rebalance (last 6); per-bucket pnl split; eligibility count time series"
+  - "benchmarks reported ungated: equal-weight commodity basket, long-only top-tercile (not preregistered - report only)"
+  - "honest caveats: whole window POST-publication; ETF vehicles embed roll costs/fund fees - a price-ratio value signal on vehicle prices is a documented proxy for spot value; survivorship wall (see 9_3); P5 averaged 4.5-5.5y back per the book's footnote (the point-in-time P5 variant is NOT run - the footnote's own primary is 5y-ago spot)"
