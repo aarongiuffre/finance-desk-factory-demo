@@ -30,7 +30,8 @@ signal: >-
   lookback (skip-1-month form: months m-L..m-1), ELIGIBLE = >= L*21 sessions of
   history at the decision date.  Quintile baskets EW (ceil(N/5) names per side);
   LS cells long top quintile / short bottom quintile (gross 1.0 split 0.5/0.5);
-  LO cells long top quintile only (1.0).  Rebalance to target monthly.
+  LO cells long top quintile only (1.0).  Rebalance to target monthly.  Machinery
+  warmup guard (preregistered): a month with < 10 eligible names stays flat.
 cells:
   mom12_q_ls: "L=12m skip-1, quintile LS, monthly"
   mom6_q_ls: "L=6m skip-1, quintile LS, monthly"
