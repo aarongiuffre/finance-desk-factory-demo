@@ -390,3 +390,42 @@ families:
                                # logs/edge/F151_3_19_mm/BLOCKED.md.
     kind: hypothesis
     hypotheses: [F151_3_19_mm]
+  F151_4_2_alpha_rot:          # Soper FULL-151 Ch4: book 4.2 alpha rotation (Eq 364)
+    retired: true              # monthly DN top-2/bottom-2 + tilt on FF3 Jensen's alpha
+                               # (252/126 daily, 52 weekly obs) over the 17-ETF pool.
+                               # KILLED at tune 2026-10-28: 0/4 - best net Sharpe -0.68
+                               # (a126_dn); alpha is a de-noised momentum proxy and
+                               # inherited the Eq_sector_mom failure as preregged.
+                               # Prereg fead22d BEFORE any run.  Evidence
+                               # logs/edge/F151_4_2_alpha_rot/.
+    kind: hypothesis
+    hypotheses: [F151_4_2_alpha_rot]
+  F151_4_3_rsquared:           # Soper FULL-151 Ch4: book 4.3 R-squared (Eqs 365-369)
+    retired: true              # FF4 alpha + time-series R2, selectivity=1-R2; tercile-x-
+                               # alpha DN (25-group sort impossible at N~16, documented),
+                               # rank-score DN, tilt.  KILLED at tune 2026-10-28: 0/5 -
+                               # best net Sharpe -1.16; R2 cross-section COMPRESSED
+                               # (median of monthly medians 0.787): index ETFs are
+                               # near-R2~1 by construction, the Amihud-Goyenko premise
+                               # does not transfer.  Evidence logs/edge/F151_4_3_rsquared/.
+    kind: hypothesis
+    hypotheses: [F151_4_3_rsquared]
+  F151_4_5_letfs:              # Soper FULL-151 Ch4: book 4.5 leveraged/inverse ETFs
+    deferred: true             # DEFER stands 2026-10-28 (exotic, path-dep daily
+                               # rebalancing; volatility-decay edge needs borrow/
+                               # financing terms not in the daily public tape).
+                               # One-line stub, nothing run.  Evidence
+                               # logs/edge/F151_4_5_letfs/DEFER.md.
+    kind: hypothesis
+    hypotheses: [F151_4_5_letfs]
+  F151_4_6_multi_trend:        # Soper FULL-151 Ch4: book 4.6 multi-asset trend following
+    retired: true              # long-only Eqs 371-373 on the ETF pool (6/12m Ricum>0,
+                               # optional MA100/200 filter; w ∝ Ricum, Ricum/sigma,
+                               # Ricum/sigma^2).  KILLED at tune 2026-10-28: 0/8 - all
+                               # cells positive net CAGR (+5.0..+7.2%) but net Sharpe
+                               # 0.48-0.68 < the 0.8 G5 bar AND G2 year-concentration
+                               # fails every cell (2017 = 0.80 of f12_w2 net pnl).
+                               # Best cell f12_w3 0.683.  Evidence
+                               # logs/edge/F151_4_6_multi_trend/.
+    kind: hypothesis
+    hypotheses: [F151_4_6_multi_trend]
