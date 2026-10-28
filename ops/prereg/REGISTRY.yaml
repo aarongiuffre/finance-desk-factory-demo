@@ -208,3 +208,14 @@ families:
                                # logs/edge/W2b_fomc/.
     kind: hypothesis
     hypotheses: [W2b_fomc]
+  W2c_hedging_pressure:        # WAVE 2c: book 9.2 hedging pressure on CFTC CME BTC
+    retired: true              # positioning (contract 133741, legacy Futures-Only bulk, 446 weekly
+                               # reports 2018-04..2026-10; PIT release rule as_of+3d 20:30 UTC).
+                               # KILLED at tune 2026-10-28: 0/12 - best cell (HP_s percentile rank
+                               # L=104) Sharpe 0.345 vs buy-hold 0.697 on the same tune slice, and
+                               # it fails G2/G3/G4 (59 trades, 99% of pnl in one year). Specs net
+                               # SHORT 93% of tune days; timing corr -0.03; HP_h canonical
+                               # de Roon direction loses everywhere. Evidence
+                               # logs/edge/W2c_hedging_pressure/.
+    kind: hypothesis
+    hypotheses: [W2c_hedging_pressure]
