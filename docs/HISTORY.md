@@ -191,3 +191,22 @@ One-liners with commit hashes; deep dives live where noted.
 ## 2026-10-28 — EODHD dropped from nightly nasdaq-watch-filings
 
 Aaron via VP: do not renew EODHD. Gate `EODHD_DISABLED=1` in unit drop-in; roster diff via NASDAQ Trader nasdaqlisted.txt (Yahoo 10y init for new listings); no EODHD dead-tier fill on delist. CIK + quarter scan + drain remain. Archive h1_universe + EODHD_MANIFEST kept. Evidence: `/workspace/finance/desk-status-20261028/eodhd-drop/`.
+- 2026-10-28 evening — W2d_skew rebuilt and KILLED at tune; thin Ch2 skew smoke KILLED
+  (Aaron chat-tap via VP: free MIT options parquet ingest, SPY/QQQ/IWM, QC PASS at
+  raw/options/QC.md).  New preregs EW3_w2d_skew + EW3_ch2_skew_smoke committed a15ce2f
+  BEFORE any run; equity/ETF IV from parquet, NOT the WAVE2 Deribit path (W2d_skew stub
+  stays blocked for BTC; REGISTRY annotated).  Daily 25-delta RR surface on SPY
+  (rr median -5.9 vol pts, mark==mid, relspread 4.2%/2.8%, 755/755 session coverage —
+  preregistered DQ guard PASS).  Tune 2015-2017 only, holdout never read: 0/4 cells pass
+  the six gates.  Findings worth keeping: (1) the delta-hedged long 25d RR is ~FLAT gross
+  (+18.8% option MTM vs -19.8% hedge over 3y) — the 25d skew carries no gross harvest
+  either direction in-window, and the preregistered 20bps/side daily-hedge floor alone
+  costs ~4.4%/yr (net Sharpe -3.26); (2) the unhedged cell's +5.72%/yr is ~0.5x-SPY beta
+  (SPY +38.1% in-window), dies G2 year share 0.53; (3) rr z mean reversion has no gross
+  edge (+1.5%/3y) and steep-skew defensive timing returns 1.79%/yr vs 11.4%/yr buy-and-
+  hold with year share 1.24.  One state_cycles tail-entry bug was caught by the G1 replay
+  detector on the first pass and fixed at the root (1fb85d2) before any verdict; clean
+  re-run produced the verdicts.  Evidence logs/edge/EW3_w2d_skew/ + EW3_ch2_skew_smoke/;
+  workdir deliverables VERDICT.md (KILL) + SUMMARY.md.  REGISTRY 135 -> 137 (both new
+  families retired).  No KEEP_TUNE -> SURVIVORS.md untouched.  pyarrow 25.0.1 added to
+  .venv-crypto for parquet reads.  Session 20261028_191340_9199e9.

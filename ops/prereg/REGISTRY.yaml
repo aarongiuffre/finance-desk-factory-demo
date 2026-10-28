@@ -232,11 +232,14 @@ families:
     kind: hypothesis
     hypotheses: [W2d_vol_rp]
   W2d_skew:                    # WAVE 2d: book 7.5 vol skew - long risk reversal (BTC)
-    blocked: true              # needs historical put/call IV skew; no free public source
-                               # (Deribit serves no chain history; Tardis CSV datasets gone
-                               # 404; CDD options ZIPs paid; Kaiko/Laevitas/Amberdata paid).
-                               # Nothing run, no claim. Unblock condition in the prereg stub
-                               # + logs/edge/W2d_skew/BLOCKED.md.
+    blocked: true              # Deribit BTC path remains data-starved (no chain history;
+                               # Tardis CSVs gone 404; paid sources refused).  SUPERSEDED
+                               # for equity/ETF IV 2026-10-28: the rebuild ran as the NEW
+                               # family EW3_w2d_skew on the free MIT SPY options parquet
+                               # (Aaron chat-tap via VP) - KILLED at tune 0/2, evidence
+                               # logs/edge/EW3_w2d_skew/.  This stub keeps only the
+                               # never-run BTC mechanism; the WAVE2 Deribit path was NOT
+                               # reopened.
     kind: hypothesis
     hypotheses: [W2d_skew]
   Eq_price_momentum:           # Soper SECONDARY (equity, Yahoo desk): book 3.1 price momentum
@@ -1536,3 +1539,37 @@ families:
                                # Evidence logs/edge/EW3_reit_time_trend/.
     kind: hypothesis
     hypotheses: [EW3_reit_time_trend]
+  EW3_w2d_skew:                # W2d_skew rebuild (book 7.5) on the FREE MIT SPY options
+    retired: true              # parquet (Aaron chat-tap via VP 2026-10-28; equity/ETF IV
+                               # from parquet - NOT the WAVE2 Deribit path).  KILLED at
+                               # tune 2026-10-28: 0/2 with the preregistered DQ guard
+                               # PASSED (coverage 755/755 sessions, delta-band hits
+                               # 0.92/0.97, IV+quote sanity, median relspread 4.2%/2.8%).
+                               # rr_static_dh: long 25d RR delta-hedged, gross ~FLAT
+                               # (option MTM +18.8% vs hedge -19.8% over 3y) -> net
+                               # Sharpe -3.26 / CAGR -5.14%: the daily-hedge turnover
+                               # floor (20bps/side, ~4.4%/yr) alone kills it, and the
+                               # 25d skew carried NO gross harvest either direction.
+                               # rr_static_unhedged: net +5.72%/yr Sharpe 0.88 passes
+                               # G5+G6 but is ~0.5x-SPY beta in a +38% window and dies
+                               # G2 (year share 0.53) - beta, not skew.  G1 replay +
+                               # mutant live on both (mutant differs; one state_cycles
+                               # tail-entry bug found by the replay detector and fixed
+                               # BEFORE any verdict).  Evidence logs/edge/EW3_w2d_skew/.
+    kind: hypothesis
+    hypotheses: [EW3_w2d_skew]
+  EW3_ch2_skew_smoke:          # thin Ch2 smoke (IV/skew cells, SPY only): rr z-band
+    retired: true              # mean-reversion + steep-skew defensive timing.  KILLED at
+                               # tune 2026-10-28: 0/2, shared DQ guard PASS.  Both cells
+                               # share ONE signal (rr z252) - smoke of a single idea.
+                               # rr_z_meanrev: gross ~+1.5%/3y (skew z mean reversion
+                               # has NO gross edge), net Sharpe -5.33 after half-spread
+                               # + hedge costs; G3/G5/G6 fail.  skew_timing: gross
+                               # +31.5%/3y is SPY beta while in-SPY; net 1.79%/yr
+                               # Sharpe 0.22 vs SPY 11.4%/yr, year share 1.24 -> G2/G5
+                               # fail: steep-skew risk-off timing has no value on this
+                               # tape.  Inventory-only Ch2 families needing full OPRA
+                               # stay BLOCKED stubs (nothing invented).  Evidence
+                               # logs/edge/EW3_ch2_skew_smoke/.
+    kind: hypothesis
+    hypotheses: [EW3_ch2_skew_smoke]

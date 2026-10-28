@@ -32,6 +32,13 @@
 # at which point this stub is replaced with a full prereg (signal: 25-delta
 # risk reversal bands / percentile ranks on BTC, mirroring the W2d_vol_rp
 # gate structure) and the standard tune/scored discipline applies.
+#
+# ADDENDUM 2026-10-28 (same day): the Aaron chat-tap delivered a FREE MIT
+# equity/ETF options parquet (GitHub mirror; QC PASS raw/options/QC.md), which
+# unblocked the mechanism on SPY under the NEW family EW3_w2d_skew
+# (ops/prereg/EW3_w2d_skew.yaml) - equity/ETF IV from parquet, NOT this
+# Deribit path.  Result: KILLED at tune 0/2 (logs/edge/EW3_w2d_skew/).  This
+# stub remains BLOCKED for the never-run BTC mechanism.
 hypothesis: W2d_skew
 family: W2d_skew
 kind: blocked
