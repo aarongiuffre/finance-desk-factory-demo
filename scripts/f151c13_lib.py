@@ -199,11 +199,17 @@ def ax_pnl(events, panel, hedged=False, side_bps=SIDE_BPS, cost_mult=1.0,
            early_mutant=False, mkt=MKT):
     """Equal-notional event pnl on the ASX calendar.
 
-    Decision at close t-1 (last cum session), pnl earned day t (ex-date):
-    r_event = (S_cum - S_ex) / S_cum, net of 2x side costs.  Hedged cells
-    subtract beta_i * r_mkt (STW TR over the same session).  early_mutant is
-    the G1 decision-early MUTANT: uses the EX-DATE close as the sell price
-    (delta measured one session late) - must produce a different series.
+    Decision at close t-1 (last cum session), pnl earned day t (ex-date).
+    AMENDED ECONOMICS (prereg amendment 001, 2026-10-28 - the first run's
+    formula Delta/S_cum omitted the dividend obligation): a short position
+    held over the ex-date OWES the dividend to the stock lender (equivalently,
+    a holder who sells cum-dividend gives up the dividend), so the flat-start
+    event pnl is r_ev = (Delta - D) / S_cum, net of 2x side costs.  The trade
+    wins iff the ex-day drop EXCEEDS the dividend by more than costs - i.e.
+    iff the imputation credit is priced into the drop (kappa*D) beyond costs.
+    Hedged cells subtract beta_i * r_mkt (STW TR over the same session).
+    early_mutant is the G1 decision-early MUTANT: uses the EX-DATE close as
+    the sell price and buys back the next session - must differ from base.
     """
     cal, close, adj = panel["cal"], panel["close"], panel["adj"]
     idx = {d: i for i, d in enumerate(cal)}
@@ -227,7 +233,7 @@ def ax_pnl(events, panel, hedged=False, side_bps=SIDE_BPS, cost_mult=1.0,
             s_buy = float(close[e["sym"]].iloc[i + 1])
             r_ev = (s_sell - s_buy) / s_sell
         else:
-            r_ev = (e["s_cum"] - e["s_ex"]) / e["s_cum"]
+            r_ev = (e["s_cum"] - e["s_ex"] - e["D"]) / e["s_cum"]
         g = r_ev
         if hedged:
             b = e.get("beta")

@@ -173,7 +173,8 @@ def run_ax():
     deltas = np.array([e["s_cum"] - e["s_ex"] for e in events])
     scums = np.array([e["s_cum"] for e in events])
     divs = np.array([e["D"] for e in events])
-    r_ev, r_div = deltas / scums, divs / scums
+    r_drop, r_div = deltas / scums, divs / scums
+    r_ev = r_drop - r_div        # amended economics: short owes the dividend
     meta = {"n_events_total": len(events), "excluded": excluded,
             "n_no_beta": sum(1 for e in events if e["beta"] is None),
             "beta_range": [float(min(e["beta"] for e in events
@@ -181,31 +182,33 @@ def run_ax():
                            float(max(e["beta"] for e in events
                                      if e["beta"] is not None))],
             "drop_decomposition": {
-                "mean_drop_pct": float(r_ev.mean() * 100),
+                "mean_drop_pct": float(r_drop.mean() * 100),
                 "mean_div_pct": float(r_div.mean() * 100),
                 "mean_drop_over_div": float((deltas / divs).mean()),
                 "share_drop_gt_div": float((deltas > divs).mean()),
                 "full_credit_benchmark_mean_pct":
                     float((r_div * (1 + kappa)).mean() * 100),
-                "mean_excess_drop_pct": float((r_ev - r_div).mean() * 100)},
+                "mean_excess_drop_pct": float(r_ev.mean() * 100)},
             "counterfactual": {
-                # foreign holder keeps the stock: -drop + dividend, with the
-                # 15% treaty withholding on the UNFRANKED portion at 0 under
-                # the full-franking UPPER BOUND -> most generous hold case
-                "hold_net_mean_pct": float((-r_ev + r_div).mean() * 100),
+                # flat-start short-cum/cover-ex with the dividend obligation:
+                # net of 2x side costs; the holder-baseline version is the
+                # same quantity (trade vs hold differ by Delta - D - costs)
                 "trade_net_mean_pct":
-                    float((r_ev - 2 * SIDE_BPS / 1e4).mean() * 100)}}
+                    float((r_ev - 2 * SIDE_BPS / 1e4).mean() * 100),
+                "share_events_net_positive":
+                    float(((r_ev - 2 * SIDE_BPS / 1e4) > 0).mean())}}
     close = panel["close"]
     idx = {d: i for i, d in enumerate(panel["cal"])}
     aligned, off = 0, []
     for e in events:
         i = idx[e["ex_date"]]
-        w = close[e["sym"]].iloc[i - 3: i + 4].pct_change().abs()
-        if int(np.argmax(w.to_numpy())) == 3:
+        w = close[e["sym"]].iloc[i - 3: i + 4].pct_change().abs().dropna()
+        # w[k] = |return of session i-3+k+1|; the ex-date move is k=2
+        if int(np.argmax(w.to_numpy())) == 2:
             aligned += 1
         else:
             off.append((e["sym"], e["ex_date"].date().isoformat(),
-                        int(np.argmax(w.to_numpy())) - 3))
+                        int(np.argmax(w.to_numpy())) - 2))
     meta["drop_alignment"] = {"aligned": aligned, "off": off, "n": len(events)}
     return cells, meta
 

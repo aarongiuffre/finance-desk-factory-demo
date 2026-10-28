@@ -113,8 +113,8 @@ try:
     check("ax: beta recovers the constructed 1.0 (stock TR == market TR)",
           events[0]["beta"] is not None and np.isclose(events[0]["beta"], 1.0))
     res = ax_pnl(events, panel, hedged=False, side_bps=20.0)
-    r_ev = (s_cum - s_ex) / s_cum
-    check("ax: unhedged event pnl = drop/price - 40bp round trip",
+    r_ev = (s_cum - s_ex - D) / s_cum
+    check("ax: unhedged event pnl = (drop - dividend)/price - 40bp round trip",
           np.isclose(res["pnl"].iloc[700], r_ev - 0.0040)
           and res["n_events"] == 1)
     resh = ax_pnl(events, panel, hedged=True, side_bps=20.0, mkt="MKT")

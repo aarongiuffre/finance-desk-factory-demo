@@ -104,3 +104,21 @@ data_walls: >-
   * Stock-loan / swap implementation (the book's other two routes) needs a
   securities-lending fee tape - not free for 2015-2017; the direct
   sell-cum/buy-ex route is the preregistered implementation.
+amendments:
+  - id: "001 (2026-10-28, BEFORE any verdict; caught on the first tune pass)"
+    change: >-
+      The signal section's pnl formula r_event = Delta / S_cum was
+      economically WRONG and is amended to r_event = (Delta - D) / S_cum.
+      A position held short over the ex-date owes the dividend to the stock
+      lender (equivalently: a holder who sells cum-dividend gives up the
+      dividend), so collecting the raw ex-day drop double-counts the
+      dividend - the first-pass run showed +2.6%/event "edge", which is
+      exactly the mean dividend, i.e. the dividend-drop capture without
+      paying for it.  The corrected trade earns money iff the ex-day drop
+      exceeds the dividend by more than costs - precisely the book's
+      hypothesis that the imputation credit (kappa*D) is priced into the
+      drop.  The drop decomposition, the D*(1+kappa) benchmark, the cells,
+      gates, costs, universe and windows are UNCHANGED.  Documented here and
+      in the machinery commit; tune re-run from scratch on the corrected
+      engine.
+
