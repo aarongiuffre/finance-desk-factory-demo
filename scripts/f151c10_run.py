@@ -160,7 +160,8 @@ def _vr(res, unhed):
 def run_hedge_cell(family, cfg, cell, bname, params, g4_floor,
                    panel, panel_cut, cal, msk, out):
     W, meta = getattr(S, bname)(panel, cal, **params)
-    spot, fut = meta["spot"], meta["fut"]
+    spot = meta.get("spot") or meta["bond"]
+    fut = meta["fut"]
     W_spot = pd.DataFrame(0.0, index=cal, columns=panel["tickers"])
     first = min(meta["reb_dates"]) if meta["reb_dates"] else None
     if first is not None:
@@ -181,7 +182,8 @@ def run_hedge_cell(family, cfg, cell, bname, params, g4_floor,
     vr_thirds = [_vr(t, u) for t, u in zip(
         thirds, np.array_split(unhed.values, 3))]
     m = L.metrics(res, rh["in_market"])
-    ep_share = _ep_abs_share(rh["gross"][msk], meta["reb_dates"], cal)
+    ep_share = _ep_abs_share(rh["gross"][msk], meta["reb_dates"],
+                             rh["gross"][msk].index)
     year_abs = _year_abs_share(res.dropna())
     cost_ann = float(rh["cost"][msk].mean() * 252.0)
     n_ep = int(meta["n_episodes"])
@@ -270,7 +272,7 @@ def run_alpha_cell(family, cfg, cell, bname, params, g4_floor,
     ep_share = None
     gross = bt["gross"][msk]
     if meta.get("reb_dates") and abs(gross.sum()) > 0:
-        ep = L.episode_gross(gross, meta["reb_dates"], cal)
+        ep = L.episode_gross(gross, meta["reb_dates"], gross.index)
         ep_share = max(abs(v) for v in ep.values()) / abs(gross.sum())
     n_ep = int(meta.get("n_episodes") or 0)
     gates = L.gate_checks(m, t["pnl"].values, ep_share, False,
