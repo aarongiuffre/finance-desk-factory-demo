@@ -284,7 +284,10 @@ def build_roll(panel, cal, mode="top2", freq="m"):
 def build_cs(panel, cal, signal="trend21"):
     """2s10s duration-matched DN steepener/flattener; signal from spread
     momentum (trend) or its inverse (meanrev), or unconditional steepener."""
-    win = int(signal.replace("trend", "").replace("meanrev", ""))
+    win = 21
+    for pre in ("trend", "meanrev"):
+        if signal.startswith(pre):
+            win = int(signal[len(pre):])
     reb = reb_dates(cal, "m")
     y = panel["y"]
     s = y["DGS10"] - y["DGS2"]
@@ -319,6 +322,7 @@ def build_value(panel, cal, mode="dn", freq="m", med_win=252, min_obs=200):
     legs = synthetic par bonds (panel['credit'])."""
     reb = reb_dates(cal, freq)
     S = panel["y"][["DAAA", "DBAA"]].sub(panel["y"]["DGS20"], axis=0)
+    S = S.rename(columns={"DAAA": "aaa", "DBAA": "baa"})
     wdates, skipped, vs = {}, 0, []
     for D in reb:
         loc = S.index.searchsorted(pd.Timestamp(D), side="right")
@@ -347,5 +351,5 @@ def build_value(panel, cal, mode="dn", freq="m", med_win=252, min_obs=200):
             "n_episodes": len(wdates), "skipped": skipped}
     if vs:
         meta["V_median"] = {k: float(np.median([x[k] for x in vs]))
-                            for k in ("aaa", "baa")}
+                            for k in vs[0]}
     return W, meta

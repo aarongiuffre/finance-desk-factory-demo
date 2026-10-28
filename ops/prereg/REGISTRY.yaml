@@ -429,3 +429,138 @@ families:
                                # logs/edge/F151_4_6_multi_trend/.
     kind: hypothesis
     hypotheses: [F151_4_6_multi_trend]
+  F151_5_2_bullets:            # Soper FULL-151 Ch5: book 5.2 bullets
+    retired: true              # single-segment Treasury ETF bullets (SHY/IEI/IEF/TLT,
+                               # 100% each, monthly).  KILLED at tune 2026-10-28: 0/4 -
+                               # best bullet_shy net Sharpe +0.215; every cell fails G2
+                               # year-concentration (a single-segment book is a levered
+                               # bet on one rate year: TLT 2015 -11.95 / 2017 +10.65 of
+                               # net pnl) and the 0.8 G5 bar.  Evidence
+                               # logs/edge/F151_5_2_bullets/.
+    kind: hypothesis
+    hypotheses: [F151_5_2_bullets]
+  F151_5_3_barbells:           # Soper FULL-151 Ch5: book 5.3 barbells
+    retired: true              # 50/50 two-segment barbells (+ quarterly).  KILLED at
+                               # tune 2026-10-28: 0/4 - best +0.085; measured meta: the
+                               # SHY+TLT barbell is MORE volatile (6.61%) than the
+                               # mid-segment IEF bullet (5.34%) - the book's convexity
+                               # advantage does not transfer to segment-ETF proxies.
+                               # Evidence logs/edge/F151_5_3_barbells/.
+    kind: hypothesis
+    hypotheses: [F151_5_3_barbells]
+  F151_5_4_ladders:            # Soper FULL-151 Ch5: book 5.4 ladders
+    retired: true              # equal-weight 4/3-rung Treasury ladders, m/q/a
+                               # rebalance.  KILLED at tune 2026-10-28: 0/4 - net
+                               # Sharpe +0.04..+0.06, G2 + G5 fail every cell; cadence
+                               # is irrelevant at this turnover (annual = monthly
+                               # metrics to 4 decimals).  Evidence
+                               # logs/edge/F151_5_4_ladders/.
+    kind: hypothesis
+    hypotheses: [F151_5_4_ladders]
+  F151_5_5_immunization:       # Soper FULL-151 Ch5: book 5.5 bond immunization
+    retired: true              # 2-ETF duration-matched portfolios for synthetic
+                               # liabilities D*=5/7.5/11y, quarterly; durations from
+                               # causal 252d return-on-delta-CMT regressions (SHY 1.63,
+                               # IEF 7.56, TLT 17.38).  KILLED at tune 2026-10-28: 0/3 -
+                               # as a portfolio it clears no gate (best +0.076), but the
+                               # immunization OBJECTIVE worked: tracking error vs the
+                               # synthetic zero liability -1.37%/-0.51%/+0.06% over 3y.
+                               # Evidence logs/edge/F151_5_5_immunization/.
+    kind: hypothesis
+    hypotheses: [F151_5_5_immunization]
+  F151_5_6_dd_butterfly:       # Soper FULL-151 Ch5: book 5.6 dollar-duration-neutral butterfly
+    retired: true              # long wings / short body, dollar- + dollar-duration-
+                               # neutral from causal regression durations.  KILLED at
+                               # tune 2026-10-28: 0/3 - all cells negative net
+                               # (-0.79..-1.18 Sharpe), G2/G3/G5/G6 everywhere; fees
+                               # only 21-22bp/yr, the premise died not the costs.
+                               # Evidence logs/edge/F151_5_6_dd_butterfly/.
+    kind: hypothesis
+    hypotheses: [F151_5_6_dd_butterfly]
+  F151_5_7_fiftyfifty_butterfly:  # Soper FULL-151 Ch5: book 5.7 fifty-fifty butterfly
+    retired: true              # equal wing dollar durations, larger gross.  KILLED at
+                               # tune 2026-10-28: 0/3 - Sharpe -0.60..-1.25, same gate
+                               # failures as 5.6.  Evidence
+                               # logs/edge/F151_5_7_fiftyfifty_butterfly/.
+    kind: hypothesis
+    hypotheses: [F151_5_7_fiftyfifty_butterfly]
+  F151_5_8_reg_weighted_butterfly:  # Soper FULL-151 Ch5: book 5.8 regression-weighted butterfly
+    retired: true              # beta from trailing-252d spread-change regression.
+                               # KILLED at tune 2026-10-28: 0/2 - Sharpe -1.06/-1.24;
+                               # measured beta medians 0.55/0.11 (< 1): the book's
+                               # short-rate-volatility asymmetry premise does not hold
+                               # in yield-spread terms on this tape.  Evidence
+                               # logs/edge/F151_5_8_reg_weighted_butterfly/.
+    kind: hypothesis
+    hypotheses: [F151_5_8_reg_weighted_butterfly]
+  F151_5_8_1_mat_weighted_butterfly:  # Soper FULL-151 Ch5: book 5.8.1 maturity-weighted butterfly
+    retired: true              # beta = (T2-T1)/(T3-T2) on preregistered segment
+                               # maturities (0.42 / 0.16 - close to the measured
+                               # regression betas of 5.8).  KILLED at tune 2026-10-28:
+                               # 0/2 - Sharpe -0.80/-1.05.  Evidence
+                               # logs/edge/F151_5_8_1_mat_weighted_butterfly/.
+    kind: hypothesis
+    hypotheses: [F151_5_8_1_mat_weighted_butterfly]
+  F151_5_9_lowrisk:            # Soper FULL-151 Ch5: book 5.9 low-risk factor
+    retired: true              # bottom-maturity IG/HY ETF proxies (decile sorts
+                               # impossible at ~4 buckets, documented).  KILLED at tune
+                               # 2026-10-28: 0/4 - BATCH NEAR-MISS lowrisk_hy_short
+                               # (long-only SHYG) net Sharpe +0.892 / CAGR +3.9% passes
+                               # G1/G3/G4/G5/G6 and fails ONLY G2 year-concentration
+                               # (2016 = +0.96 of net pnl vs 0.40 cap); holdout never
+                               # read.  DN cells negative.  Evidence
+                               # logs/edge/F151_5_9_lowrisk/.
+    kind: hypothesis
+    hypotheses: [F151_5_9_lowrisk]
+  F151_5_10_value:             # Soper FULL-151 Ch5: book 5.10 value factor
+    retired: true              # PROXY run under a documented data wall: literal
+                               # Eq 410 needs per-bond spreads+ratings (TRACE/ICE paid;
+                               # FRED BAML series serve only 2023-10-30+ via
+                               # fredgraph.csv); proxy = Moody's Aaa/Baa two-bucket
+                               # cross-section (degenerate, stated up front).  KILLED
+                               # at tune 2026-10-28: 0/3 - DN cells -1.50 Sharpe,
+                               # long-only +0.33.  Evidence logs/edge/F151_5_10_value/.
+    kind: hypothesis
+    hypotheses: [F151_5_10_value]
+  F151_5_11_carry:             # Soper FULL-151 Ch5: book 5.11 carry factor
+    retired: true              # yield + 1m roll-down ranking on FRED CMT buckets
+                               # {1..30y}, aging synthetic zeros.  KILLED at tune
+                               # 2026-10-28: 0/3 - ranking is level-dominated (DN = long
+                               # 30/20y vs short 1/2y in 35/36 months, a steep-curve
+                               # position); Sharpe +0.10/+0.20, G2 fails hard (2015
+                               # -2.29 of net pnl).  Evidence logs/edge/F151_5_11_carry/.
+    kind: hypothesis
+    hypotheses: [F151_5_11_carry]
+  F151_5_12_rolldown:          # Soper FULL-151 Ch5: book 5.12 rolling down the yield curve
+    retired: true              # long the steepest 1y-roll-down CMT bucket(s), monthly,
+                               # aging synthetic zeros.  KILLED at tune 2026-10-28: 0/3
+                               # - the steepest segment was the FRONT (bucket 1-2 in
+                               # 33/36 months) and the trade is negative net
+                               # (-1.19/-0.11/-1.50 Sharpe).  Evidence
+                               # logs/edge/F151_5_12_rolldown/.
+    kind: hypothesis
+    hypotheses: [F151_5_12_rolldown]
+  F151_5_13_curve_spread:      # Soper FULL-151 Ch5: book 5.13 curve spread (flatteners & steepeners)
+    retired: true              # 2s10s duration-matched DN; signal = spread momentum /
+                               # mean-reversion / unconditional steepener.  KILLED at
+                               # tune 2026-10-28: 0/4 - trend/meanrev cells -1.42..-2.16
+                               # Sharpe at 419bp/yr drag; unconditional ~0.  Evidence
+                               # logs/edge/F151_5_13_curve_spread/.
+    kind: hypothesis
+    hypotheses: [F151_5_13_curve_spread]
+  F151_5_14_cds_basis:         # Soper FULL-151 Ch5: book 5.14 CDS basis arbitrage
+    blocked: true              # BLOCKED 2026-10-28: no free historical per-entity CDS
+                               # tape (Markit/ICE paid) AND no free per-bond spread
+                               # leg (TRACE paid; FRED BAML series post-2023 only).
+                               # Nothing run.  Evidence
+                               # logs/edge/F151_5_14_cds_basis/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_5_14_cds_basis]
+  F151_5_15_swap_spread:       # Soper FULL-151 Ch5: book 5.15 swap-spread arbitrage
+    blocked: true              # BLOCKED 2026-10-28: no free daily swap curve for
+                               # 2015-2017 (FRED DSWP* discontinued; BAML swap series
+                               # post-2023 only) and no free term-repo tape - 2 of the
+                               # 4 legs unconstructible.  Nothing run.  Evidence
+                               # logs/edge/F151_5_15_swap_spread/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_5_15_swap_spread]

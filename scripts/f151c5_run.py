@@ -28,7 +28,7 @@ import f151c5_lib as FL
 import f151c5_signals as S
 
 EVID_ROOT = "/data/finance/logs/edge"
-ETF_LEGS = ("SHY", "IEI", "IEF", "TLT", "SHYG", "HYG")
+ETF_LEGS = ("SHY", "IEI", "IEF", "TLT", "SHYG", "HYG", "SPY")
 REPLAY_CUTS = ["2015-08-15", "2016-03-15", "2016-11-15", "2017-05-15"]
 LOADER_CUT = "2016-09-15"
 
