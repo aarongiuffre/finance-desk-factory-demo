@@ -1295,4 +1295,114 @@ families:
     kind: covered_stub
     covered_by: H8_tweet_nb
     hypotheses: [F151_18_3_sentiment]
+  F151_19_2_macro_mom:         # Soper FULL-151 Ch19: book 19.2 fundamental
+    retired: true              # macro momentum.  KILL at tune 2026-10-28:
+                               # 0/6 cells (10-country equity XS - US SPY,
+                               # JP EWJ, DE EWG, GB EWU, FR EWQ, IT EWI,
+                               # NL EWN, CA EWC, KR EWY, MX EWW - ranked on
+                               # the book's 4 state variables as 1-yr
+                               # changes: bc = 0.5*dGDP-growth + 0.5*dCPI
+                               # (realized proxy, forecast = paid wall),
+                               # tr = 1yr log FX (US via DTWEXB export-
+                               # weighted; others bilateral-USD proxy,
+                               # IMF DOTS paid wall), mon = 1yr dIR3TIB01,
+                               # rs = 1yr excess return; rank-avg per 3.6;
+                               # top-k LS, H=3/6m holds).  ALL cells net
+                               # NEGATIVE: xavg_h3_top1 -0.73 sharpe
+                               # -12.6%/yr, h3_top2 -0.52, h6_top2 -0.36,
+                               # z-combine -0.58, 3-var -0.94, rs-only
+                               # -0.38; year shares 0.80-1.60 (G2 fail);
+                               # EVERY standalone variable negative as an
+                               # LS book (bc -0.56, tr -0.86, mon -0.56,
+                               # rs -0.38) - the macro ranks pointed the
+                               # WRONG way in-window; mon sign flip also
+                               # negative (-0.41).  Free-proxy
+                               # discriminating power low: euro bloc fully
+                               # degenerate (DE/FR/IT/NL tr/mon dispersion
+                               # exactly 0 - one EUR leg, one euro rate).
+                               # Exclusions probed+documented (ES/CH no
+                               # OECD GDP; SE no FX; NO no pre-2016 ETF;
+                               # AU/NZ/SG/HK/TW no OECD feeds; BR no free
+                               # short rate).  G1 replay clean + strict
+                               # decision-early mutants everywhere.  Tune
+                               # 2015-01-01..2017-12-31; holdout unread.
+                               # Evidence logs/edge/F151_19_2_macro_mom/.
+    kind: hypothesis
+    hypotheses: [F151_19_2_macro_mom]
+  F151_19_3_inflation_hedge:   # Soper FULL-151 Ch19: book 19.3 Eq 547
+    retired: true              # global macro inflation hedge.  KILL at
+                               # tune 2026-10-28: 0/5 cells (CA =
+                               # clip((HI-CI)/HI,0,1) on CPIAUCSL vs
+                               # CPILFESL with the 1-month publication
+                               # lag, CA% commodity basket DBC/GSG/USO/EW3
+                               # vs 60/40 SPY/AGG base, monthly, + static
+                               # 10% DBC premise cell).  Runner-fix BEFORE
+                               # the verdict: Eq 547 is ill-defined for
+                               # HI_YoY <= 0 - 2015's negative headline
+                               # (oil crash) flips the ratio and clips CA
+                               # to 1.0 (deflation months = "100%
+                               # commodities", opposite of the book's
+                               # mechanism); preregistered CA = 0 when
+                               # HI <= 0, all cells re-run.  Corrected:
+                               # Eq 547 activates on only 5/36 decision
+                               # months (Feb-Apr 2017 + Dec 2017, CA
+                               # 0.01-0.21) - every CA cell FAILS the
+                               # preregistered G4b activation guard (>=6
+                               # months) AND G2 year share (0.50-0.53);
+                               # G5 passes (sharpe 0.99-1.05, the base
+                               # portfolio) but the hedge rule added
+                               # nothing; static premise cell fails G2
+                               # (0.59).  Hedge premise weak in the proxy:
+                               # corr(DBC monthly, HI-CI spread) +0.19,
+                               # corr(DBC, HI YoY) +0.18.  Tune
+                               # 2015-01-01..2017-12-31; holdout unread.
+                               # Evidence
+                               # logs/edge/F151_19_3_inflation_hedge/.
+    kind: hypothesis
+    hypotheses: [F151_19_3_inflation_hedge]
+  F151_19_4_global_fi:         # Soper FULL-151 Ch19: book 19.4 global
+    blocked: true              # fixed income - BLOCKED AT PREREG 2026-10-28
+                               # (0 cells, no tune, no gates, no go ask):
+                               # free per-country sovereign bond ETF
+                               # cross-section does not exist - pre-2015
+                               # legs = US (TLT/IEF/IEI) + UK (IGLT.L) +
+                               # Canada (XGB.TO) + euro-area AGGREGATE
+                               # basket (IEAC.L/IBGM.L) = 4 legs, one a
+                               # basket; Japan TSE JGB ETFs begin 2016-08,
+                               # no UCITS JGB/DE-specific/AU legs; unhedged
+                               # local-currency listings = FX+duration
+                               # contamination, not sovereign ranks
+                               # (currency-hedged per-country tape not
+                               # free); book's factor set needs paid CDS/
+                               # output-gap/CP-factor inputs.  Baskets
+                               # (IGOV/BWX/BNDX/EMB/PCY) preregistered as
+                               # NOT transferring.  Unblock = rewrite THIS
+                               # prereg in place, never a new name.
+                               # Evidence
+                               # logs/edge/F151_19_4_global_fi/BLOCKED.md
+                               # (+ probes.txt transcript).
+    kind: hypothesis
+    hypotheses: [F151_19_4_global_fi]
+  F151_19_5_announcements:     # Soper FULL-151 Ch19: book 19.5 trading on
+    blocked: true              # economic announcements - COVERED BY WAVE2
+                               # 2026-10-28 (0 new cells, no run, no tune):
+                               # same book section is already preregistered
+                               # and scored as W2b_fomc (prereg header
+                               # "Soper WAVE 2b, book 19.5", retired:
+                               # KILL 0/6 at tune - best cell Sharpe 0.778
+                               # < 0.8 G5 bar, 68% of pnl in 2020 G2 fail).
+                               # Scope caveat recorded: W2b ran the
+                               # announcement-premium MECHANISM as the
+                               # crypto adaptation (BTC/ETH on FOMC ADs);
+                               # the equity-index form (SPY on ADs /
+                               # T-bills on NDAs) was NOT separately run -
+                               # per the batch brief this stub does NOT add
+                               # it; unblock ONLY via rewriting W2b_fomc
+                               # in place, never under this name.  Evidence
+                               # logs/edge/F151_19_5_announcements/KILL.md
+                               # (cross-ref; actual evidence
+                               # logs/edge/W2b_fomc/).
+    kind: covered_stub
+    covered_by: W2b_fomc
+    hypotheses: [F151_19_5_announcements]
 
