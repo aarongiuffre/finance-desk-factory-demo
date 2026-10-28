@@ -121,7 +121,7 @@ def test_signal_semantics():
 def test_trade_segments():
     import h4_run
     pos = np.array([np.nan, 1.0, 1.0, -1.0, -1.0, 0.0, 1.0, 1.0])
-    segs = h4_run.trade_segments(pos, None)
+    segs = h4_run.trade_segments(pos)
     ok = segs == [(1, 2), (3, 4), (6, 7)]
     check("trade_segments_sign_flip_closes_trade", ok, f"segs {segs}")
 
