@@ -1,0 +1,75 @@
+# PRE-REGISTRATION - Eq_residual_momentum (Soper 151 Trading Strategies secondary slate).
+# Written 2026-10-28 BEFORE any tune run.  New Eq_ family: does not re-open any
+# retired name (H1/H2/H3, PRIMARY H4-H9, W2a-W2d all retired 2026-10-28).
+# Book section: 3.7 residual momentum (Blitz-Huij-Martens: FF3 residuals of the 12-1 formation, DN decile).  The book has NO backtests - no performance claims are
+# attributed to it anywhere below.  Paper / Yahoo public data only; no spend.
+hypothesis: Eq_residual_momentum
+family: Eq_residual_momentum
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 3.7; Blitz, Huij & Martens 2011. Book: 36-month FF3 regression, residuals of the 12-1 formation risk-adjusted by residual sigma, decile DN.
+
+prior: >-
+  SKEPTICAL, with a data-depth caveat stated UP FRONT: the tape starts 2014-04, so the book-canonical 36-month regression cannot warm up before ~2017-05 - only ~7 tune episodes for the canonical cell (family G4 floor lowered to 6 for that reason, documented here BEFORE the run). Shorter regression windows (12/24m) are preregistered adaptations that trade bias for history; they are the cells most likely to carry the family.
+
+signal: >-
+  monthly excess returns regressed on MKT/SMB/HML (monthly-compounded French daily factors), no intercept in the residual (alpha NOT removed per book Eq. 279) formation months m-12..m-2; riskadj = mean/std of the 11 residual months regression window: months m-W..m-1 for W in {36,24,12}; names need all window months non-NaN
+cells:
+  reg36_decile_dn: "36m FF3 regression (book-canonical), residual 12-1 risk-adj, decile DN"
+  reg24_decile_dn: "24m regression variant, decile DN"
+  reg12_decile_dn: "12m regression variant, decile DN"
+total_cells: 3 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 6 rebalance episodes for the family (data-depth-forced; canonical 36m warmup ends ~2017-05)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing lookback)"
+  data_end: "2019-12-31 (fold-copy cutoff; no row past it is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Cap enforced at the file loader: no bar past the cap
+    date is loaded at all.
+data:
+  prices: >-
+    fold-copy price tiers folds/dev/raw/price/{sp_exits,price,dead} (PIT S&P
+    snapshot, tape starts 2014-04-21; SPY 2014-01-02), plus main raw/price for
+    ETF-only tickers (Yahoo chart v8 pulls 2026-10-28, desk price_pull.py).
+  membership: folds/dev/universe/sp500_ticker_start_end.csv (PIT S&P roster incl. exits)
+  factors: raw/ff (Kenneth French daily FF5 zip; FF3 + RF used)
+universe: >-
+  PIT S&P members at D with close >= $5, ADV20 >= $1M and the family's history
+  floor (bars counted, not imputed).  ETF families use the fixed ETF pool.
+costs: &costs >-
+  Equity desk floors (edge_plan section 6): per side = fee 15 bps + half-spread
+  bucket by ADV20 (large >= $50M: 5, mid >= $5M: 15, small: 40) + slippage 10
+  bps; per-side floor 20 bps (round-trip floor 40).  Short borrow 100 bps/yr on
+  short notional.  Weights held fixed between rebalances (no drift rebalancing).
+  Decision at close t-1 earns day-t adjclose return; costs charged on |dW| with
+  the decision day's ADV bucket.  Delisting: tape-faithful (weight released the
+  day after the last bar, NO trade cost); -30% haircut run as a reported
+  sensitivity, not a gate (dead/sp_exits tapes already carry the final price).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights (detector live).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max episode
+  share of gross <= 0.25 (monthly families: episode = one rebalance; daily
+  families: episode = one calendar month).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (below).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">- 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr"
+  - "benchmarks reported ungated: SPY total return and equal-weight eligible-universe daily return (same convention)"
+  - "era split by calendar year (G2); pool sizes; delist events; haircut-30% CAGR sensitivity"
+  - "honest caveats: whole window is POST-publication for every cited anomaly (decay is IN the test)"
