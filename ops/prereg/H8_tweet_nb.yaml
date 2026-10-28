@@ -1,0 +1,27 @@
+# PRE-REGISTRATION - H8_tweet_nb (PRIMARY crypto slate, book section 18.3).
+# Status: BLOCKED STUB - DO NOT RUN.  Written 2026-10-28.
+#
+# Book 18.3 is a Bernoulli Naive Bayes sentiment classifier on stock-tweet
+# corpora predicting next-hour moves.  The VP has NOT confirmed a tweet source.
+# Per the PRIMARY directive: no inventing tweets, no synthetic corpora, no
+# buying the X API, no scraping that violates the source's terms.  This stub
+# exists only so the slate slot is accounted for.
+#
+# UNBLOCK CONDITION (VP must supply one):
+#   (a) a historical tweet dataset with timestamps and tickers/cashtags
+#       (e.g. a licensed academic corpus), OR
+#   (b) a paid feed the desk chooses to fund, with API access provided.
+# On unblock: write the real prereg here (label source, train/val split,
+# Bernoulli NB over bag-of-cashtag/word features, next-hour BTC direction,
+# fee 0.06%/turnover, six gates), then the same tune/scored discipline as
+# H4-H7 (code-freeze amendment + standing dev go before any scored claim).
+hypothesis: H8_tweet_nb
+family: H8_tweet_nb
+kind: hypothesis
+status: BLOCKED
+blocker: "no tweet feed confirmed by VP; synthetic tweet data is forbidden"
+unblock: "VP supplies a historical tweet corpus or funds a feed; then prereg is rewritten in place"
+gate_signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"
+evidence: logs/edge/H8_tweet_nb/BLOCKED.md
+runner: none (stub only)
+python: /data/finance/.venv-crypto/bin/python
