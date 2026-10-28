@@ -155,3 +155,7 @@ One-liners with commit hashes; deep dives live where noted.
   restored verbatim from the hourly-202610210400 ZFS snapshot (sha
   re-verified == pin; data unchanged).  Both sandbox smokes SMOKE PASS
   again.  No data mutation; bookkeeping repair only.
+
+## 2026-10-28 — EODHD dropped from nightly nasdaq-watch-filings
+
+Aaron via VP: do not renew EODHD. Gate `EODHD_DISABLED=1` in unit drop-in; `nasdaq_watch.py` skips roster diff. CIK + quarter scan + drain remain. Evidence: `/workspace/finance/desk-status-20261028/eodhd-drop/` on Finance Bot box.

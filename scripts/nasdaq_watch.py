@@ -6,6 +6,7 @@ Filings (subcommand `filings`, daily):
   2. Refresh EODHD live list (1 req) -> diff vs universe/nasdaq_price_roster.json:
        new listings  -> add to live roster + watchlist + queue-enum + Yahoo 10y init
        delistings    -> move to dead roster + EODHD dead-price pull
+       SKIPPED when env EODHD_DISABLED=1 (Aaron 2026-10-28; unit drop-in).
   3. Re-scan CURRENT + PREVIOUS quarter full-index master.idx (2 req) — one
      request each covers EVERY company's new filings (subsumes daily-index).
      Rows append to universe/nasdaq_filing_queue.jsonl (accn-idempotent).
@@ -117,55 +118,69 @@ def cmd_filings():
     lines.append(f"map {len(m)}")
 
     # 2. EODHD live-list diff (new listings / delistings)
-    key = open(os.path.join(ROOT, ".eodhd_key")).read().strip().split("=", 1)[-1].strip()
-    dl_live = json.loads(urllib.request.urlopen(  # sec-throttle: non-SEC (EODHD)
-        f"https://eodhd.com/api/exchange-symbol-list/US?fmt=json&api_token={key}",
-        timeout=120).read().decode())
-    live_set = {x["Code"].upper() for x in dl_live
-                if x.get("Exchange") == "NASDAQ" and x.get("Type") in ("Common Stock",)}
-    roster = load_json(ROSTER, [])
-    rost_codes = {x["ticker"] for x in roster}
-    dead = load_json(DEAD_ROSTER, [])
-    dead_codes = {x["ticker"] for x in dead}
+    # Aaron 2026-10-28 via VP: EODHD not needed (backtest data already collected).
+    # Gate with EODHD_DISABLED=1 (unit drop-in 20-eodhd-disabled.conf) so the
+    # nightly path cannot 401 on eodhd.com. Reversible: remove drop-in + reload.
+    # Manual one-shots (eod_fill / survivorship_fill / nasdaq_price_eod) unchanged.
+    eodhd_off = os.environ.get("EODHD_DISABLED", "").strip().lower() in (
+        "1", "true", "yes", "on")
+    if eodhd_off:
+        roster = load_json(ROSTER, [])
+        dead = load_json(DEAD_ROSTER, [])
+        note("EODHD_DISABLED set — skipping EODHD roster diff "
+             "(no eodhd.com calls; roster left unchanged)")
+        lines.append("eodhd: skipped (EODHD_DISABLED)")
+        note(f"roster: {len(roster)} live, {len(dead)} dead (unchanged)")
+    else:
+        key = open(os.path.join(ROOT, ".eodhd_key")).read().strip().split("=", 1)[-1].strip()
+        dl_live = json.loads(urllib.request.urlopen(  # sec-throttle: non-SEC (EODHD)
+            f"https://eodhd.com/api/exchange-symbol-list/US?fmt=json&api_token={key}",
+            timeout=120).read().decode())
+        live_set = {x["Code"].upper() for x in dl_live
+                    if x.get("Exchange") == "NASDAQ" and x.get("Type") in ("Common Stock",)}
+        roster = load_json(ROSTER, [])
+        rost_codes = {x["ticker"] for x in roster}
+        dead = load_json(DEAD_ROSTER, [])
+        dead_codes = {x["ticker"] for x in dead}
 
-    new_listings = sorted(live_set & tkset - rost_codes - dead_codes) \
-        if tkset else sorted(live_set - rost_codes - dead_codes)
-    # restrict to names we treat as ours (universe file only updates weekly;
-    # a NASDAQ listing not yet in the universe file is still a real NASDAQ name)
-    for t in new_listings:
-        info = next(x for x in dl_live if x["Code"].upper() == t)
-        roster.append({"ticker": t, "symbol": f"{t}.US", "dead": False})
-        dead[:] = [x for x in dead if x["ticker"] != t]
-        if t not in tkset:
-            tkset.add(t)
-            tk.append(t)
-            m.setdefault(t, m.get(t, ""))
-        with open(WATCH, "a") as f:
-            f.write(t + "\n")
-        note(f"NEW LISTING {t}: added to live roster+watchlist (10y Yahoo init)")
-        os.system(f"cd {ROOT} && python3 scripts/price_pull.py pull {t} --backfill 10y "
-                  ">> logs/nasdaq-price-new.log 2>&1")
-    delist = sorted(rost_codes & dead_codes - live_set) if False else \
-        sorted({x["ticker"] for x in roster} - live_set)
-    for t in delist:
-        sub = next((x for x in load_json(
-            "/tmp/eod_delisted.json", [])
-            if x.get("Code", "").upper() == t), None)
-        if sub is None:
-            continue     # not in vendor delisted list: leave alone
-        ci = m.get(t, "")
-        dead.append({"ticker": t, "symbol": f"{t}.US", "dead": True,
-                     "cik": ci, "name": sub.get("Name", "")[:80],
-                     "last_filing": _now()[:10]})
-        roster[:] = [x for x in roster if x["ticker"] != t]
-        note(f"DELISTED {t}: moved to dead roster")
-    save_json(ROSTER, roster)
-    save_json(DEAD_ROSTER, dead)
-    if delist:
-        os.system(f"cd {ROOT} && python3 scripts/nasdaq_price_eod.py pull {DEAD_ROSTER} "
-                  ">> logs/nasdaq-price-dead-inc.log 2>&1")
-    lines.append(f"new={len(new_listings)} delisted={len(delist)}")
-    note(f"roster: {len(roster)} live, {len(dead)} dead")
+        new_listings = sorted(live_set & tkset - rost_codes - dead_codes) \
+            if tkset else sorted(live_set - rost_codes - dead_codes)
+        # restrict to names we treat as ours (universe file only updates weekly;
+        # a NASDAQ listing not yet in the universe file is still a real NASDAQ name)
+        for t in new_listings:
+            info = next(x for x in dl_live if x["Code"].upper() == t)
+            roster.append({"ticker": t, "symbol": f"{t}.US", "dead": False})
+            dead[:] = [x for x in dead if x["ticker"] != t]
+            if t not in tkset:
+                tkset.add(t)
+                tk.append(t)
+                m.setdefault(t, m.get(t, ""))
+            with open(WATCH, "a") as f:
+                f.write(t + "\n")
+            note(f"NEW LISTING {t}: added to live roster+watchlist (10y Yahoo init)")
+            os.system(f"cd {ROOT} && python3 scripts/price_pull.py pull {t} --backfill 10y "
+                      ">> logs/nasdaq-price-new.log 2>&1")
+        delist = sorted(rost_codes & dead_codes - live_set) if False else \
+            sorted({x["ticker"] for x in roster} - live_set)
+        for t in delist:
+            sub = next((x for x in load_json(
+                "/tmp/eod_delisted.json", [])
+                if x.get("Code", "").upper() == t), None)
+            if sub is None:
+                continue     # not in vendor delisted list: leave alone
+            ci = m.get(t, "")
+            dead.append({"ticker": t, "symbol": f"{t}.US", "dead": True,
+                         "cik": ci, "name": sub.get("Name", "")[:80],
+                         "last_filing": _now()[:10]})
+            roster[:] = [x for x in roster if x["ticker"] != t]
+            note(f"DELISTED {t}: moved to dead roster")
+        save_json(ROSTER, roster)
+        save_json(DEAD_ROSTER, dead)
+        if delist:
+            os.system(f"cd {ROOT} && python3 scripts/nasdaq_price_eod.py pull {DEAD_ROSTER} "
+                      ">> logs/nasdaq-price-dead-inc.log 2>&1")
+        lines.append(f"new={len(new_listings)} delisted={len(delist)}")
+        note(f"roster: {len(roster)} live, {len(dead)} dead")
 
     # 3. current+prev quarter re-scan
     cik2t = {c: t for t, c in m.items()}

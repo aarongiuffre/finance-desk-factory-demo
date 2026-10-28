@@ -14,7 +14,7 @@ rules — verified against the live system 2026-10-09.
 | `eda-pull.service` | continuous (Restart=on-failure) | NASDAQ backlog filing crawl, 6 workers, `.done`-flag resume. Backlog ETA ~Oct 14 2026; afterwards the nasdaq-watch drain keeps it idle |
 | `finance-embed-sweep.timer` | every 30 min (OnUnitActiveSec, boot +5min) | `incremental_embed.py` — append-only embedding of `parsed/` into LanceDB. **The sole embedder** (full rebuilds are manual-only, see Index operations) |
 | `finance-tree-sweep.timer` | every 2h (OnUnitActiveSec, boot +10min) | PageIndex tree generation for new parsed filings |
-| `nasdaq-watch-filings.timer` | daily 22:00 | `nasdaq_watch.py filings`: CIK-map refresh, EODHD roster diff (new listings → 10y Yahoo init; delistings → dead tier), current+prev-quarter master.idx re-scan, queue drain if free, parse |
+| `nasdaq-watch-filings.timer` | daily 22:00 | `nasdaq_watch.py filings`: CIK-map refresh, **EODHD roster diff skipped when `EODHD_DISABLED=1`** (drop-in `20-eodhd-disabled.conf`, Aaron 2026-10-28), current+prev-quarter master.idx re-scan, queue drain if free, parse |
 | `nasdaq-watch-price.timer` | Mon–Fri 18:30 | incremental Yahoo refresh over the live NASDAQ roster |
 | `paper-driver.timer` | Mon–Fri 15:45 | flag sweep on held names, monthly self-guarded rebalance (first trading day), event tracker, `logs/paper-status.txt` |
 | `finance-logrotate.timer` | daily 04:50 | logrotate (copytruncate) per `ops/logrotate.conf` |
@@ -285,3 +285,15 @@ final pull. Do not change the subscription from the box.
   `survivorship_fill.py` and `eodhd_final_pull.py`. New delistings after the cancel
   date get no dead-tier prices. Yahoo live prices and the Alpaca paper tools are
   unaffected.
+
+### EODHD disabled on nightly path (2026-10-28)
+
+Aaron: EODHD not needed — backtest data already collected; do not renew `.eodhd_key`.
+`nasdaq-watch-filings.service` sets `Environment=EODHD_DISABLED=1` via drop-in
+`~/.config/systemd/user/nasdaq-watch-filings.service.d/20-eodhd-disabled.conf`.
+`nasdaq_watch.py filings` then skips the EODHD roster-diff branch (no `eodhd.com`
+calls) and still runs CIK-map refresh, quarter master.idx re-scan, drain, parse.
+Yahoo price watch (`nasdaq-watch-price`) was never on EODHD. Manual EODHD scripts
+are unchanged but will 401 until a key is restored (do not restore without Aaron).
+Revert: remove the drop-in and `systemctl --user daemon-reload`.
+
