@@ -1,0 +1,39 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_17_5_pawn
+# (Soper 151 Ch17 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 17.5 Pawnbroking.
+hypothesis: F151_17_5_pawn
+family: F151_17_5_pawn
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 17.5: a pawnbroker extends a secured cash loan at a
+  pre-agreed interest and period against a valuable collateral (jewelry,
+  electronics, vehicles, etc.) at a significant DISCOUNT to the appraised
+  value; default forfeits the collateral, which the pawnbroker keeps or
+  sells.  The return = interest + collateral discount/forfeiture spread,
+  at the individual-loan level.
+blocked_at_prereg: true
+blocked_reason: >-
+  The mechanism is PRIVATE COLLATERALIZED LENDING at the loan level, and
+  every input is walled on free data:
+  * The loan tape (loan amounts, LTV vs APPRAISED value, interest terms,
+    renewals, forfeitures) exists only as private pawnbroker records /
+    proprietary studies (e.g. Bos-Carter-Skiba-class academic datasets);
+    there is no free origination tape of any kind (same wall class as
+    F151_15_2_3 private-loan origination).
+  * Appraisal values of the collateral (retail/resale prices of jewelry,
+    instruments, vehicles) are deal-level private information; used-goods
+    resale prices are not a structured free tape.
+  * No listed proxy transfers the mechanism (preregistered): gold/silver
+    ETFs are the price of the METAL, not the loan book's spread over
+    appraisal-discount + forfeiture; pawnshop-operator equities are the
+    equity beta of the operators, not the book's per-loan economics, and
+    carry no LTV/forfeiture terms to paper.  Prefer-BLOCKED-over-clever-
+    proxies rule applies.
+  Re-opens only with a free per-loan pawn tape (loan, appraisal, terms,
+  forfeiture outcomes) AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_17_5_pawn/BLOCKED.md (this prereg is the record)"

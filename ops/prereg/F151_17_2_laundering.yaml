@@ -1,0 +1,26 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_17_2_laundering
+# (Soper 151 Ch17 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 17.2 Money laundering - the dark side of cash.
+hypothesis: F151_17_2_laundering
+family: F151_17_2_laundering
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 17.2: money laundering = using cash to transform illegal
+  profits into legitimate-appearing assets, via the three canonical steps
+  placement -> layering -> integration.
+blocked_reason: >-
+  OUT-OF-SCOPE AT INVENTORY, per the batch brief and desk rule: money
+  laundering is illegal activity.  This family is inventoried as a stub
+  ONLY - there is no SlowGlow edge here to paper.  Explicitly: NO
+  laundering workflow is designed, simulated, optimized, scored, or
+  data-probed beyond this inventory line; no proxy cells are preregistered;
+  no free/paid data source is evaluated for it.  Detection-side work
+  (AML analytics) is a compliance problem, not a SlowGlow trading edge,
+  and is likewise out of scope for F151.
+  Re-opens never (standing policy, not a data wall).
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_17_2_laundering/BLOCKED.md (this prereg is the record)"

@@ -1,0 +1,29 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_17_6_loan_shark
+# (Soper 151 Ch17 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 17.6 Loan sharking.
+hypothesis: F151_17_6_loan_shark
+family: F151_17_6_loan_shark
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 17.6: loan sharking = offering loans at excessively
+  high (usurious) interest rates, not necessarily collateralized, with
+  enforcement sometimes via blackmail and/or violence.  The book itself
+  notes it is illegal in many jurisdictions.
+blocked_at_prereg: true
+blocked_reason: >-
+  OUT-OF-SCOPE AT INVENTORY, per the batch brief and desk rule: illegal
+  usury and violent/enforcement-driven lending.  This family is
+  inventoried as a stub ONLY - there is no SlowGlow edge to paper.
+  Explicitly: NO predatory-lending workflow is designed, simulated,
+  optimized, scored, or data-probed beyond this inventory line; no proxy
+  cells are preregistered; no data source is evaluated for it.
+  (Legal adjacent lending products - payday/installment lenders' listed
+  equities - are operator equity beta, do not transfer the mechanism, and
+  are NOT preregistered as proxies; the family is not reopened by them.)
+  Re-opens never (standing policy, not a data wall).
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_17_6_loan_shark/BLOCKED.md (this prereg is the record)"

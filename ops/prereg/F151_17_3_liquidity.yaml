@@ -1,0 +1,46 @@
+# PRE-REGISTRATION - F151_17_3_liquidity (Soper FULL-151 Ch17 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune attempt.  New F151_ family: does not re-open
+# any retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_16_* all
+# closed 2026-10-28).  Book 17.3 Liquidity management.  BLOCKED AT PREREG - 0
+# cells; report-only evidence authorized (standing brief rule: no tradeable rule
+# in the book -> report-only + honest BLOCKED).
+hypothesis: F151_17_3_liquidity
+family: F151_17_3_liquidity
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 17.3: liquidity management = optimally defining the
+  amount of cash held in the portfolio to meet liquidity demands generated
+  by unforeseen events.  Cash is framed as a risk-management / opportunity-
+  management / liquidity-management tool; liquid funds can be held via
+  T-bills, CDs, commercial paper, banker's acceptances, eurodollars, repos.
+  The section contains NO signal, threshold, allocation rule, or equation -
+  it is a portfolio-management description, not a strategy rule.
+blocked_at_prereg: true
+blocked_reason: >-
+  (i) NO TRADEABLE RULE EXISTS in the book: section 17.3 prescribes
+  "optimally defining the amount of cash" but defines no decision variable,
+  trigger, or optimization that could be preregistered and KILLed/KEPT.
+  There is nothing to tune, so the family cannot enter scored DEV at all.
+  (ii) The only paperable object the brief authorizes is an ALWAYS-ON
+  money-market / T-bill ETF sleeve vs 0%-cash drag.  That premise cell is
+  trivially true BY CONSTRUCTION (a positive-yield, ~zero-vol sleeve
+  mechanically dominates 0% cash; no null hypothesis can fail), so it is
+  not a testable edge - preregistered as NOT paperable-as-strategy, same
+  non-edge class as a static always-on allocation (Ch13/Ch14 static-cell
+  caveat, here with no timing claim at all).  Prefer-BLOCKED-over-clever-
+  proxies rule applies.
+  (iii) Tape facts (verified 2026-10-28 pulls, window 2015-01-01..2017-12-31):
+  BIL (SPDR 1-3m T-bill, 2007-) and SHV (iShares Short Treasury, 2007-) and
+  ICSH (iShares Ultra Short-Term Bond, 2013-12) cover the tune window;
+  SGOV (2020-06) and TBIL (2022-08) BEGIN AFTER the tune window - listed
+  for completeness per the brief, not usable in-window.
+  Report-only blocks authorized below are the honest accounting of what
+  the cash-replacement sleeve earned in-window vs 0% cash drag; they carry
+  no gate, no KILL/KEEP, and no go ask.
+cells: "NONE - BLOCKED at prereg (0 preregistered cells; report-only)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: 0 cells, no tune run, no gates, no go ask, no holdout read; REGISTRY blocked_stub."
+reporting:
+  - "Report-only (authorize): BIL/SHV/ICSH sleeve CAGR/vol/Sharpe/maxDD 2015-2017 vs 0% cash; sleeve-vs-SPY monthly corr; computed by scripts/f151c17_report.py from window-capped tapes."
+  - "stub evidence in logs/edge/F151_17_3_liquidity/BLOCKED.md"

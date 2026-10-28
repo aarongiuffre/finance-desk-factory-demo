@@ -1,0 +1,43 @@
+# PRE-REGISTRATION - F151_17_4_repo (Soper FULL-151 Ch17 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune attempt.  New F151_ family: does not re-open
+# any retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_16_* all
+# closed 2026-10-28).  Book 17.4 Repurchase agreement (REPO).  BLOCKED AT PREREG
+# - 0 cells; report-only rate evidence authorized.
+hypothesis: F151_17_4_repo
+family: F151_17_4_repo
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 17.4: a repo is a cash-equivalent asset providing
+  immediate liquidity at a preset interest rate for a period (typically
+  1 day to 6 months) in exchange for collateral; a REPO strategy amounts
+  to borrowing (lending) cash with interest in exchange for securities
+  with a commitment to repurchase/resell.  No signal, threshold, or rule
+  is defined - the section describes the instrument class.
+blocked_at_prereg: true
+blocked_reason: >-
+  (i) MECHANISM DOES NOT TRANSFER (fatal, standing ETF-proxy rule): the
+  strategy IS originating/holding the collateralized cash loan as a repo
+  counterparty.  Money-market and T-bill ETFs (BIL/SHV/ICSH) merely HOLD
+  repo/repo-adjacent paper inside a fund; their return is the pass-through
+  of a managed book, not the book's origination-and-collateral mechanism,
+  and they carry no preset-rate bilateral terms to paper.  Same wall class
+  as F151_15_2_3 (no listed instrument expresses the private-loan
+  origination side).  Collateral-side ETFs (the securities lent against
+  cash) are the other leg, not the strategy.
+  (ii) NO FREE REPO-MARKET RATE TAPE for the tune window (probed 2026-10-28
+  via fred_pull, cosd 2000-01-01 coed 2017-12-31): SOFR (and its averages)
+  begin 2018-04-03 - AFTER the window (fredgraph window-breach guard fired);
+  BGCR/TGCR and GCF-repo-class series 404 on fredgraph (not served free);
+  the only free pre-2018 series is RRPONTSYD (Fed overnight reverse-repo
+  OFFERED rate, 2003+) - a policy-administered rate, not a traded repo
+  market rate.  The rate data, even where free, would be an input, never
+  the tradeable instrument.
+  Report-only blocks authorized below document the near-cash rate
+  environment in-window; they carry no gate, no KILL/KEEP, no go ask.
+cells: "NONE - BLOCKED at prereg (0 preregistered cells; report-only)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: 0 cells, no tune run, no gates, no go ask, no holdout read; REGISTRY blocked_stub."
+reporting:
+  - "Report-only (authorize): RRPONTSYD vs DGS1MO/DFF level + spread in-window 2015-2017 (window-capped at pull); computed by scripts/f151c17_report.py."
+  - "stub evidence in logs/edge/F151_17_4_repo/BLOCKED.md"
