@@ -1,0 +1,39 @@
+# PRE-REGISTRATION (COVERED STUB) - F151_18_2_ann
+# (Soper FULL-151 Ch18 batch, F151_ prefix).  Written 2026-10-28 BEFORE any run.
+# Book section 18.2 Strategy: Artificial neural network (ANN).
+# Status: COVERED BY PRIMARY - DO NOT RUN, DO NOT RE-TUNE, DO NOT AMEND.
+#
+# Book 18.2 (crypto adaptation of Nakano, Takahashi & Takahashi 2018): a
+# small ANN on BTC 15m bars with (E)MA/(E)MSD/RSI-style inputs and a
+# K-quantile softmax head predicting the tercile of the next forward
+# return; long the top class, short the bottom class.
+#
+# This exact strategy was already preregistered and scored on the PRIMARY
+# crypto slate as H6_nn_quantile on 2026-10-28 (same book section, same
+# mechanism: numpy MLP 4 -> 16 ReLU -> 3 softmax, past-only tercile
+# cutoffs, daily retrain, Binance US BTC/USD 15m, fee 6 bps/side, whole
+# preregistered grid F {4,16} x W {60,120} x {long/short, long/flat}).
+# Result: KILL - 0/8 cells pass the six gates (all fail G5 fees at
+# 6 bps/side, net Sharpe -1.07..-1.62; out-of-sample accuracy 0.360-0.373
+# vs chance 1/3).  The H6 family is RETIRED permanently; per the batch
+# brief this inventory stub does NOT reopen, re-tune, or amend it.
+#
+# Explicitly: 0 new cells preregistered here; no tune run, no gates, no
+# go ask, no holdout read, no data pull, no code.  The F151_18_2_ann
+# family has no scored cells of its own - its verdict is the covered
+# verdict of H6_nn_quantile.
+hypothesis: F151_18_2_ann
+family: F151_18_2_ann
+kind: covered_stub
+covered_by: H6_nn_quantile        # PRIMARY crypto slate, book section 18.2
+covered_verdict: KILL             # retired: true in REGISTRY (2026-10-28)
+cells: "NONE - covered stub (0 preregistered cells; the scored cells live
+  under the H6_nn_quantile family and are NOT duplicated here)"
+total_cells: 0
+verdict_policy:
+  - "KILL by coverage: the runnable book strategy is already scored KILL
+     under H6_nn_quantile; no new cell may be opened under this name
+     (re-opening would re-test a retired family under a new name)."
+reporting:
+  - "stub evidence in logs/edge/F151_18_2_ann/KILL.md (cross-reference
+     record; the actual evidence lives in logs/edge/H6_nn_quantile/)"

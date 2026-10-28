@@ -1,0 +1,36 @@
+# PRE-REGISTRATION (COVERED STUB) - F151_18_3_sentiment
+# (Soper FULL-151 Ch18 batch, F151_ prefix).  Written 2026-10-28 BEFORE any run.
+# Book section 18.3 Strategy: Sentiment analysis - naive Bayes Bernoulli.
+# Status: COVERED BY PRIMARY - DO NOT RUN, DO NOT RE-TUNE, DO NOT AMEND.
+#
+# Book 18.3: a Bernoulli Naive Bayes sentiment classifier over stock-tweet
+# corpora predicting next-hour moves.
+#
+# This exact strategy is already preregistered on the PRIMARY crypto slate
+# as H8_tweet_nb (same book section, same mechanism) and is BLOCKED: no
+# tweet feed confirmed by the VP; no inventing tweets, no synthetic
+# corpora, no X API purchase, no scraping that violates the source's
+# terms.  Unblock condition lives in ops/prereg/H8_tweet_nb.yaml (VP
+# supplies a licensed historical corpus or funds a feed; then THAT prereg
+# is rewritten in place - not this stub).
+#
+# Explicitly: 0 new cells preregistered here; no tune run, no gates, no
+# go ask, no holdout read, no data probing beyond this inventory line.
+# The F151_18_3_sentiment family has no scored cells of its own - its
+# verdict is the covered verdict of H8_tweet_nb.
+hypothesis: F151_18_3_sentiment
+family: F151_18_3_sentiment
+kind: covered_stub
+covered_by: H8_tweet_nb           # PRIMARY crypto slate, book section 18.3
+covered_verdict: BLOCKED          # blocked: true in REGISTRY (no tweet feed)
+cells: "NONE - covered stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED by coverage: no tweet feed; the family verdict follows
+     H8_tweet_nb.  Any unblock happens ONLY by rewriting the H8 prereg in
+     place per its UNBLOCK condition - never by opening cells under this
+     F151_ name."
+reporting:
+  - "stub evidence in logs/edge/F151_18_3_sentiment/BLOCKED.md
+     (cross-reference record; the actual evidence lives in
+     logs/edge/H8_tweet_nb/BLOCKED.md)"
