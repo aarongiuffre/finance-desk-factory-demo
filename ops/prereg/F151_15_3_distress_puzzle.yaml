@@ -1,0 +1,138 @@
+# PRE-REGISTRATION - F151_15_3_distress_puzzle (Soper 151 Ch15 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_14_* all closed
+# 2026-10-28).  Book section 15.3: Distress risk puzzle.
+# The book has NO backtests - no performance claims are attributed to it anywhere below.
+# Paper / free public only (EDGAR companyfacts + Yahoo fold prices); no spend.
+hypothesis: F151_15_3_distress_puzzle
+family: F151_15_3_distress_puzzle
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 15.3: the "distress risk puzzle".  Early studies: firms more
+  prone to bankruptcy earn HIGHER returns (a risk premium; Chan & Chen 1991,
+  Fama-French 1992/1996, Vassalou & Xing 2004).  More recent studies find the
+  OPPOSITE - distressed firms do not outperform healthier ones and the healthy
+  actually earn more (George & Hwang 2010, Godfrey & Brooks 2015, Griffin &
+  Lemmon 2002, Ozdagli 2010).  The strategy: buy the SAFEST companies, sell the
+  RISKIEST ones, proxied by a bankruptcy probability Pi (e.g. a logistic
+  regression per Campbell, Hilscher & Szilagyi 2008).  Zero-cost portfolio:
+  short the top decile by Pi, long the bottom decile; monthly rebalance, annual
+  also possible "with similar returns".
+prior: >-
+  SKEPTICAL.  (a) The whole tune window is POST-publication for every cited
+  anomaly (decay is in the test).  (b) Universe wall (below): this desk's free
+  PIT tape is the S&P 500 roster - the puzzle literature runs all-NYSE/AMEX/
+  NASDAQ; S&P members rarely approach bankruptcy, so the riskiest decile here
+  is "relatively distressed" and the spread should be attenuated.  (c) 2015-16
+  carries the energy distress episode: the riskiest-by-score decile in 2016 is
+  energy-crash names (HAL/WMB/CNP top the O-score at 2016-06-30 in the
+  pre-registration probe) - if the puzzle holds they UNDERPERFORM afterward
+  and the short leg profits; if the risk-premium view holds they bounce.
+  The gates, not the papers, decide.
+signal: >-
+  Monthly rebalance at month-end D.  Distress score = Ohlson (1980) O-score
+  with the ORIGINAL PUBLISHED coefficients (fixed weights - no estimation, so
+  no fitting PIT hazard):
+    O = -1.32 - 0.407*SIZE + 6.03*TLTA - 1.43*WCTA + 0.0757*CLCA
+        - 1.72*OENEG - 2.26*NITA - 1.43*FUTL + 0.285*INTWO - 0.521*CHIN
+  with SIZE = ln(TA), TLTA = TL/TA, WCTA = (CA-CL)/TA, CLCA = CL/CA,
+  OENEG = 1{TL > TA}, NITA = NI_TTM/TA, FUTL = (NI_TTM - NI_TTM_prior) /
+  |NI_TTM + NI_TTM_prior|, INTWO = 1{NI_TTM < 0 and NI_TTM_prior < 0},
+  CHIN = (NI_TTM - NI_TTM_prior)/|NI_TTM|.
+  Health score = -O; LONG top decile by health (= lowest O = safest), SHORT
+  bottom decile (= highest O = riskiest), equal-weight legs, gross 1,
+  dollar-neutral.  The book's Pi is "e.g." a logistic regression - a fixed-
+  weight bankruptcy logit is the honest free transfer (see adaptations).
+  Any input missing/stale/excluded -> score NaN -> name excluded that month.
+adaptations: &adapt >-
+  Documented deviations from the book's literal construction:
+  (a) Pi via a FITTED logistic regression (Campbell-Hilscher 2008) is NOT
+  estimable free: it needs bankruptcy/default labels (EDGAR 8-K Item 1.03
+  filings are unstructured event text; CRSP delisting codes are paid) plus a
+  PIT fitting window.  Ohlson's O-score is the classic fixed-weight bankruptcy
+  logit with published 1980 coefficients - an OLDER, ANNUAL model; the
+  mechanism (rank by bankruptcy probability, long safest/short riskiest)
+  transfers, the specific model does not.  This is a data wall, not a choice.
+  (b) TTM trailing-4-quarter sums replace annual statements (fresher PIT
+  analog; 8 quarterly NetIncomeLoss obs required).
+  (c) SIZE = ln(TA) without Ohlson's GNP-price deflator - the deflator is
+  common to all firms at date D, so the cross-sectional RANK is unchanged.
+  (d) TL = TA - StockholdersEquity (accounting identity; the explicit
+  Liabilities tag is inconsistently adopted - cross-checked report-only:
+  4/4 sampled names consistent within 2% at 2016-06-30).
+  (e) Universe wall: PIT S&P 500 roster only (no free all-US PIT tape on this
+  desk).  Scores are cross-sectional WITHIN that universe.
+cells:
+  o_decile_m: "decile L/S by health (-O), monthly rebalance (leg_frac 0.1)"
+  o_quintile_m: "quintile L/S by health (-O), monthly (leg_frac 0.2)"
+  o_decile_hold6: "decile L/S, 6-month holding (leg_frac 0.1, floor 6)"
+total_cells: 3 (whole preregistered budget; no post-hoc cells)
+g4_floor: "monthly cells >= 24 rebalances; hold6 >= 6 (per-cell override)"
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars/filings only as trailing lookback)"
+  data_end: "2019-12-31 (fold cutoff; no row past it is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Cap enforced at the file loader: no price bar past
+    the cap date is loaded at all; fundamentals were hard-capped filed <=
+    2019-12-31 AT PULL TIME.
+data:
+  prices: >-
+    fold-copy price tiers folds/dev/raw/price/{sp_exits,<tickers>,dead} (PIT
+    S&P snapshot, tape starts 2014-04-21; SPY 2014-01-02), Yahoo chart v8.
+  membership: folds/dev/universe/sp500_ticker_start_end.csv (PIT S&P roster incl. exits)
+  fundamentals: >-
+    raw/edgar15/<TICKER>.json - fresh EDGAR companyfacts pull 2026-10-28
+    (f151c15_pull.py, 471/471 tickers, 0 failures), every row hard-filtered
+    filed <= 2019-12-31 AT PULL TIME (the on-disk artifact cannot see a
+    post-2019 filing).  Announcement date = `filed`.  Balance-sheet rows =
+    first filed per period-end; quarterly flows = 60-100 day spans, first
+    filed per quarter-end (original announcement, not restatement); revenue =
+    per-quarter preference union Revenues > RevenueFromContractWithCustomer
+    ExcludingAssessedTax > SalesRevenueNet > ...IncludingAssessedTax >
+    RevenuesNetOfInterestExpense (filers switch tags over time; all are total-
+    revenue lines).  Diluted shares derived as NetIncomeLoss / EPSDiluted of
+    the SAME filing (same accn + period end), sanity band 5e6..5e10.
+    Measured pre-registration probe (load_distress cap 2017-12-31): valid
+    O-score at month-end 288-307 names (2015-01-30..2017-12-29); Altman Z
+    206-224.
+universe: >-
+  PIT S&P members at D with close >= $5, ADV20 >= $1M, >= 280 bars history
+  (bars counted, not imputed) and a finite O-score that month.  Score NaN
+  (missing tag, stale balance sheet > 400d, < 8 quarterly NI obs, zero
+  FUTL/CHIN denominator) excludes a name that month.
+costs: &costs >-
+  Equity desk floors (edge_plan section 6): per side = fee 15 bps + half-spread
+  bucket by ADV20 (large >= $50M: 5, mid >= $5M: 15, small: 40) + slippage 10
+  bps; per-side floor 20 bps (round-trip floor 40).  Short borrow 100 bps/yr
+  on short notional.  Weights held fixed between rebalances (no drift
+  rebalancing).  Decision at close t-1 earns day-t adjclose return; costs
+  charged on |dW| with the decision day's ADV bucket.  Delisting: tape-faithful
+  (weight released the day after the last bar, NO trade cost); -30% haircut
+  run as a reported sensitivity, not a gate.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh price panel capped at the cut; weights through the cut identical)
+  + 1 fundamentals-cap cut (fund reloaded capped at the cut; weights through
+  the cut identical) AND a decision-early mutant (day-t signal used for day-t
+  return) must produce different weights (detector live).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25 (episode = one rebalance).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (below).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr"
+  - "benchmarks reported ungated: SPY total return and equal-weight eligible-universe daily return (same convention)"
+  - "report-only: (a) the puzzle's PREMISE measured - forward 21d equal-weight return by O-score decile (does the riskiest decile actually underperform in-window?); (b) Altman (1968) Z decile L/S economics as the second classic fixed-weight score; (c) O vs Z cross-sectional rank correlation per rebalance; (d) annual-rebalance decile economics (3 episodes in-window - no G4 floor possible, never a gate cell); (e) explicit-Liabilities vs TA-SE consistency rate across all scored names; (f) era split by calendar year, pool sizes, delist events, haircut-30% CAGR sensitivity"
+  - "honest caveats: S&P-500-only universe wall; whole window POST-publication (decay is in the test)"

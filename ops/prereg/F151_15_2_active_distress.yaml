@@ -1,0 +1,51 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_15_2_active_distress
+# (Soper 151 Ch15 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 15.2: Active distressed investing (15.2.1 Planning a reorganization,
+# 15.2.2 Buying outstanding debt, 15.2.3 Loan-to-own).
+hypothesis: F151_15_2_active_distress
+family: F151_15_2_active_distress
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 15.2: buy distressed assets with the view of acquiring
+  some degree of CONTROL of the company's management and direction, unlike
+  the passive 15.1 holder.  Scenarios per the book: 15.2.1 submit a
+  reorganization plan to Court to obtain management participation (plans by
+  significant debt holders are more competitive); 15.2.2 buy the distressed
+  firm's outstanding debt at a discount so that, after reorganization, part
+  of the debt converts into equity giving the investor control; 15.2.3
+  loan-to-own - finance a not-yet-bankrupt distressed firm via SECURED LOANS
+  so that it either recovers or files Chapter 11 and the secured loan
+  converts into equity with control rights.
+blocked_reason: >-
+  All three sub-strategies are control positions in the private reorganization
+  process; their required data is not free anywhere (checked 2026-10-28):
+  - 15.2.1 needs the bankruptcy-court process itself: filed plans (docket,
+    PACER fee-per-page), plan terms, competing-plan outcomes, creditor
+    committee records.  EDGAR 8-K/8-K-A disclosures of plan milestones are
+    UNSTRUCTURED event text, not a plan/outcome database.
+  - 15.2.2 needs the same per-issuer distressed bond tape + vendor distress
+    screen + default/bankruptcy event dates as F151_15_1 (TRACE historic
+    subscription-for-fee; standing wall class F151_5_14/F151_11_5/F151_12_1),
+    PLUS the debt-to-equity conversion terms of each reorganization plan
+    (court data).  Post-conversion equity value needs the plan's distribution
+    schedule - paid/unstructured.
+  - 15.2.3 needs the PRIVATE loan market: origination of secured loans to
+    distressed firms (terms, covenants, pricing) - a dealer/CLD tape that has
+    no free historical source at all (LSTA/LCD paid; S&P Capital IQ Leveraged
+    Loans paid); the strategy IS originating the loan, so no exchange
+    instrument can proxy it.
+  Proxies preregistered as NOT transferring: the book's edge is acquiring
+  CONTROL through claim ownership in a court process - a position no listed
+  instrument expresses.  Distressed-credit mutual funds/ETFs are diversified,
+  passive, fee-levied vehicles with no plan participation, no loan
+  origination, and no control rights; their returns are not the book's
+  mechanism (same standing ETF-proxy rule as F151_11_2..11_6, F151_12_1).
+  Re-opens only with free structured court/plan data + a free distressed
+  bond tape (15.2.1/15.2.2) or a free secured-loan origination tape
+  (15.2.3), and a fresh prereg per sub-strategy.
+cells: "NONE - BLOCKED stub (0 preregistered cells; 15.2.1-15.2.3 share this stub - the walls are the same class: court/private-process data)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_15_2_active_distress/BLOCKED.md (per-subsection walls; this prereg is the record)"

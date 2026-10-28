@@ -1,0 +1,98 @@
+# PRE-REGISTRATION - F151_15_3_1_distress_vol (Soper 151 Ch15 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name.  Book section 15.3.1: Distress risk puzzle - risk management
+# (vol-targeted HMD, Eq 519).
+# The book has NO backtests - no performance claims are attributed to it anywhere below.
+# Paper / free public only (EDGAR companyfacts + Yahoo fold prices); no spend.
+hypothesis: F151_15_3_1_distress_vol
+family: F151_15_3_1_distress_vol
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 15.3.1: a variation of the 15.3 distress risk puzzle.
+  Zero-cost healthy-minus-distressed (HMD) strategies carry a high time-varying
+  market beta that turns significantly NEGATIVE after market downturns
+  (associated with increased volatility), causing large losses if the market
+  bounces abruptly (Garlappi & Yan 2011, O'Doherty 2012, Opp 2017).  Mitigation
+  (Eisdorfer & Misirli 2015), Eq 519:
+      HMD* = (sigma_target / sigma_b) * HMD
+  where sigma_target is a target volatility (typically 10-15%) and sigma_b is
+  the estimated realized volatility over the PRIOR YEAR using daily data.
+  100% allocation only when sigma_b = sigma_target; LESS when sigma_b >
+  sigma_target; the strategy could be LEVERAGED when sigma_b < sigma_target.
+prior: >-
+  INHERITS the 15.3 skeptical prior (S&P-only universe wall, post-publication
+  window, energy-distress regime risk).  The overlay itself is a MECHANICAL
+  variation: it cannot create alpha, only rescale the base HMD's exposure -
+  if the base HMD has no edge, the vol-targeted variant has none either
+  (vol targeting can only change the Sharpe through the leverage path's
+  convexity/cost interaction).  The cells test whether Eq 519 lifts the base
+  cells' gate profile on this tape.
+signal: >-
+  Base HMD = F151_15_3_distress_puzzle's o_decile_m / o_quintile_m weights
+  (identical construction: Ohlson O-score health decile/quintile L/S, monthly
+  rebalance).  Overlay per Eq 519: at each monthly rebalance date D,
+  scale(D) = sigma_target / sigma_hat(D), where sigma_hat(D) = std(ddof=1)
+  over the trailing 252 SESSIONS of the BASE HMD's daily GROSS pnl (W . r,
+  before costs/borrow - the strategy's own position volatility), annualized
+  x sqrt(252), using sessions through D inclusive (decision at close D).
+  The episode's weights = scale(D) x base episode weights; scale is FROZEN
+  for the episode (documented adaptation: daily updating would churn trade
+  costs; the book does not specify the update frequency).
+  Warmup: if the trailing 252-session window holds < 126 in-market sessions,
+  scale = 1 (no leverage) - the first ~6 months of 2015 run at 1x.
+  Machinery guard (preregistered, not post-hoc): scale <= 10.0 (never
+  approached: it requires sigma_hat < sigma_target/10).
+adaptations: &adapt >-
+  (a) All F151_15_3_distress_puzzle adaptations (a)-(e) inherit verbatim:
+  O-score instead of a fitted CH-2008 logit, TTM flows, ln(TA) without GNP
+  deflator, TL = TA - SE, S&P-500-only universe wall.
+  (b) sigma_b on GROSS base pnl (positions' realized vol; costs are
+  implementation, not strategy vol).
+  (c) Monthly-frozen scale; warmup rule scale = 1 below 126 in-market
+  sessions; machinery guard scale <= 10.
+  (d) No leverage cap otherwise - Eq 519's "could be leveraged" is taken
+  literally (a 1x-capped variant is a REPORT-ONLY sensitivity).
+cells:
+  o_decile_vt10: "o_decile_m base, Eq 519 overlay sigma_target = 10%"
+  o_decile_vt15: "o_decile_m base, Eq 519 overlay sigma_target = 15%"
+  o_quintile_vt10: "o_quintile_m base, Eq 519 overlay sigma_target = 10%"
+total_cells: 3 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 rebalances (monthly, same as base)"
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars/filings only as trailing lookback)"
+  data_end: "2019-12-31 (fold cutoff; no row past it is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run.  Caps enforced at
+    the file loader (prices) and at pull time (fundamentals filed <= 2019-12-31).
+data:
+  prices: "identical to F151_15_3_distress_puzzle (fold-copy tiers + PIT S&P roster)"
+  fundamentals: "identical to F151_15_3_distress_puzzle (raw/edgar15, filed <= 2019-12-31 hard-capped at pull; measured O-score coverage 288-307 names per month-end)"
+universe: "identical to F151_15_3_distress_puzzle"
+costs: &costs >-
+  Identical to F151_15_3_distress_puzzle.  The overlay's scale changes are
+  part of |dW| and are costed at the decision day's ADV bucket like any
+  rebalance trade.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level price
+  cut + 1 fundamentals-cap cut (weights through each cut identical) AND a
+  decision-early mutant (day-t weights used for day-t return) must differ.
+  The vol scaler reads only sessions <= D, so every cut leaves it intact.
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25 (episode = one rebalance).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - >= 24 rebalances.
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, avg/ex-max scale"
+  - "report-only: (a) 1x-capped variant (no leverage) economics vs the uncapped cell - is the overlay's difference just leverage?; (b) daily-updated scale variant economics (cost sensitivity of the frozen-scale adaptation); (c) base-cell (unscaled) economics side by side; (d) scale path by year"
+  - "honest caveats: same S&P-500-only universe wall; whole window POST-publication"

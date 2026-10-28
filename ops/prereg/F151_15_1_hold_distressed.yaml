@@ -1,0 +1,55 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_15_1_hold_distressed
+# (Soper 151 Ch15 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 15.1: Buying and holding distressed debt (passive distressed).
+hypothesis: F151_15_1_hold_distressed
+family: F151_15_1_hold_distressed
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 15.1: distressed debt = issuer bonds trading at a yield
+  spread vs Treasuries above a preset level (e.g. 1,000 bp; Harner 2008).
+  Passive strategy: buy the distressed company's debt at a steep discount,
+  diversified across industries / entities / seniority, expecting repayment
+  or a successful reorganization; only a small fraction of held assets have
+  positive returns but those pay high rates (Altman & Hotchkiss 2006,
+  Greenhaus 1991).  Two passive sub-approaches: (a) predict bankruptcy via
+  models (see 15.3) BEFORE distress; (b) buy assets of companies already in
+  default/bankruptcy, positions established at key dates such as the end of
+  the default month or the bankruptcy-filing month to exploit overreaction
+  (Eberhart & Sweeney 1992, Gilson 1995).
+blocked_reason: >-
+  The trade's long leg is the distressed ISSUER'S OWN BONDS at a deep
+  discount, timed on default / bankruptcy-filing event dates.  Required data,
+  none of which is free (checked 2026-10-28):
+  - Per-issuer corporate bond price/yield tape for 2015-2017, including the
+    bonds of defaulted / bankrupt issuers: FINRA TRACE historic is
+    subscription-for-fee (the free site serves current quotes/lookups only).
+    This is the standing F151_5_14 / F151_11_5 / F151_12_1 wall class.
+  - The distressed universe itself (which bonds traded >1,000 bp spread, at
+    what price, which seniority): a vendor screen over the same paid tape.
+  - Default and bankruptcy-filing EVENT dates (to time entries at the end of
+    the default/filing month): S&P Capital IQ / Moody's default databases and
+    the bankruptcy court docket (PACER, fee-per-page) are paid; EDGAR 8-K
+    Item 1.03 filings exist but are UNSTRUCTURED text and carry no bond
+    identifiers or prices - and the trade still needs the bond tape.
+  - Post-reorganization recovery values (the return driver) come from the
+    reorganization process itself (plan distributions, new securities): court
+    documents and claim-agent data, paid/unstructured.
+  Proxies preregistered as NOT transferring:
+  - Equity of distressed issuers: bankruptcy firms trade OTC/pink-sheet with
+    broken Yahoo coverage, and the mechanism (buy DEBT at a discount, recover
+    through reorganization seniority) is a claim-seniority position - equity
+    is the residual claim and does not transfer it.
+  - Fallen-angel HY ETFs (e.g. ANGL, incepted 2012-04): bonds DOWNGRADED from
+    IG to HY are not the book's distressed universe (spreads mostly below the
+    1,000 bp line), the fund has no event-date timing, and a diversified fund
+    is not a steep-discount single-issuer portfolio - a different trade.
+  - Broad HY ETFs (HYG/JNK/HYS): same objection at a further remove - no
+    distressed screen, no event timing, no seniority claim.
+  Re-opens only with a free PIT per-issuer bond price tape covering defaulted
+  issuers plus structured default/bankruptcy event dates, and a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_15_1_hold_distressed/BLOCKED.md (this prereg is the record)"
