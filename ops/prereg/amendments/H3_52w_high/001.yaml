@@ -1,0 +1,11 @@
+amendment: 1
+hypothesis: H3_52w_high
+prereg_sha256: 4a53155ca9b52041d170c4ec16c73499810f3ce0fb6994d959aecb02367944a1
+reason: >-
+  H3 52-week-high dev-fold freeze (monthly event builder + gated scored
+  runner).  Committed BEFORE any granted run; a standing dev go naming
+  this freeze_sha is required for the first scored dev trial (none installed -
+  the run is BLOCKED until Aaron's go file exists).
+code_freeze:
+  scripts/h3_events.py: dbef39cfceb4a28cc91b14c99c78f651ec76a280
+  scripts/h3_run.py: 52113155d70df567b4e9d5c4e6a706eba122c347
