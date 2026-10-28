@@ -1405,4 +1405,70 @@ families:
     kind: covered_stub
     covered_by: W2b_fomc
     hypotheses: [F151_19_5_announcements]
+  F151_20_1_diversify:         # Soper FULL-151 Ch20: book 20 theme 1 - infra
+    retired: true              # sleeves in a 60/40 mix.  KILL 0/5 sleeves AT
+                               # TUNE 2026-10-28 (6 cells scored: base + five
+                               # sleeves).  Preregistered sleeve-vs-baseline
+                               # rule: every sleeve DILUTES the mix (Sharpe
+                               # 0.91-0.99 vs base 1.06, need >= 1.312; vol
+                               # 7.50-8.03% vs cap 7.52%; maxDD deeper) - the
+                               # 16_2 REIT pattern again; 20% sizing strictly
+                               # worse than 10%.  Premise report-only: listed
+                               # infra = equity beta (corr vs SPY 0.56-0.73,
+                               # vs AGG 0.36-0.50); stress corr DROPS (GII
+                               # 0.59->0.42, TOLZ 0.60->0.02 worst-decile).
+                               # IFRA preregistered NO-TAPE-in-window
+                               # (firstTradeDate 2018-04-05, probes.txt).
+                               # Listed-proxy wall: unlisted infra funds
+                               # (appraisal-smoothed) not free.  Tune
+                               # 2015-01-01..2017-12-31; holdout unread.
+                               # Evidence logs/edge/F151_20_1_diversify/.
+    kind: hypothesis
+    hypotheses: [F151_20_1_diversify]
+  F151_20_2_inflation_hedge:   # Soper FULL-151 Ch20: book 20 theme 2 - infra
+    retired: true              # as inflation hedge.  KILL 0/5 z-cells AT TUNE
+                               # 2026-10-28 (+ static premise cell fails G2+G5;
+                               # 6 cells scored).  T10YIE trailing-252 z, long
+                               # infra/short bond at z >= +z1, reverse at
+                               # <= -z1 (16_5 machinery mirrored): all five
+                               # z-cells net-NEGATIVE (Sharpe -0.34..-0.66),
+                               # G2 year share 1.40-1.82 - breakeven-compression
+                               # regime puts the book short infra most of the
+                               # window (same shape that killed Ch14 0/7 and
+                               # 16_5 0/5).  Premise report-only and DIRECTION-
+                               # RIGHT here (unlike 16_5 REITs): corr(IGF, CPI
+                               # YoY) +0.24, corr(IGF, dT10YIE) +0.17; fwd-21d
+                               # IGF-AGG spread by z-quintile MONOTONE (+0.20%
+                               # -> +1.60%) - but the reverse leg fights a
+                               # still-positive bottom-quintile spread and
+                               # trigger crossings eat the edge.  Static
+                               # IGF/AGG 1:1: Sharpe 0.29, maxDD -23.4%.
+                               # Listed-proxy wall: contracted cash-flow
+                               # indexation not observable free.  Tune
+                               # 2015-01-01..2017-12-31; holdout unread.
+                               # Evidence logs/edge/F151_20_2_inflation_hedge/.
+    kind: hypothesis
+    hypotheses: [F151_20_2_inflation_hedge]
+  F151_20_3_cashflow_brownfield:  # Soper FULL-151 Ch20: book 20 theme 3 -
+    blocked: true              # stable cash flows from brownfield infra -
+                               # BLOCKED AT PREREG 2026-10-28 (0 cells, no
+                               # tune, no gates, no go ask): brownfield-vs-
+                               # greenfield selection needs project-level
+                               # cash-flow data (contracted revenues,
+                               # concession terms, construction capex) -
+                               # Preqin/Burgiss/EDHECinfra-class PAID; unlisted
+                               # infra fund returns appraisal-smoothed and
+                               # licensed (the smoothing is part of the claim
+                               # being tested); muni project bonds OTC (EMMA =
+                               # disclosure docs, not a tradeable cross-
+                               # section).  Listed utility/infra proxies
+                               # preregistered as NOT transferring - no
+                               # brownfield/greenfield cohort dimension in
+                               # free listed tape; per the batch brief, honest
+                               # BLOCKED over clever non-transferring proxies.
+                               # Unblock = rewrite THIS prereg in place, never
+                               # a new name.  Evidence
+                               # logs/edge/F151_20_3_cashflow_brownfield/BLOCKED.md.
+    kind: hypothesis
+    hypotheses: [F151_20_3_cashflow_brownfield]
 
