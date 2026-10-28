@@ -922,6 +922,64 @@ families:
     kind: blocked_stub
     hypotheses: [F151_13_2_1_cross_border_opts]
 
+  F151_14_1_inflation_swaps:   # Soper FULL-151 Ch14: book 14.1 inflation swaps
+    retired: true              # KILLED at tune 2026-10-28: 0/5 - 1Y ZC/YoY
+                               # inflation swap roll (Eqs 500-503), K proxied
+                               # by survey 1Y expectations (MICH/EXPINF1YR; no
+                               # free 1Y market breakeven - FRED serves 5Y/10Y
+                               # + 5y5y only, wall).  Realized YoY CPI ran
+                               # BELOW survey all 3y (0.12/1.27/2.13% vs MICH
+                               # 2.73/2.51/2.58%): long cells lose (sharpe
+                               # -6.3/-2.8); the short-swap carry is real
+                               # (+15.9%/yr, sharpe 3.83; report-only 10Y ZC
+                               # Eq 500 open mark -0.53%) but is ONE regime -
+                               # 2015 disinflation shock = year share 0.69 vs
+                               # 0.40, G2 kills every cell.  Prereg e91230e +
+                               # machinery a9c5a77 BEFORE any run.  Evidence
+                               # logs/edge/F151_14_1_inflation_swaps/.
+    kind: hypothesis
+    hypotheses: [F151_14_1_inflation_swaps]
+  F151_14_2_tips_treasury:     # Soper FULL-151 Ch14: book 14.2 TIPS-Treasury
+    retired: true              # KILLED at tune 2026-10-28: 0/7 - Eq 508
+                               # replication NOT measurable free (CUSIP/STRIPS/
+                               # swap fixed rates paid, wall); ETF-direction
+                               # cells (TIP/SCHP vs IEF/TLT 1:1 / 1:0.45) on a
+                               # T5YIE z-score signal: all 6 z-cells negative
+                               # (sharpe -1.6..-2.6, years worsening 2016-17;
+                               # the z signal is non-monotone forward: quintile
+                               # fwd-21d spread +0.08/+0.20/+0.13/-0.16/+0.37),
+                               # static always-on premise cell ~0 (-1bp, dies
+                               # G2 by construction, preregistered).  Prereg
+                               # e91230e.  Evidence
+                               # logs/edge/F151_14_2_tips_treasury/.
+    kind: hypothesis
+    hypotheses: [F151_14_2_tips_treasury]
+  F151_14_3_weather:           # Soper FULL-151 Ch14: book 14.3 weather risk
+    blocked: true              # BLOCKED at prereg 2026-10-28: hedge design
+                               # needs (i) weather futures/options tape - CME
+                               # CDD/HDD history is DataShop subscription,
+                               # no free weather instrument anywhere (cmegroup
+                               # blocks probes); (ii) demand series q_w -
+                               # EIA-930 hourly demand begins 2018-07 (post-
+                               # window; EIA API 403 without key); NOAA GHCN
+                               # temps free but index-only.  No proxy
+                               # transfers.  Evidence
+                               # logs/edge/F151_14_3_weather/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_14_3_weather]
+  F151_14_4_spark_spread:      # Soper FULL-151 Ch14: book 14.4 spark spread
+    blocked: true              # BLOCKED at prereg 2026-10-28: futures spread
+                               # (short power / long gas, Eq 518).  Gas leg
+                               # free (NG=F verified); power leg has NO free
+                               # tape in tradeable form: power FUTURES paid,
+                               # EIA wholesale 403 without key, FRED retail/
+                               # PPI only, CAISO OASIS rate-limited spot-only
+                               # (spot LMP cannot express the Eq 518 futures
+                               # hedge).  Evidence
+                               # logs/edge/F151_14_4_spark_spread/BLOCKED.md.
+    kind: blocked_stub
+    hypotheses: [F151_14_4_spark_spread]
+
   F151_7_6_variance_swaps:     # Soper FULL-151 Ch7: book 7.6 variance swaps
     blocked: true              # BLOCKED 2026-10-28: no free variance-swap tape.
                                # Soft-fold: was orphaned outside families:.
