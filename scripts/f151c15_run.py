@@ -148,7 +148,8 @@ def run_report_only_vt(out, panel, cal, elig, fund):
 def run_family(family, only_cell=None, use_cache=True):
     cfg = FAMILIES[family]
     dirs = L.DIRS_STOCK
-    panel = L.build_panel(dirs, cap=L.TUNE_HI, cache=use_cache)
+    panel = L.build_panel(dirs, cap=L.TUNE_HI, extra_tickers=("SPY",),
+                          cache=use_cache)
     cal = panel["cal"]
     fund = F.load_distress(cap=L.TUNE_HI, cache=use_cache)
     elig = ES.eligibility(panel, cal, min_bars=cfg["min_bars"])
@@ -189,7 +190,8 @@ def run_family(family, only_cell=None, use_cache=True):
             same = np.allclose(a.values, b.values, atol=1e-12, equal_nan=True)
             replay_detail[cut] = bool(same)
             replay_ok &= same
-        panel_cut = L.build_panel(dirs, cap=LOADER_CUT, cache=use_cache)
+        panel_cut = L.build_panel(dirs, cap=LOADER_CUT, extra_tickers=("SPY",),
+                                  cache=use_cache)
         W3, _ = builder(panel_cut, panel_cut["cal"], elig=ES.eligibility(
             panel_cut, panel_cut["cal"], min_bars=cfg["min_bars"]),
             fund=fund, **p)
