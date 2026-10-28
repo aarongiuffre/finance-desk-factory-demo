@@ -1,0 +1,12 @@
+amendment: 1
+hypothesis: H2_lazy_prices
+prereg_sha256: a21c610ca7d7cf07154a114c3e254dbcc964951bc5248e474259a7fbbf5ea693
+reason: >-
+  H2 Lazy Prices dev-fold freeze (pair builder + quintile event builder + gated
+  scored runner).  Committed BEFORE any granted run; a standing dev go naming
+  this freeze_sha is required for the first scored dev trial (none installed -
+  the run is BLOCKED until Aaron's go file exists).
+code_freeze:
+  scripts/h2_pairs.py: bc286b75cc808a7aeb0117cdb04129f9d6e5554d
+  scripts/h2_events.py: 610f5a0d9184028a8ef7cc8f8d144e33aea9bf82
+  scripts/h2_run.py: c157c052a45f457e219a7ee51e74daeb8936c14b
