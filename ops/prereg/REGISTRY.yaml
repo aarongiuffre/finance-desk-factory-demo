@@ -1477,19 +1477,27 @@ families:
     hypotheses: [F151_20_3_cashflow_brownfield]
 
   EW3_gap_fade:                # NEW EDGE WAVE A/B/C (Aaron GO via VP 2026-10-28):
-    kind: hypothesis           # Track A event/microstructure friction.  Overnight
-                               # gap fade on SPY daily OHLC (down-gap long fade /
-                               # up-gap short fade, 1%/2% thresholds, h1/h5 holds,
-                               # 1/5 book per event, max 5 concurrent).  FREE tape
-                               # only; prereg committed BEFORE any run; tune
-                               # 2015-01-01..2017-12-31; holdout unread.
+    retired: true              # Track A gap fade. KILLED at tune 2026-10-28: 0/6 -
+                               # down1_h1 Sharpe -0.88 (gap days CONTINUED, not faded),
+                               # up1_h1 -0.68; h5 cells G2 fail (year share 0.59-0.75);
+                               # down2_h1 5 events (G4, amended floor honestly applied).
+                               # G1 replay clean all 6; early mutant differs all 6.
+                               # Prereg 17ac6d8 + G4 floor amendment (60->12 events,
+                               # tape count 35) BEFORE the run; machinery 9cee532.
+                               # Evidence logs/edge/EW3_gap_fade/.
+    kind: hypothesis
     hypotheses: [EW3_gap_fade]
   EW3_etf_premium:             # NEW EDGE WAVE A/B/C: Track A ETF premium/discount
-    kind: hypothesis           # vs NAV proxy (SPY close vs ^GSPC/10 ratio; no
-                               # free NAV feed - preregistered DATA-QUALITY
-                               # GUARD decides BLOCKED-at-tune vs cells).  FREE
-                               # tape only; prereg BEFORE any run; tune
-                               # 2015-01-01..2017-12-31; holdout unread.
+    retired: true              # vs NAV proxy. KILLED at tune 2026-10-28: DQ guard
+                               # PASSED (prem sd 16.8bp >= 15bp floor, median 14bp,
+                               # tape complete, no splits) -> 3 cells ran, 0 pass:
+                               # z_timing_1 Sharpe 0.29, z_timing_2 0.86 but G2 year
+                               # share 0.63 + G4 <8 switches, band_mr Sharpe -1.08
+                               # (premium mean-reversion NEGATIVE in-window). G1
+                               # clean + mutants differ. The premium IS measurable
+                               # free - it just carries no tradeable reversion.
+                               # Evidence logs/edge/EW3_etf_premium/.
+    kind: hypothesis
     hypotheses: [EW3_etf_premium]
   EW3_earn_drift:              # NEW EDGE WAVE A/B/C: Track A earnings drift (PEAD)
     blocked: true              # COVERED STUB at prereg (0 cells, no run): the
@@ -1506,16 +1514,25 @@ families:
     covered_by: F151_3_2_earnings_mom
     hypotheses: [EW3_earn_drift]
   EW3_reit_time_rs:            # NEW EDGE WAVE A/B/C: Track B REIT sector-timing
-    kind: hypothesis           # (F151_16_3 lesson - timing, NOT always-on).
-                               # Industrial/infra baskets when RS63 vs SPY > 0,
-                               # else SPY/AGG; monthly decisions; G2 year share
-                               # <= 0.40 HARD (no exemption - the 16_3 skeptic
-                               # gate).  Paper only; prereg BEFORE any run; tune
-                               # 2015-01-01..2017-12-31; holdout unread.
+    retired: true              # (16_3 lesson). KILLED at tune 2026-10-28: 0/4 -
+                               # the timing rule REALLY traded (pct_basket ind 0.56 /
+                               # infra 0.64, 10-15 leg flips, G4 pass) yet G2 year
+                               # share still 0.55-0.62: net pnl concentrates in the
+                               # 2016-17 sector boom even under genuine timing.
+                               # infra cells: preregistered early mutant INERT
+                               # (RS63 day-stable, 0/45 decisions differ - signal
+                               # persistence, not look-ahead); sign-flip mutant
+                               # differs on all 4 (detector live). ind_rs63_spy
+                               # Sharpe 0.857 G5+G6 pass - beta again. Evidence
+                               # logs/edge/EW3_reit_time_rs/.
+    kind: hypothesis
     hypotheses: [EW3_reit_time_rs]
   EW3_reit_time_trend:         # NEW EDGE WAVE A/B/C: Track B REIT sector-timing,
-    kind: hypothesis           # absolute-trend state (basket vs own 200s SMA,
-                               # else AGG).  Same G2-hard skeptic gate.  Paper
-                               # only; prereg BEFORE any run; tune
-                               # 2015-01-01..2017-12-31; holdout unread.
+    retired: true              # absolute 200s-SMA state. KILLED at tune 2026-10-28:
+                               # 0/2 - slow rule barely trades (7 change days < G4
+                               # floor 8; pct_basket 0.75/0.83) and G2 year share
+                               # 0.77/0.87; Sharpe 0.45/0.73 fail G5. Early mutant
+                               # differs; sign-flip mutant differs (detector live).
+                               # Evidence logs/edge/EW3_reit_time_trend/.
+    kind: hypothesis
     hypotheses: [EW3_reit_time_trend]

@@ -71,12 +71,8 @@ def run_cell_prem(cell, z1, cap, cost_mult=1.0, early=False):
 
 
 def run_cell_reit(family, cell, cap, cost_mult=1.0, early=False):
-    if family == "EW3_reit_time_rs":
-        basket_key, alt, state = cell
-        state = "rs63"
-    else:
-        basket_key, alt, state = cell
-        state = "sma200"
+    basket_key, alt = cell
+    state = "rs63" if family == "EW3_reit_time_rs" else "sma200"
     tickers = L.BASKETS[basket_key] + [alt, "SPY"]
     panel = L.build_panel(tickers, cap=cap)
     return L.reit_timing_engine(panel, L.BASKETS[basket_key], state, alt,
@@ -186,8 +182,9 @@ def main():
 
     else:  # reit_time_rs / reit_time_trend
         cells = CELLS_RS if fam == "EW3_reit_time_rs" else CELLS_TREND
+        state = "rs63" if fam == "EW3_reit_time_rs" else "sma200"
         for cell in cells:
-            name = f"{cell[0]}_{cell[2]}_{cell[1].lower()}"
+            name = f"{cell[0]}_{state}_{cell[1].lower()}"
             base = run_cell_reit(fam, cell, TUNE_HI)
             mut = run_cell_reit(fam, cell, TUNE_HI, early=True)
             ev, g = gates_for(base, TIME_FLOOR, None)
