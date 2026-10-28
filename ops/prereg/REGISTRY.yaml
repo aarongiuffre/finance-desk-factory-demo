@@ -62,11 +62,17 @@ families:
                                  # 21d hold, PIT S&P universe; scored DEV KILLED 2026-10-28
     hypotheses: [H3_52w_high]
   H4_hp_filter:                # PRIMARY crypto slate (Aaron 2026-10-28): book 8.1, BTC daily,
-    kind: hypothesis           # rolling past-only HP + two-MA on S*; NOT a re-open of retired
-                               # H4_inventory (same section number, different hypothesis).
-                               # Tune-only work authorized by prereg; scored DEV needs a
-                               # standing dev go (none installed - BLOCKED until Aaron signs).
-                               # prereg H4_hp_filter.yaml - ccxt paper data, fee 0.06%/turnover
+    retired: true              # KILLED at tune 2026-10-28: 0/48 grid cells pass the six gates -
+                               # every cell fails G2 (max calendar-year share 0.41-0.87 of net
+                               # PnL, gate 0.40) and G4 (5-31 trades over ~6.5y, gate >= 60);
+                               # best long/flat 365/5/60 Sharpe 1.50 but 6 trades, 56% one-year
+                               # concentration; B&H tune Sharpe 1.35. No eligible cell -> scored
+                               # DEV moot, holdout never read, no go issued. Family retired
+                               # permanently, no re-test under a new name (H3 doctrine).
+                               # NOT a re-open of retired H4_inventory (same section number,
+                               # different hypothesis). prereg H4_hp_filter.yaml; evidence
+                               # logs/edge/H4_hp_filter/{h4_summary.json,KILL.md}; freeze 71060bf
+    kind: hypothesis
     hypotheses: [H4_hp_filter]
   H5_knn:                      # PRIMARY crypto slate: book 3.17 single-stock KNN on BTC daily,
     kind: hypothesis           # 60/40 train/val, T/z1/train grid; prereg H5_knn.yaml
