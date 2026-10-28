@@ -1,0 +1,118 @@
+# PRE-REGISTRATION - F151_6_5_vol_target (Soper 151 Trading Strategies Ch6 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*, F151_4_*, F151_5_*
+# all closed 2026-10-28).  Book section: 6.5 Index volatility targeting with
+# risk-free asset (w = sigma*/sigma, cap L; rebalance periodic or threshold kappa).
+# The book has NO backtests - no performance claims are attributed to it anywhere
+# below.  DISTINCT from W2b crypto vol-target (closed KILL) - different asset
+# class, different legs, no shared code path beyond the desk engine.
+# Paper / Yahoo + free FRED public only; no spend; no paid tape.
+hypothesis: F151_6_5_vol_target
+family: F151_6_5_vol_target
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 6.5: hold a constant volatility level by periodically
+  rebalancing between an index (risky) and T-bills (risk-free); risky weight
+  w = sigma*/sigma (capped at preset max leverage L), risk-free weight 1-w;
+  to cut turnover, optionally rebalance only when |dw|/w since the last
+  rebalancing exceeds a preset threshold kappa.  (Perold 1988 lineage;
+  Albeverio et al 2013; Anderson/Bianchi/Goldberg 2014; etc.)
+prior: >-
+  MILD PRIOR AGAINST clearing the desk gates: index vol targeting is one of the
+  oldest published overlays (Perold 1988) - the effect is well arbitraged, and
+  on a 2015-2017 tape (calm VIX, strong equity years) the cash drag costs CAGR
+  while the gate bar (net Sharpe >= 0.8 with G2 year-concentration <= 0.40)
+  is the same bar that killed every F151_5 cell.  The 2015-2017 tune window is
+  PRE-publication of the 2018 book, which is the honest side of that test, but
+  the overlay itself was public decades before the window opens.
+signal: >-
+  Risky leg = index ETF proxy; cash leg = SHY (1-3y Treasury ETF as the
+  T-bill proxy; BIL used only as a report-only cash sensitivity - the book
+  wants T-bills, SHY carries ~2y duration, documented as a proxy limitation).
+  Decision at close D uses only data <= D: risky weight
+  w(D) = min(L, sigma*/sigma(D)), cash weight 1 - w(D); weights fixed from the
+  day after D to the next rebalance.  sigma(D) estimators (book footnote: IV
+  preferred, historical allowed):
+  - vix  : ^VIX close / 100 (SPX 30d implied; used for SPY cells - it is the
+           free implied-vol proxy for the S&P 500 index itself)
+  - r21 / r63 : trailing 21d / 63d realized vol of the index ETF's adjclose
+           returns, annualized x sqrt(252) (used for QQQ/IWM cells - no free
+           historical implied vol exists for those indexes)
+  Rebalance schedules: monthly (month-end close) and threshold kappa=0.10
+  (daily check; rebalance when |w_target - w_last| / w_last > kappa; if the
+  position is flat, any w_target > 0 rebalances).  sigma* grid {10%, 15%};
+  leverage cap L grid {1.0, 1.5} - w > 1 is financed by shorting the cash leg
+  (charged the desk 100 bps/yr borrow).
+cells:
+  vt_spy_vix_m15: "SPY, sigma from ^VIX, sigma*=15%, monthly rebalance, L=1"
+  vt_spy_r21_m15: "SPY, sigma = 21d realized, sigma*=15%, monthly rebalance, L=1"
+  vt_spy_r63_m15: "SPY, sigma = 63d realized, sigma*=15%, monthly rebalance, L=1"
+  vt_spy_vix_m10: "SPY, sigma from ^VIX, sigma*=10%, monthly rebalance, L=1"
+  vt_spy_vix_m15_l15: "SPY, ^VIX, sigma*=15%, monthly, L=1.5 (w>1 short-financed)"
+  vt_spy_vix_k10: "SPY, ^VIX, sigma*=15%, threshold rebalance kappa=0.10, L=1"
+  vt_qqq_r63_m15: "QQQ, sigma = 63d realized, sigma*=15%, monthly rebalance, L=1"
+  vt_iwm_r63_m15: "IWM, sigma = 63d realized, sigma*=15%, monthly rebalance, L=1"
+total_cells: 8 (whole preregistered budget; no post-hoc cells)
+g4_floor: >-
+  >= 24 funded rebalance episodes for monthly cells (36 month-ends in tune);
+  >= 12 actual rebalance episodes for the threshold cell (kappa=0.10 is
+  designed to rebalance rarely; documented floor).
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing lookback)"
+  data_end: "2017-12-31 tune cap (loader-capped: no bar past the cap is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Cap enforced at the loader: every price/ETF/VIX file
+    is hard-capped at 2017-12-31 in load_ticker_bars.
+data:
+  prices: >-
+    Desk ETF tapes (Yahoo chart v8): SPY, QQQ, IWM, SHY (+BIL report-only).
+    New pulls 2026-10-28 for this prereg: ^VIX (1990-, index level, v=0) and
+    BIL (2007-).  Full history on disk like every other ETF tape; the loader
+    caps at the tune cap so the holdout is never loaded.  VIX pulls to disk
+    match the desk's established ETF convention (loader-cap discipline, not
+    disk-cap).
+universe: >-
+  Fixed legs per cell; eligibility = tape covers the tune window (all do:
+  SPY/QQQ/IWM/SHY/BIL all quote through the window; ^VIX from 1990).
+costs: &costs >-
+  Equity desk floors (edge_plan section 6, same as F151_5): per side = fee
+  15 bps + half-spread bucket by ADV20 (all five legs are large-cap ADV
+  >= $50M -> 5 bps) + slippage 10 bps; per-side floor 20 bps (round-trip
+  floor 40).  Short borrow 100 bps/yr on short notional (binding only in the
+  L=1.5 cell).  Weights held fixed between rebalances (no drift rebalancing);
+  costs charged on |dW| of BOTH legs at the decision day's ADV bucket.
+  ^VIX is never a held leg, so its zero-ADV bucket never prices a trade.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights (all cells are signal-varying - the vol estimator moves w).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max
+  episode share of gross <= 0.25 (episode = one executed rebalance).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr,
+     cost drag/yr, borrow drag/yr, avg risky weight"
+  - "benchmarks reported ungated: SPY buy-hold and a fixed 60/40 SPY/SHY blend
+     (no rebalance costs) on the same tune slice"
+  - "report-only sensitivity: BIL cash leg (vs SHY) for the headline SPY/VIX
+     cell - the T-bill proxy question, not a gate"
+  - "honest caveats: the overlay is decades-published (Perold 1988 lineage) so
+     decay is in the test even though the window pre-dates the book; SHY is a
+     ~2y-duration proxy for T-bills (BIL sensitivity reported); ^VIX is SPX
+     implied vol applied to the SPY ETF (tracking is close but not exact);
+     realized-vol estimators lag regime shifts by construction; the book
+     contains no backtests to compare against"
