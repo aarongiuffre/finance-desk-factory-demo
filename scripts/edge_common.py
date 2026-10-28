@@ -96,9 +96,12 @@ def evaluate(pos, ts, closes, fee_bps=FEE_BPS):
         trade_pnl.append(float(np.nansum(pnl[a + 1: b + 2])))  # pnl earned while in the trade
     gross = float(np.nansum(pos[:-1] * (closes[1:] / closes[:-1] - 1.0)))
     years = pd.Series(ts).dt.year.to_numpy()
-    yr_pnl = {}
+    months = pd.Series(ts).dt.strftime("%Y-%m").to_numpy()
+    yr_pnl, mo_pnl = {}, {}
     for y in np.unique(years):
         yr_pnl[int(y)] = float(np.nansum(pnl[years == y]))
+    for m in np.unique(months):
+        mo_pnl[str(m)] = float(np.nansum(pnl[months == m]))
     third_pnl = []
     bounds = np.linspace(0, len(pnl), 4).astype(int)
     for k in range(3):
@@ -111,7 +114,9 @@ def evaluate(pos, ts, closes, fee_bps=FEE_BPS):
         "max_trade_share": (max(trade_pnl, key=abs) / gross) if (gross != 0 and trade_pnl) else None,
         "max_year_share": (max((abs(v) for v in yr_pnl.values()), default=0.0) / abs(tot))
         if tot != 0 else None,
-        "year_pnl": yr_pnl, "third_pnl": third_pnl,
+        "max_month_share": (max((abs(v) for v in mo_pnl.values()), default=0.0) / abs(tot))
+        if tot != 0 else None,
+        "year_pnl": yr_pnl, "month_pnl": mo_pnl, "third_pnl": third_pnl,
     }
 
 
