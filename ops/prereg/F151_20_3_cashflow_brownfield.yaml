@@ -1,0 +1,49 @@
+# PRE-REGISTRATION - F151_20_3_cashflow_brownfield (Soper FULL-151 Ch20 batch,
+# F151_ prefix).  Written 2026-10-28 BEFORE any tune attempt.  New F151_ family:
+# does not re-open any retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*,
+# F151_3_*..F151_19_* all closed 2026-10-28).  Book 20 Infrastructure - theme 3:
+# generate stable cash flows from infrastructure investments; "brownfield"
+# projects (established assets in need of improvement) are more appropriate than
+# "greenfield" (assets to be constructed); diversification across sectors can be
+# beneficial.  BLOCKED STUB AT PREREG - 0 cells.
+hypothesis: F151_20_3_cashflow_brownfield
+family: F151_20_3_cashflow_brownfield
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur ch.20 (prose only): a third investment strategy is to
+  generate stable cash flows from infrastructure investments, where brownfield
+  projects beat greenfield, and sector diversification helps.  The return is
+  project-level: contracted/regulated cash-flow stability of an OPERATING asset
+  vs the construction/development risk of a new build - a comparison that lives
+  in private (unlisted) infrastructure vehicles.
+blocked_at_prereg: true
+blocked_reason: >-
+  The mechanism requires an unlisted infrastructure deal tape that no free
+  source provides:
+  * Brownfield-vs-greenfield selection needs project-level cash-flow data
+    (contracted revenues, availability payments, concession terms, construction
+    capex) - Preqin/Burgiss/EDHECinfra-class PAID private-infrastructure
+    databases; no free tape exists for any jurisdiction.
+  * Unlisted infrastructure fund returns (the vehicle the book's strategy runs
+    through) are appraisal-smoothed and licensed (Preqin, Cambridge Associates,
+    Burgiss) - not free, and the appraisal smoothing is itself part of the
+    "stable cash flow" claim being tested.
+  * Municipal project bonds earmarked to specific infrastructure projects are
+    OTC/bond-desk data (EMMA is disclosure documents, not a clean free
+    project-cash-flow tape for a tradeable cross-section).
+  * Listed proxies do NOT transfer the mechanism (preregistered): listed
+    utility/infra equities (IGF/GII/NGIS-class) are claims on corporate cash
+    flows with NO brownfield-vs-greenfield selection dimension - you cannot
+    sort listed infrastructure into brownfield vs greenfield cohorts from free
+    tape; the book's brownfield preference is exactly the information that is
+    private.  Running listed-ETF cells under this name would be a clever
+    non-transferring proxy and is NOT done (per the batch brief: prefer honest
+    BLOCKED).
+data_needed: >-
+  Project-level infrastructure cash-flow tape (project id, type brownfield/
+  greenfield, contracted revenue series, concession dates) or unlisted infra
+  fund deal-level returns (Preqin/Burgiss class), PIT, covering a sector panel
+  (transport/energy/utilities/social) - any free equivalent would reopen the
+  family.
+verdict_policy:
+  - "BLOCKED at prereg: 0 cells, no tune, REGISTRY blocked_stub, no go ask."

@@ -1,0 +1,130 @@
+# PRE-REGISTRATION - F151_20_2_inflation_hedge (Soper FULL-151 Ch20 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*..F151_19_* all
+# closed 2026-10-28).  Book 20 Infrastructure - theme 2: infrastructure as an
+# inflation hedge.  Reuses the F151_14_2/F151_16_5 breakeven-z machinery with
+# the infra ETF as the hedge leg (sign mirrored to the hedge direction, as in
+# 16_5).  The book has NO backtests and NO equations - no performance claims
+# attributed below.  Paper / free public only; no spend.
+hypothesis: F151_20_2_inflation_hedge
+family: F151_20_2_inflation_hedge
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur ch.20 (prose only): another investment strategy is to use
+  infrastructure assets for inflation hedging (footnote 244: infrastructure, as
+  real estate, can be an inflation-hedging investment, albeit apparently with
+  some heterogeneity).  The book frames NO rule: no trigger, no sizing, no
+  frequency.  The only free tradeable form tested here: when market inflation
+  compensation is being REPRICED UP (breakeven rich vs its own trailing
+  history), hold listed infrastructure against nominal bonds; reverse when it
+  is cheap; flat in between - the same timing shape as F151_16_5 (which used
+  REITs as the hedge leg) and the Ch14 z-machinery mirrored to the hedge
+  direction.
+prior: >-
+  WEAK-PRIOR, two-sided, with a HOSTILE-REGIME caveat preregistered.  (a) The
+  hedge premise (listed infra co-moves with realized inflation / breakeven
+  CHANGES) is measurable report-only.  (b) 2015-2017 breakevens COMPRESSED
+  (T10YIE 2.2 -> 1.9); the same breakeven-z timing shape died 0/7 in Ch14 and
+  0/5 z-cells in 16_5 - the z-rule will spend much of the window long bonds /
+  short infra.  (c) Listed global infra is dominated by REGULATED utilities
+  whose cash flows do NOT index to inflation the way unlisted contracted assets
+  partially do (the book's own "heterogeneity" caveat) - the pass-through the
+  mechanism needs is not measurable free (NCREIF/PFI-class paid).  (d) The
+  hedge leg is an equity-beta instrument vs a bond leg: on a 1:1 notional the
+  book is a levered equity bet with an inflation trigger, not a clean hedge.
+signal: >-
+  Daily, decision at close t-1, pnl day t.  Signal = z-score of the market
+  breakeven BE(t) vs its trailing 252-session mean/std (obs <= t-1 only):
+  z >= +z1 -> LONG infra leg / SHORT bond leg (inflation repricing up - the
+  hedge on); z <= -z1 -> REVERSE (long bond / short infra); else flat.  While
+  on, weights CONSTANT; each change = one trade per leg.  BE mapped to ETF
+  sessions by date with ffill <= 5.  (16_5 direction: there the hedge leg was
+  REITs; here listed global infrastructure.)
+cells:
+  z05_igf_agg: "BE = T10YIE, z1 = 0.5, long IGF / short AGG 1:1"
+  z10_igf_agg: "BE = T10YIE, z1 = 1.0, long IGF / short AGG 1:1"
+  z05_gii_agg: "BE = T10YIE, z1 = 0.5, long GII / short AGG 1:1"
+  z10_gii_agg: "BE = T10YIE, z1 = 1.0, long GII / short AGG 1:1"
+  z05_igf_ief: "BE = T10YIE, z1 = 0.5, long IGF / short IEF 1:1 (duration-
+    narrower bond leg)"
+  static_igf_agg: "ALWAYS-ON premise cell: long IGF / short AGG 1:1 from the
+    first tune session, never traded thereafter - adjudicates the book's
+    UNCONDITIONAL hedge claim, not a timing strategy"
+total_cells: 6 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 10 position-change days for every z-cell (a +-z1 trigger on a
+  daily series exceeds this via crossing counts; preregistered floor 10; the
+  static cell is G4-exempt by construction)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing history)"
+  data_end: "2017-12-31 tune cap (ETF loaders cap bars at the cap; T10YIE on
+    disk was request-capped coed=2017-12-31 AT PULL)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31 (36 months).  Dev holdout 2018-01-01..2019-12-31
+    NEVER READ this run (no validation or holdout without go).
+data:
+  prices: >-
+    raw/price/{IGF,GII,AGG,IEF,SPY}.json (Yahoo chart v8; IGF pulled --backfill
+    max 2026-10-28, the rest on disk).  Total return = adjclose 'a'.  SPY
+    supplies the session calendar.
+  fred: >-
+    raw/fred/T10YIE.json (10Y breakeven, request-capped 2017-12-31 at pull,
+    Ch14/Ch16 pulls) + raw/fred/CPIAUCSL.json (report-only premise block;
+    request-capped 2017-12-31).
+universe: >-
+  Infra hedge legs: IGF (iShares Global Infrastructure), GII (SPDR S&P Global
+  Infrastructure).  Bond legs: AGG (broad), IEF (7-10y).  NFRA/TOLZ (shorter
+  tapes: 2013-10/2014-03) are NOT z-cells - the trailing 252-session z needs
+  warmup and the two broadest global legs already cover the class; documented,
+  not a gate exemption.
+costs: &costs >-
+  Desk large-bucket floor 20 bps/side on |dpos| x (wL + wS) per leg at each
+  position change (all legs large-ADV ETFs; ETF pairs carry no borrow, Ch14
+  rule).  G6 stress at 2x per-side costs (cagr reported).
+gates: &gates >-
+  Standard F151 daily gates per cell (sharpe sqrt(252), cagr 252/n):
+  G1 lookahead - replay truncation at 4 slice cuts + loader-cap cut (positions
+  through the cut identical) AND a decision-early mutant (z NOT shifted one
+  session, i.e. the day-t breakeven decides day t) must produce a different pnl
+  series.  G2 concentration - max calendar-year share of net pnl <= 0.40 AND
+  max per-episode share of gross <= 0.25 (episodes = on-runs of the trigger).
+  G3 regime - at least 2 of 3 equal thirds of the cell's own tune window
+  net-positive.  G4 min trades >= 10 position-change days (static cell exempt
+  by construction).  G5 fees - net Sharpe >= 0.8 AND net CAGR > 0 at base
+  costs.  G6 stress - net CAGR > 0 at 2x costs.
+family_decision_rule: >-
+  KEEP_TUNE iff AT LEAST ONE z-cell (z05_*/z10_*) passes ALL of G1, G2, G3, G4,
+  G5 and G6.  The static_igf_agg premise cell is REPORTED for premise
+  adjudication but CANNOT make the family a survivor (always-on hedge, G2
+  year-share fails by construction - same rule as the Ch13/Ch14/16_5 static
+  cells).  Otherwise KILL.  The hedge PREMISE itself is adjudicated in
+  report-only blocks (a)-(c), not by gates.
+verdict_policy:
+  - "Family decision rule above -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">= 1 z-cell survivor per the rule -> KEEP_TUNE: holdout unread; BLOCKED
+    awaiting standing dev go (ops/offbox/aaron_sign_dev_go.py; go file names
+    the code freeze sha and max_dev_trials) before any scored DEV run."
+report_only:
+  - >-
+    (a) Hedge co-movement: corr(monthly IGF return, CPI YoY) and corr(monthly
+    IGF, delta-T10YIE) over the tune window - does listed infra co-move with
+    inflation AT ALL in the proxy (compare 16_5: corr(VNQ, CPI YoY) -0.03,
+    corr(VNQ, dBE) -0.19, the WRONG sign)?
+  - >-
+    (b) Fwd-21d IGF-minus-AGG spread by trailing z-quintile - is the hedge
+    direction (rich breakeven -> infra outperforms) even monotone in-window?
+  - >-
+    (c) Static-cell economics: net Sharpe / CAGR / maxDD of always-on IGF/AGG
+    1:1 - what the unconditional hedge actually delivered in-window.
+data_walls: >-
+  * The book's hedge premise is about UNLISTED contracted infrastructure cash
+    flows (regulated tariffs, availability payments with indexation clauses);
+    listed global-infra ETFs are equity claims on utility companies whose
+    revenue-indexation share is NOT observable free - standing listed-proxy
+    limitation, preregistered (footnote 244's "heterogeneity" is unmeasurable
+    here).
+  * Realized CPI (CPIAUCSL) is a 1-month-lagged proxy for the inflation the
+    breakeven forecasts; no free real-time inflation-expectations tape beyond
+    T10YIE/T5YIE market breakevens.
+  * Unlisted infra funds / project cash-flow tapes are paid -> F151_20_3 stub.
