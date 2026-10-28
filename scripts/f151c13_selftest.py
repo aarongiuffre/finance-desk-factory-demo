@@ -42,10 +42,10 @@ res2 = muni_pnl(tr, rf, tau, side_bps=20.0)
 rate_shift = rf["R"].shift(1).reindex(res2["fund"].index)
 check("muni: funding leg is (1-tau)*r_f(t-1)/252 (prior-session rate)",
       np.allclose(res2["fund"].to_numpy(), (1 - tau) * rate_shift / 252.0))
-check("muni: gross = TR daily diff incl. entry move vs pre-tune close",
-      np.isclose(res2["gross"].iloc[0], tr["V"].iloc[1] - tr["V"].iloc[0])
+check("muni: gross = TR daily pct-change incl. entry move vs pre-tune close",
+      np.isclose(res2["gross"].iloc[0], tr["V"].iloc[1] / tr["V"].iloc[0] - 1.0)
       and np.allclose(res2["gross"].iloc[1:].to_numpy(),
-                      tr["V"].diff().iloc[2:].to_numpy()))
+                      tr["V"].pct_change().iloc[2:].to_numpy()))
 exp_pnl = res2["gross"] - res2["fund"]
 exp_pnl.iloc[0] -= 20.0 / 1e4
 check("muni: pnl = gross - funding - entry cost",

@@ -136,7 +136,7 @@ def muni_pnl(tr, rf, tau=TAU, side_bps=SIDE_BPS, cost_mult=1.0,
     """
     tr_s = tr.iloc[:, 0]
     rf_s = rf.iloc[:, 0]
-    r = tr_s.diff()
+    r = tr_s.pct_change()          # TOTAL RETURN of the muni leg (adjclose)
     r = r[r.index >= lo]
     rate = rf_s if early_funding else rf_s.shift(1)
     fund = ((1.0 - tau) * rate / 252.0).reindex(r.index)
