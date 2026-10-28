@@ -1,0 +1,108 @@
+# PRE-REGISTRATION - F151_4_6_multi_trend (Soper 151 Trading Strategies Ch4 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_* all closed 2026-10-28).
+# Book section: 4.6 Multi-asset trend following (Eqs 371-373).  The book has NO
+# backtests - no performance claims are attributed to it anywhere below.
+# Paper / Yahoo public only; no spend, no paid data.
+hypothesis: F151_4_6_multi_trend
+family: F151_4_6_multi_trend
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 4.6: long-only trend-following portfolio of ETFs.  Compute
+  cumulative returns Ricum over some period T (e.g. 6-12 months); keep only
+  ETFs with positive Ricum; optional MA filter (keep only ETFs whose last close
+  P_i > MA_i(T0), T0 typically 100-200 days); then assign weights to ALL
+  remaining ETFs: wi = gamma1*Ricum (371), gamma2*Ricum/sigma_i (372), or
+  gamma3*Ricum/sigma_i^2 (373), normalized so sum(wi) = 1.  (372)/(373) damp
+  the volatile-ETF overweight; (373) is the diagonal-covariance Sharpe-optimal
+  weighting.
+
+prior: >-
+  MIXED.  Distinct from W2b_tsmom (which ran 4.6's Eqs on the crypto panel and
+  died); this is the ETF panel the section was written for, and the pool spans
+  asset classes (equity sectors + SPY/QQQ/IWM + TLT + GLD).  2015-2017 tune
+  tape: equities trend up in 2016-17 (favorable), GLD/TLT chop (long-only
+  filter should sit those out).  Long-only trend following on ~17 liquid ETFs
+  at monthly rebalance is the one cell family in this batch with a real prior
+  of positive gross drift; the 0.8 net Sharpe bar after floor costs is
+  nonetheless demanding, and G2 year-concentration is a real risk for a
+  long-only book in a 3-year window.
+
+signal: >-
+  Monthly rebalance at month-end D (decision at close D, active D+1).  Ricum_i
+  = compounded return over the `f_months` COMPLETE calendar months before D
+  (same formation convention as Eq_sector_mom).  sigma_i = trailing 252-bar
+  daily-return std as of D.  Eligible at D: tape covers the formation window
+  AND Ricum > 0 (and, for MA-filter cells, P_i > MA_i(T0) at D, MA on
+  adjclose).  Weights over eligible names, normalized to gross 1: w ∝ Ricum
+  (w1), Ricum/sigma (w2), Ricum/sigma^2 (w3).  No eligible name -> flat.
+  Long-only: no shorts, no borrow.
+
+cells:
+  f6_w1: "6m Ricum, w ∝ Ricum (Eq 371)"
+  f6_w2: "6m Ricum, w ∝ Ricum/sigma (Eq 372)"
+  f6_w3: "6m Ricum, w ∝ Ricum/sigma^2 (Eq 373)"
+  f12_w1: "12m Ricum, w ∝ Ricum (Eq 371)"
+  f12_w2: "12m Ricum, w ∝ Ricum/sigma (Eq 372)"
+  f12_w3: "12m Ricum, w ∝ Ricum/sigma^2 (Eq 373)"
+  f6_ma100_w2: "6m Ricum + P > MA100 filter, w ∝ Ricum/sigma"
+  f12_ma200_w2: "12m Ricum + P > MA200 filter, w ∝ Ricum/sigma"
+total_cells: 8 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes (36 monthly reb dates; a long-only
+  book legitimately sits flat when nothing trends - G4 documents that)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing lookback)"
+  data_end: "2019-12-31 (fold-copy cutoff; no row past it is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Cap enforced at the file loader: no bar past the cap
+    date is loaded at all.
+data:
+  prices: >-
+    fold-copy price tiers folds/dev/raw/price/{sp_exits,price,dead} (SPY 2014-01-02),
+    plus main raw/price for the ETF pool (Yahoo chart v8 pulls 2026-10-28, desk
+    price_pull.py; XLB/XLE/XLF/XLI/XLK/XLP/XLU/XLV/XLY/VOX/SPY/QQQ/IWM/TLT/GLD;
+    XLC 2018-06+, XLRE 2015-10+ - absent from the cross-section until their tape).
+  membership: folds/dev/universe/sp500_ticker_start_end.csv (PIT S&P roster incl. exits)
+
+universe: >-
+  Fixed multi-asset ETF pool: XLB XLE XLF XLI XLK XLP XLU XLV XLY VOX SPY QQQ
+  IWM TLT GLD (+ XLC XLRE when their tapes exist).  Eligible at D iff the
+  name's tape covers the formation window (and passes the MA filter in the
+  filter cells).
+costs: &costs >-
+  Equity desk floors (edge_plan section 6): per side = fee 15 bps + half-spread
+  bucket by ADV20 (large >= $50M: 5, mid >= $5M: 15, small: 40) + slippage 10
+  bps; per-side floor 20 bps (round-trip floor 40).  Short borrow 100 bps/yr on
+  short notional (nil here: long-only).  Weights held fixed between rebalances
+  (no drift rebalancing).  Decision at close t-1 earns day-t adjclose return;
+  costs charged on |dW| with the decision day's ADV bucket.  Delisting:
+  tape-faithful (weight released the day after the last bar, NO trade cost);
+  -30% haircut run as a reported sensitivity, not a gate.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights (detector live).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max episode
+  share of gross <= 0.25 (monthly families: episode = one rebalance; daily
+  families: episode = one calendar month).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">- 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, avg net exposure, avg #names"
+  - "benchmarks reported ungated: SPY total return and equal-weight pool daily return (same convention)"
+  - "era split by calendar year (G2); pool sizes; delist events; haircut-30% CAGR sensitivity"
+  - "honest caveats: whole window is POST-publication for every cited anomaly (decay is IN the test)"

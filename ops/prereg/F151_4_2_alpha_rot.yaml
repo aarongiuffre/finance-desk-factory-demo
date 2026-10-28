@@ -1,0 +1,99 @@
+# PRE-REGISTRATION - F151_4_2_alpha_rot (Soper 151 Trading Strategies Ch4 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_* all closed 2026-10-28).
+# Book section: 4.2 Alpha rotation (Eq 364).  The book has NO backtests - no
+# performance claims are attributed to it anywhere below.  Paper / Yahoo public +
+# desk's Kenneth French daily factor zips (free, already on desk) only; no spend,
+# no paid data.
+hypothesis: F151_4_2_alpha_rot
+family: F151_4_2_alpha_rot
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 4.2: sector momentum rotation with cumulative return Ricum
+  replaced by Jensen's alpha from a serial regression Ri(t) = alpha_i +
+  b1*MKT + b2*SMB + b3*HML + eps (Eq 364); estimation period typically 1 year,
+  daily or weekly returns (fn 77).  Rotation = long top / short bottom of the
+  ETF cross-section by alpha, monthly.
+
+prior: >-
+  SKEPTICAL.  Eq_sector_mom already killed the raw-momentum rotation on this
+  same 12-17 ETF pool (best net Sharpe 0.25, 0/4 cells).  Alpha is a
+  de-noised/orthogonalized momentum proxy, so the expectation is the same
+  weak-signal / fee-death profile.  A 12-17 name pool also has no deciles -
+  top-2/bottom-2 is the documented adaptation (as in Eq_sector_mom).
+
+signal: >-
+  For each month-end decision date D: trailing `window` daily (or weekly)
+  returns of each pool ETF, regression of returns on [1, MKT, SMB, HML] (FF3
+  daily factors from raw/ff; weekly = compounded weekly factors).  alpha_i =
+  intercept.  Names need >= 80% joint non-NaN rows in the window.  Cells:
+  DN top-2 alpha long (+0.25 each) / bottom-2 short (-0.25 each), gross 1,
+  weights fixed between month-end rebalances, decided at close D, active D+1.
+  Tilt cell: w_i proportional to centered pct-rank of alpha (sum|w| = 1;
+  long-biased, net exposure reported).
+
+cells:
+  a252_dn: "1y daily FF3 alpha, top-2/bottom-2 DN"
+  a126_dn: "6m daily FF3 alpha, top-2/bottom-2 DN"
+  a52w_dn: "52-week weekly FF3 alpha, top-2/bottom-2 DN"
+  a252_tilt: "1y daily FF3 alpha, rank-tilted gross-1 (long-biased)"
+total_cells: 4 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes (36 monthly reb dates)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing lookback)"
+  data_end: "2019-12-31 (fold-copy cutoff; no row past it is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Cap enforced at the file loader: no bar past the cap
+    date is loaded at all.
+data:
+  prices: >-
+    fold-copy price tiers folds/dev/raw/price/{sp_exits,price,dead} (SPY 2014-01-02),
+    plus main raw/price for the ETF pool (Yahoo chart v8 pulls 2026-10-28, desk
+    price_pull.py; XLB/XLE/XLF/XLI/XLK/XLP/XLU/XLV/XLY/VOX/SPY/QQQ/IWM/TLT/GLD;
+    XLC 2018-06+, XLRE 2015-10+ - absent from the cross-section until their tape).
+  membership: folds/dev/universe/sp500_ticker_start_end.csv (PIT S&P roster incl. exits)
+  factors: raw/ff (Kenneth French daily FF5 zip for MKT/SMB/HML + momentum zip;
+    FF3 used here per Eq 364)
+
+universe: >-
+  Fixed ETF pool below (rotation strategies on a fixed liquid-ETF set; not a
+  PIT S&P screen).  Eligible at D iff the name's tape covers the window.
+  pool = XLB XLE XLF XLI XLK XLP XLU XLV XLY VOX SPY QQQ IWM TLT GLD
+  (+ XLC XLRE when their tapes exist).
+costs: &costs >-
+  Equity desk floors (edge_plan section 6): per side = fee 15 bps + half-spread
+  bucket by ADV20 (large >= $50M: 5, mid >= $5M: 15, small: 40) + slippage 10
+  bps; per-side floor 20 bps (round-trip floor 40).  Short borrow 100 bps/yr on
+  short notional.  Weights held fixed between rebalances (no drift rebalancing).
+  Decision at close t-1 earns day-t adjclose return; costs charged on |dW| with
+  the decision day's ADV bucket.  Delisting: tape-faithful (weight released the
+  day after the last bar, NO trade cost); -30% haircut run as a reported
+  sensitivity, not a gate.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights (detector live).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max episode
+  share of gross <= 0.25 (monthly families: episode = one rebalance; daily
+  families: episode = one calendar month).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">- 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr"
+  - "benchmarks reported ungated: SPY total return and equal-weight pool daily return (same convention)"
+  - "era split by calendar year (G2); pool sizes; delist events; haircut-30% CAGR sensitivity"
+  - "honest caveats: whole window is POST-publication for every cited anomaly (decay is IN the test)"

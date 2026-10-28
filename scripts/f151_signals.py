@@ -350,6 +350,231 @@ def build_pivot(panel, cal, tickers=("SPY",), xs=False, elig=None):
     return W, {"n_episodes": flips}
 
 
+# ------------------------------------------------------------- Ch4 shared: FF daily factors
+_FF_DAILY_CACHE = {}
+
+
+def ff_daily():
+    """Daily MKT SMB HML MOM RF (decimal) from the desk's Kenneth French zips."""
+    if "ff" in _FF_DAILY_CACHE:
+        return _FF_DAILY_CACHE["ff"]
+    import zipfile
+    z = zipfile.ZipFile("/data/finance/raw/ff/F-F_Research_Data_5_Factors_2x3_daily_CSV.zip")
+    name = [n for n in z.namelist() if n.lower().endswith(".csv")][0]
+    lines = z.read(name).decode("latin-1").splitlines()
+    start = next(i for i, l in enumerate(lines) if l.startswith(",Mkt-RF"))
+    rows = []
+    for l in lines[start + 1:]:
+        p = [x.strip() for x in l.split(",")]
+        if len(p) >= 7 and p[0].isdigit():
+            rows.append(p[:7])
+        else:
+            break
+    df = pd.DataFrame(rows, columns=["date", "MKT", "SMB", "HML", "RMW", "CMA", "RF"])
+    df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
+    df = df.set_index("date").astype(float) / 100.0
+    zm = zipfile.ZipFile("/data/finance/raw/ff/F-F_Momentum_Factor_daily_CSV.zip")
+    name = [n for n in zm.namelist() if n.lower().endswith(".csv")][0]
+    lines = zm.read(name).decode("latin-1").splitlines()
+    start = next(i for i, l in enumerate(lines) if l.startswith(",Mom"))
+    rows = []
+    for l in lines[start + 1:]:
+        p = [x.strip() for x in l.split(",")]
+        if len(p) == 2 and p[0].isdigit():
+            rows.append(p)
+        else:
+            break
+    mom = pd.DataFrame(rows, columns=["date", "MOM"])
+    mom["date"] = pd.to_datetime(mom["date"], format="%Y%m%d")
+    mom = mom.set_index("date").astype(float) / 100.0
+    df = df.join(mom, how="left")
+    df = df.where(df > -99.0)              # -99.99 = missing in the French files
+    _FF_DAILY_CACHE["ff"] = df
+    return df
+
+
+def _ff_regression_scores(panel, elig, D, window, fac_names, weekly=False):
+    """Trailing-window FF regression per pool ETF ending at decision date D.
+
+    Returns {ticker: (alpha, r2)} for names whose tape covers >= 80% of the
+    window (jointly with the factors).  Reads only rows <= D (causal: the
+    weights are active from D+1 via apply_rebalance).
+    """
+    cols = list(elig.columns)
+    r = panel["r"].reindex(columns=cols)
+    F = ff_daily()[list(fac_names)]
+    if weekly:
+        mc = max(3, int(0.8 * 5))
+        r = (1.0 + r).resample("W-FRI").prod(min_count=mc) - 1.0
+        F = (1.0 + F).resample("W-FRI").prod(min_count=mc) - 1.0
+    idx = r.index[r.index <= pd.Timestamp(D)]
+    if len(idx) < window:
+        return None
+    sl = idx[-window:]
+    y = r.loc[sl]
+    Xv = F.reindex(sl).values
+    min_obs = int(0.8 * window)
+    if np.isfinite(Xv).sum() < Xv.size * 0.99:
+        return None
+    e = elig.loc[pd.Timestamp(D)].reindex(cols).fillna(False)
+    ok_rows = y.notna().sum() >= min_obs
+    out = {}
+    for t in cols:
+        if not (e.get(t, False) and bool(ok_rows.get(t, False))):
+            continue
+        yv = y[t].values
+        m = np.isfinite(yv) & np.isfinite(Xv).all(axis=1)
+        if m.sum() < min_obs:
+            continue
+        A = np.column_stack([np.ones(int(m.sum())), Xv[m]])
+        beta, *_ = np.linalg.lstsq(A, yv[m], rcond=None)
+        resid = yv[m] - A @ beta
+        sstot = float(((yv[m] - yv[m].mean()) ** 2).sum())
+        r2 = 1.0 - float((resid ** 2).sum()) / sstot if sstot > 0 else np.nan
+        out[t] = (float(beta[0]), r2)
+    return out or None
+
+
+def _dn2(scores):
+    """top-2 long (+0.25) / bottom-2 short (-0.25) on a score Series."""
+    ss = scores.sort_values(ascending=False, kind="mergesort")
+    w = {t: 0.25 for t in ss.index[:2]}
+    w.update({t: -0.25 for t in ss.index[-2:]})
+    return w
+
+
+# ------------------------------------------------------------- F151_4_2 alpha rotation
+def build_alpha_rot(panel, cal, elig, window=252, weekly=False, tilt=False):
+    """Book 4.2 Eq 364: rotation on Jensen's alpha (FF3 intercept), 1y window
+    (fn 77), monthly.  DN top-2/bottom-2 (pool adaptation, as Eq_sector_mom),
+    or a rank tilt with sum|w| = 1 (long-biased, documented variation)."""
+    reb = [d for d in month_ends(cal)
+           if pd.Timestamp(TUNE_LO_G) <= pd.Timestamp(d) <= pd.Timestamp(TUNE_HI_G)]
+    wdates, pool_sizes, alphas = {}, [], []
+    for D in reb:
+        sc = _ff_regression_scores(panel, elig, D, window, ("MKT", "SMB", "HML"), weekly)
+        if sc is None or len(sc) < 4:
+            continue
+        s = pd.Series({t: v[0] for t, v in sc.items()})
+        if tilt:
+            rk = s.rank(pct=True) - 0.5
+            gross = rk.abs().sum()
+            if gross <= 0:
+                continue
+            w = (rk / gross).to_dict()
+        else:
+            w = _dn2(s)
+        wdates[str(pd.Timestamp(D).date())] = w
+        pool_sizes.append(len(sc))
+        alphas.append({t: round(float(v), 8) for t, v in s.items()})
+    W = pd.DataFrame(0.0, index=cal, columns=panel["tickers"])
+    apply_rebalance(W, cal, reb, wdates)
+    return W, {"reb_dates": [str(pd.Timestamp(d).date()) for d in reb],
+               "n_episodes": len(wdates), "pool_sizes": pool_sizes,
+               "alphas_sample": alphas[:2] + alphas[-1:]}
+
+
+# ------------------------------------------------------------- F151_4_3 R-squared
+def build_rsquared(panel, cal, elig, window=252, weekly=False, mode="tercile"):
+    """Book 4.3 Eqs 365-369: FF4 (MKT SMB HML MOM) regression per ETF -> alpha
+    and time-series R2; selectivity = 1 - R2.  25-group sort impossible at
+    N~12-17 (documented): tercile-by-R2 x alpha-half DN, rank-score DN, or a
+    selectivity*sign(alpha) rank tilt (gross 1)."""
+    reb = [d for d in month_ends(cal)
+           if pd.Timestamp(TUNE_LO_G) <= pd.Timestamp(d) <= pd.Timestamp(TUNE_HI_G)]
+    wdates, pool_sizes, r2_stats = {}, [], []
+    for D in reb:
+        sc = _ff_regression_scores(panel, elig, D, window,
+                                   ("MKT", "SMB", "HML", "MOM"), weekly)
+        if sc is None or len(sc) < 6:
+            continue
+        s_a = pd.Series({t: v[0] for t, v in sc.items()})
+        s_r2 = pd.Series({t: v[1] for t, v in sc.items()})
+        sel = 1.0 - s_r2
+        r2_stats.append({"n": int(len(s_r2)),
+                         "r2_min": float(s_r2.min()), "r2_med": float(s_r2.median()),
+                         "r2_max": float(s_r2.max())})
+        if mode == "tercile":
+            q1, q2 = s_r2.quantile([1.0 / 3.0, 2.0 / 3.0])
+            low = s_r2[s_r2 <= q1].index          # high selectivity
+            high = s_r2[s_r2 >= q2].index         # low selectivity
+            if len(low) < 2 or len(high) < 2:
+                continue
+            w = {t: 0.25 for t in s_a[low].sort_values(ascending=False).index[:2]}
+            w.update({t: -0.25
+                      for t in s_a[high].sort_values(ascending=False).index[-2:]})
+        elif mode == "score":
+            sc2 = sel.rank(pct=True) + s_a.rank(pct=True)
+            w = _dn2(sc2)
+        elif mode == "tilt":
+            rk = sel.rank(pct=True).sub(0.5) * np.sign(s_a)
+            gross = rk.abs().sum()
+            if gross <= 0:
+                continue
+            w = (rk / gross).to_dict()
+        else:
+            raise ValueError(mode)
+        wdates[str(pd.Timestamp(D).date())] = w
+        pool_sizes.append(len(sc))
+    W = pd.DataFrame(0.0, index=cal, columns=panel["tickers"])
+    apply_rebalance(W, cal, reb, wdates)
+    return W, {"reb_dates": [str(pd.Timestamp(d).date()) for d in reb],
+               "n_episodes": len(wdates), "pool_sizes": pool_sizes,
+               "r2_stats": r2_stats}
+
+
+# ------------------------------------------------------------- F151_4_6 multi-asset trend
+def build_multi_trend(panel, cal, elig, f_months=6, wmode=1, ma_len=None,
+                      sigma_win=252):
+    """Book 4.6 Eqs 371-373: long-only trend following on the multi-asset ETF
+    pool.  Ricum over f_months complete calendar months; keep Ricum > 0
+    (optional P > MA(ma_len) filter); weights ∝ Ricum (1), Ricum/sigma (2),
+    Ricum/sigma^2 (3), normalized to gross 1.  Flat when nothing qualifies."""
+    cols = list(elig.columns)
+    M = ES.monthly_returns(panel)[cols]
+    a = panel["a"].reindex(columns=cols)
+    sigma = panel["r"].reindex(columns=cols).rolling(sigma_win, min_periods=sigma_win // 2).std(ddof=1)
+    ma = a.rolling(ma_len, min_periods=ma_len).mean() if ma_len else None
+    reb = [d for d in month_ends(cal)
+           if pd.Timestamp(TUNE_LO_G) <= pd.Timestamp(d) <= pd.Timestamp(TUNE_HI_G)]
+    wdates, pool_sizes, exposures = {}, [], []
+    W = pd.DataFrame(0.0, index=cal, columns=panel["tickers"])
+    for D in reb:
+        mi = M.index.get_indexer([pd.Timestamp(D)], method="nearest")
+        m = M.index.get_loc(M.index[np.argmin(np.abs(M.index - pd.Timestamp(D)))])
+        if m < f_months:
+            continue
+        form = M.iloc[m - f_months: m]        # f complete months before D
+        e = elig.loc[pd.Timestamp(D)].reindex(cols).fillna(False) & form.notna().all()
+        ricum = ((form + 1.0).prod() - 1.0)[e]
+        ricum = ricum[ricum > 0]
+        if ma_len is not None:
+            mav = ma.loc[pd.Timestamp(D)]
+            px = a.loc[pd.Timestamp(D)]
+            keep = [t for t in ricum.index
+                    if pd.notna(mav.get(t)) and pd.notna(px.get(t)) and px[t] > mav[t]]
+            ricum = ricum.reindex(keep).dropna()
+        if len(ricum) == 0:
+            continue
+        if wmode == 1:
+            sig = ricum
+        elif wmode == 2:
+            sig = ricum / sigma.loc[pd.Timestamp(D)].reindex(ricum.index)
+        else:
+            sig = ricum / (sigma.loc[pd.Timestamp(D)].reindex(ricum.index) ** 2)
+        sig = sig.replace([np.inf, -np.inf], np.nan).dropna()
+        if len(sig) == 0 or sig.sum() <= 0:
+            continue
+        w = (sig / sig.sum()).to_dict()
+        wdates[str(pd.Timestamp(D).date())] = w
+        pool_sizes.append(int(len(ricum)))
+        exposures.append(float(sum(w.values())))
+    apply_rebalance(W, cal, reb, wdates)
+    return W, {"reb_dates": [str(pd.Timestamp(d).date()) for d in reb],
+               "n_episodes": len(wdates), "pool_sizes": pool_sizes,
+               "avg_names": float(np.mean(pool_sizes)) if pool_sizes else 0.0}
+
+
 # ------------------------------------------------------------- F151_3_15 Donchian channel
 def build_donchian(panel, cal, tickers=("SPY",), T=20, xs=False, elig=None):
     a = panel["a"]

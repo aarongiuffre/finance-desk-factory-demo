@@ -63,6 +63,38 @@ FAMILIES = {
             ("wreg_mkt_252", S.build_wreg, dict(window=252, factors=("SPY",))),
             ("wreg_sect_126", S.build_wreg, dict(window=126, factors=tuple(SECTOR_AUX))),
         ]),
+    "F151_4_2_alpha_rot": dict(
+        dirs=L.DIRS_ETF, kind="monthly", g4_floor=24, min_bars=0,
+        pool=ETF_POOL,
+        cells=[
+            ("a252_dn", S.build_alpha_rot, dict(window=252)),
+            ("a126_dn", S.build_alpha_rot, dict(window=126)),
+            ("a52w_dn", S.build_alpha_rot, dict(window=52, weekly=True)),
+            ("a252_tilt", S.build_alpha_rot, dict(window=252, tilt=True)),
+        ]),
+    "F151_4_3_rsquared": dict(
+        dirs=L.DIRS_ETF, kind="monthly", g4_floor=24, min_bars=0,
+        pool=ETF_POOL,
+        cells=[
+            ("r2a252_dn", S.build_rsquared, dict(window=252, mode="tercile")),
+            ("r2a126_dn", S.build_rsquared, dict(window=126, mode="tercile")),
+            ("r2a52w_dn", S.build_rsquared, dict(window=52, weekly=True, mode="tercile")),
+            ("r2score252_dn", S.build_rsquared, dict(window=252, mode="score")),
+            ("r2a252_tilt", S.build_rsquared, dict(window=252, mode="tilt")),
+        ]),
+    "F151_4_6_multi_trend": dict(
+        dirs=L.DIRS_ETF, kind="monthly", g4_floor=24, min_bars=0,
+        pool=ETF_POOL,
+        cells=[
+            ("f6_w1", S.build_multi_trend, dict(f_months=6, wmode=1)),
+            ("f6_w2", S.build_multi_trend, dict(f_months=6, wmode=2)),
+            ("f6_w3", S.build_multi_trend, dict(f_months=6, wmode=3)),
+            ("f12_w1", S.build_multi_trend, dict(f_months=12, wmode=1)),
+            ("f12_w2", S.build_multi_trend, dict(f_months=12, wmode=2)),
+            ("f12_w3", S.build_multi_trend, dict(f_months=12, wmode=3)),
+            ("f6_ma100_w2", S.build_multi_trend, dict(f_months=6, wmode=2, ma_len=100)),
+            ("f12_ma200_w2", S.build_multi_trend, dict(f_months=12, wmode=2, ma_len=200)),
+        ]),
     "F151_3_11_single_ma": dict(
         dirs=L.DIRS_STOCK, kind="mixed", g4_floor=250, min_bars=280,
         cells=[
@@ -172,7 +204,8 @@ def run_family(family, only_cell=None, use_cache=True):
         if "ELIG" in str(p.get("elig", "")):
             p["elig"] = elig
         if builder in (S.build_sue, S.build_bp, S.build_rank_avg, S.build_blend,
-                       S.build_wreg):
+                       S.build_wreg, S.build_alpha_rot, S.build_rsquared,
+                       S.build_multi_trend):
             p.setdefault("elig", elig)
             if fund is not None:
                 p["fund"] = fund
