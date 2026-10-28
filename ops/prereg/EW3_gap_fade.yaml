@@ -43,7 +43,13 @@ cells:
   down2_h1: "gap <= -2%, long, hold to close"
   up2_h1: "gap >= +2%, short, hold to close"
 total_cells: 6 (whole preregistered budget; no post-hoc cells)
-g4_floor: ">= 60 gap events per cell over the tune window (entries + exits are 2x that)"
+g4_floor: ">= 12 gap events per cell over the tune window.  AMENDED 2026-10-28
+  BEFORE the tune run (prereg-construction defect caught by the pre-tune tape
+  probe, 19_2-floor-amendment precedent): the original preregistered floor of
+  60 events fails EVERY cell by construction - the real SPY tape has only 35
+  |gap| >= 1% events in 2015-2017 (20 down / 15 up) and 7 at 2% (5 down / 2
+  up).  New floor = 12 events, the desk's hold3-convention floor; cells below
+  it (down2_h1 = 5 events) die G4 honestly."
 fold: dev
 window:
   data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing history)"
