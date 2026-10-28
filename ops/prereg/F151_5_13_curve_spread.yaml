@@ -1,0 +1,93 @@
+# PRE-REGISTRATION - F151_5_13_curve_spread (Soper 151 Trading Strategies Ch5 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*, F151_4_* all closed
+# 2026-10-28).  Book section: 5.13 Yield curve spread (flatteners & steepeners).  The book has NO backtests - no
+# performance claims are attributed to it anywhere below.
+# Paper / Yahoo + free FRED public only; no spend; no Bloomberg/TRACE/paid tape.
+hypothesis: F151_5_13_curve_spread
+family: F151_5_13_curve_spread
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 5.13: buy/sell the yield-curve spread; steepener (buy
+  spread: long front leg, short back leg) when rates are expected to fall,
+  flattener when expected to rise; matching dollar durations of the legs
+  immunizes against small parallel shifts.
+prior: >-
+  NEUTRAL: the book's rule needs a rate outlook it does not specify - the
+  preregistered proxy replaces it with spread momentum (trend) or its
+  inverse (mean-reversion), plus an unconditional steepener cell for
+  reference (2015-2017 is mostly positively sloped).  A duration-matched
+  2s10s DN book has near-zero parallel exposure; pnl comes from curve shape,
+  small and fee-dominated.  Expect KILL; run for the record.
+signal: >-
+  Monthly rebalance at month-end D.  Legs: 2y and 10y aging synthetic zeros
+  (same construction as F151_5_11).  Dollar-duration-matched notional
+  (preregistered zero-coupon durations D2 = 2.0, D10 = 10.0): steepener
+  w_front = +G*D10/(D2+D10) = +1.667, w_back = -G*D2/(D2+D10) = -0.333
+  (gross G = 2, like the other DN cells); flattener mirrored.  Signal
+  s = y10 - y2 (2s10s at D): trend cell goes steepener iff s rose over the
+  trailing window, mean-reversion cell the opposite; uncond cell always
+  steepener.  Decision at D uses only observations <= D.
+cells:
+  cs_trend21: "2s10s, steepener iff 2s10s rose over trailing 21 obs, monthly"
+  cs_trend63: "2s10s, steepener iff 2s10s rose over trailing 63 obs, monthly"
+  cs_meanrev21: "2s10s, flattener iff 2s10s rose over trailing 21 obs (mean-reversion), monthly"
+  cs_steep_uncond: "unconditional steepener, monthly"
+total_cells: 4 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes (36 monthly reb dates; always in)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars/obs only as trailing lookback)"
+  data_end: "2017-12-31 tune cap (fold-copy price files and FRED pulls both capped there; no row past the cap is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Cap enforced at the loader: no bar/observation past
+    the cap date is loaded at all (ETF files) or landed on disk (FRED pull
+    window coed=2017-12-31, scripts/fred_pull.py).
+data:
+  yields: >-
+    FRED CMT daily 2013-01-01..2017-12-31 (raw/fred/DGS*.json, window
+    capped at the pull): DGS1MO DGS3MO DGS6MO DGS1 DGS2 DGS3 DGS5 DGS7 DGS10
+    DGS20 DGS30.
+universe: >-
+  Fixed 2y/10y legs; synthetic instruments, no membership.
+costs: &costs >-
+  Synthetic-zero costs (no volume tape for synthetic instruments, so no ADV
+  spread bucket): per side = 25 bps flat (15 bps fee + 10 bps slippage; the
+  desk's 20 bps/side floor), charged on |dW| at rebalance.  Short borrow
+  100 bps/yr on short notional.  Decision at close t-1 earns day-t return of
+  the synthetic aging zero-coupon buckets; weights held fixed between
+  rebalances.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights FOR SIGNAL-VARYING CELLS.  Constant-weight cells (target
+  weights fixed by construction, no signal input) are exempt from the mutant
+  requirement - there is nothing to leak - but replay still enforced.
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max episode
+  share of gross <= 0.25 (monthly families: episode = one rebalance; quarterly:
+  one quarterly rebalance).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">- 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, borrow drag/yr, avg gross"
+  - "benchmarks reported ungated:   constant-maturity 10y zero-coupon buy-hold (same aging convention, no
+  costs) and equal-weight 8-bucket daily return - report-only"
+  - "era split by calendar year (G2); pool/leg sizes; duration-estimate summaries where applicable"
+  - "honest caveats: whole window is POST-publication for every cited anomaly (decay is IN the test);
+     maturity-segment ETFs are proxies for individual bonds (segment widths, convexity and roll
+     captured only through the fund tapes); the book contains no backtests to compare against"
+  - "meta report-only: 2s10s level/trajectory; signal flip counts per cell"
+

@@ -1,0 +1,99 @@
+# PRE-REGISTRATION - F151_5_10_value (Soper 151 Trading Strategies Ch5 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_*, F151_3_*, F151_4_* all closed
+# 2026-10-28).  Book section: 5.10 Value factor.  The book has NO backtests - no
+# performance claims are attributed to it anywhere below.
+# Paper / Yahoo + free FRED public only; no spend; no Bloomberg/TRACE/paid tape.
+hypothesis: F151_5_10_value
+family: F151_5_10_value
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 5.10: bond value vs a fitted credit spread - cross-
+  sectional regression S_i = sum_r beta_r I_ir + gamma*T_i + eps_i (Eq 410)
+  over rating dummies and maturities; value V_i = ln(S_i/S_i*) with S_i* the
+  fit; top decile by V_i long.
+prior: >-
+  BLOCKED-SCALE DATA WALL, DOCUMENTED PROXY RUN: the literal Eq 410 needs
+  per-bond credit spreads and ratings (TRACE/ICE index tapes - paid; the free
+  FRED ICE BofA spread series serve only 2023-10-30+ through fredgraph.csv,
+  i.e. NOT the 2015-2017 window).  What IS free for the window: Moody's
+  seasoned Aaa (DAAA) and Baa (DBAA) daily yields.  The preregistered proxy
+  is therefore a TWO-bucket cross-section - degenerate vs the book's 21
+  ratings, run for the record with that caveat front and center.  Expect the
+  Aaa/Baa spread ratio to be slow-moving; the value signal is mostly flat
+  and the DN cell is a slow credit bet.
+signal: >-
+  Monthly rebalance at month-end D.  Spread_i = Y_i(D) - DGS20(D) for
+  i in {Aaa, Baa} (Moody's seasoned yields minus the 20y CMT).
+  S_i* = median of Spread_i over the trailing 252 observations ending at D
+  (>= 200 obs else flat episode).  V_i = ln(S_i/S_i*); cheap = high V.
+  Legs are synthetic par bonds at fixed preregistered duration 10y:
+  daily return r_i(t) = -10 * delta Y_i(t) + Y_i(t)/252 (price effect plus
+  coupon accrual at the current yield - documented approximation).
+cells:
+  value_dn_m: "long cheap bucket 0.5 / short rich bucket -0.5, monthly"
+  value_long_cheap_m: "long-only the cheap bucket (higher V), gross 1, monthly"
+  value_dn_q: "long cheap / short rich, quarterly"
+total_cells: 3 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded rebalance episodes (monthly cells; quarterly cell floor 8)"
+
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars/obs only as trailing lookback)"
+  data_end: "2017-12-31 tune cap (fold-copy price files and FRED pulls both capped there; no row past the cap is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Cap enforced at the loader: no bar/observation past
+    the cap date is loaded at all (ETF files) or landed on disk (FRED pull
+    window coed=2017-12-31, scripts/fred_pull.py).
+data:
+  yields: >-
+    FRED raw/fred/DAAA.json, DBAA.json, DGS20.json (2013-01-01..
+    2017-12-31, window capped at the pull).  No ETF legs in this family -
+    the synthetic par bonds ARE the instruments.
+universe: >-
+  N = 2 rating buckets (Moody's Aaa, Baa) - the entire free daily credit-
+  yield cross-section for the tune window.  Documented degeneracy: no
+  maturity term, no 21-rating dummies; standing data wall for the literal
+  strategy is recorded in the family evidence dir.
+costs: &costs >-
+  Synthetic-zero costs (no volume tape for synthetic instruments, so no ADV
+  spread bucket): per side = 25 bps flat (15 bps fee + 10 bps slippage; the
+  desk's 20 bps/side floor), charged on |dW| at rebalance.  Short borrow
+  100 bps/yr on short notional.  Decision at close t-1 earns day-t return of
+  the synthetic aging zero-coupon buckets; weights held fixed between
+  rebalances.
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights FOR SIGNAL-VARYING CELLS.  Constant-weight cells (target
+  weights fixed by construction, no signal input) are exempt from the mutant
+  requirement - there is nothing to leak - but replay still enforced.
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max episode
+  share of gross <= 0.25 (monthly families: episode = one rebalance; quarterly:
+  one quarterly rebalance).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (above).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">- 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr, borrow drag/yr, avg gross"
+  - "benchmarks reported ungated:   buy-hold Aaa and Baa synthetic par bonds (same return convention, no costs)
+  and the DGS20 constant-maturity zero - report-only"
+  - "era split by calendar year (G2); pool/leg sizes; duration-estimate summaries where applicable"
+  - "honest caveats: whole window is POST-publication for every cited anomaly (decay is IN the test);
+     maturity-segment ETFs are proxies for individual bonds (segment widths, convexity and roll
+     captured only through the fund tapes); the book contains no backtests to compare against"
+  - "meta report-only: spread levels and z-score trajectories for both buckets; the standing
+     BLOCKED note for the literal 21-rating cross-sectional regression (per-bond spreads/ratings
+     not free) is written to the evidence dir alongside tune_cells.json"
+
