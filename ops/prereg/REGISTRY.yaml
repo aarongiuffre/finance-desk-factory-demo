@@ -160,3 +160,51 @@ families:
                                # Evidence logs/edge/W2a_calendar/.
     kind: hypothesis
     hypotheses: [W2a_calendar]
+  W2b_tsmom:                   # WAVE 2b: book 4.1.1/4.1.2/4.6 momentum rotation, dual
+    retired: true              # momentum, multi-asset trend on the 10-coin Binance.US universe,
+                               # monthly. KILLED at tune 2026-10-28: 0/20 - G2 year concentration
+                               # everywhere (best 4.6 cell Sharpe 1.64 with 65% of pnl in 2021);
+                               # rotation/dual cells die on G2 episode share + G4 count. Evidence
+                               # logs/edge/W2b_tsmom/.
+    kind: hypothesis
+    hypotheses: [W2b_tsmom]
+  W2b_mr_residual:             # WAVE 2b: book 3.9.1/3.10 weekly cluster MR, 3.7 residual momentum,
+    retired: true              # 3.6 multifactor blend. KILLED at tune 2026-10-28: 0/9 - weekly MR
+                               # fee-dead (Sharpe -0.31..+0.03), res_mom best 0.856 but one episode
+                               # = 68% of gross / 58 trades, multifactor G2+G5. Evidence
+                               # logs/edge/W2b_mr_residual/.
+    kind: hypothesis
+    hypotheses: [W2b_mr_residual]
+  W2b_mr_technical:            # WAVE 2b: book 3.14 pivot points, 3.15 Donchian (meanrev + breakout)
+    retired: true              # on BTC/ETH daily. KILLED at tune 2026-10-28: 0/14 - pivot fee-dead;
+                               # donchian ETH T=20 breakout Sharpe 1.19 misses G4 (54<60) and G2
+                               # (0.26 share); meanrev mirrors negative. Evidence
+                               # logs/edge/W2b_mr_technical/.
+    kind: hypothesis
+    hypotheses: [W2b_mr_technical]
+  W2b_xs_activity:             # WAVE 2b: book 10.3/10.3.1 weekly contrarian with volume filter
+    retired: true              # (OI filter not buildable - no OI tape). KILLED at tune 2026-10-28:
+                               # 0/4, negative expectancy after fees on every cell; the volume
+                               # filter makes it worse (-1.03). Evidence logs/edge/W2b_xs_activity/.
+    kind: hypothesis
+    hypotheses: [W2b_xs_activity]
+  W2b_vol_target:              # WAVE 2b: book 6.5 vol targeting w = sigma*/sigma with kappa
+    retired: true              # threshold, BTC/ETH, cash leg earning 0 (T-bill coupon NOT modeled).
+                               # KILLED at tune 2026-10-28: 0/16 - BTC cells Sharpe 0.68-0.79 (G5);
+                               # ETH cells reach 0.81-0.87 but year share 0.54-0.61 (G2). Evidence
+                               # logs/edge/W2b_vol_target/.
+    kind: hypothesis
+    hypotheses: [W2b_vol_target]
+  W2b_skew:                    # WAVE 2b: book 9.5 skewness premium, long bottom / short top quintile
+    retired: true              # of 10 coins, monthly. KILLED at tune 2026-10-28: 0/4 - the un-damped
+                               # T=252 cell is WIPED OUT (CAGR -100%): shorting crypto lottery coins
+                               # is shorting the winners. Evidence logs/edge/W2b_skew/.
+    kind: hypothesis
+    hypotheses: [W2b_skew]
+  W2b_fomc:                    # WAVE 2b: book 19.5 long BTC/ETH on FOMC statement days (calendar from
+    retired: true              # federalreserve.gov statement URLs, 84 days 2017-2026). KILLED at tune
+                               # 2026-10-28: 0/6 - best (BTC ad_prev, the Lucca-Moench window) Sharpe
+                               # 0.778 < 0.8 and 68% of pnl in 2020 (March emergency FOMCs). Evidence
+                               # logs/edge/W2b_fomc/.
+    kind: hypothesis
+    hypotheses: [W2b_fomc]

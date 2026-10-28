@@ -261,8 +261,8 @@ def mr_multifactor(C, T, peek=False):
     if peek:
         m, v = m.shift(-1), v.shift(-1)
     n = m.notna().sum(axis=1).clip(lower=1)
-    r1 = m.rank(axis=1, ascending=False) - (n + 1) / 2.0      # high momentum good
-    r2 = v.rank(axis=1, ascending=True) - (n + 1) / 2.0       # low vol good
+    r1 = m.rank(axis=1, ascending=False).sub((n + 1) / 2.0, axis=0)   # high mom good
+    r2 = v.rank(axis=1, ascending=True).sub((n + 1) / 2.0, axis=0)    # low vol good
     s = (r1 + r2) / 2.0
     C_d = C.reindex(dec)
     Wd = pd.DataFrame(np.nan, index=dec, columns=C.columns)

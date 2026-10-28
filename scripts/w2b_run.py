@@ -262,9 +262,16 @@ def run_tune(family, data, mode):
         stress = stress_cell(W_t, C_t, fee)
         gg["G6_stress"] = stress["cagr_x2"] > 0
         cell = dict(params=prm, fee_bps=fee, tune_bars=split_i,
+                    tune_start=str(W_t.index[0].date()), tune_end=str(W_t.index[-1].date()),
+                    holdout_start=str(W.index[v0 + split_i].date()) if v0 + split_i < len(W) else None,
                     eval_metrics=ev, gates=gg, stress=stress, meta=meta)
         if family == "W2b_vol_target":
-            cell["n_rebalance_actions"] = L.rebalance_actions(W_t)
+            n_rebal = L.rebalance_actions(W_t)
+            cell["n_rebalance_actions"] = n_rebal
+            cell["gates_episode_G4"] = gg["G4_min_trades"]
+            # prereg: the position is continuous, so G4 = executed rebalance
+            # actions >= 60 (episode count reported alongside)
+            gg["G4_min_trades"] = n_rebal >= 60
         if family == "W2b_fomc":
             gg60 = gates(ev, min_trades=60)
             cell["gates_default60_G4"] = gg60["G4_min_trades"]
