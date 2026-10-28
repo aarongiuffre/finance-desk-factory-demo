@@ -99,7 +99,7 @@ def dn_weights(signals, n_leg_frac):
 def _elig_bars(panel, elig, min_bars=0):
     if not min_bars:
         return elig
-    bars = panel["a"].notna().cumsum()
+    bars = panel["a"].notna().cumsum().reindex(columns=elig.columns).fillna(0)
     return elig & (bars >= min_bars)
 
 
@@ -112,15 +112,11 @@ def build_momentum(panel, cal, elig, crit="rcum", leg_frac=0.1, hold_months=1):
     if hold_months > 1:
         reb_dates = reb_dates[::hold_months]
     wdates, pool_sizes = {}, []
-    mi = {str(pd.Timestamp(d).date()): i for i, d in enumerate(M.index)}
     for D in reb_dates:
-        e = elig.loc[D]
+        e = elig.loc[D].reindex(panel["tickers"]).fillna(False)
         if e.sum() < 10:
             continue
-        key = str(pd.Timestamp(D).date())
-        if key not in mi:
-            continue
-        m = mi[key]
+        m = M.index.searchsorted(pd.Timestamp(D))
         if m < 13:
             continue
         form = M.iloc[m - 12: m - 1]          # months m-12..m-2 (skip month m)
@@ -134,7 +130,7 @@ def build_momentum(panel, cal, elig, crit="rcum", leg_frac=0.1, hold_months=1):
             sig = form.loc[:, e2].mean() / form.loc[:, e2].std(ddof=1)
         w, n_leg = dn_weights(sig, leg_frac)
         if w:
-            wdates[key] = w
+            wdates[str(pd.Timestamp(D).date())] = w
             pool_sizes.append(int(e2.sum()))
     W = pd.DataFrame(0.0, index=cal, columns=panel["tickers"])
     apply_rebalance(W, cal, reb_dates, wdates)
@@ -170,18 +166,16 @@ def build_resmom(panel, cal, elig, reg_window=36, leg_frac=0.1):
     reb_dates = [d for d in month_ends(cal)
                  if pd.Timestamp(TUNE_LO_G) <= pd.Timestamp(d) <= pd.Timestamp(TUNE_HI_G)]
     wdates, pool_sizes = {}, []
-    mi = {str(pd.Timestamp(d).date()): i for i, d in enumerate(M.index)}
     for D in reb_dates:
-        e = elig.loc[D]
-        key = str(pd.Timestamp(D).date())
-        if key not in mi:
+        e = elig.loc[D].reindex(panel["tickers"]).fillna(False)
+        m = M.index.searchsorted(pd.Timestamp(D))
+        if m < reg_window:
             continue
-        m = mi[key]
-        if m < reg_window + 12:
-            continue
-        # regression window: months m-reg_window .. m-1
-        Y = (M.iloc[m - reg_window: m] - rf.iloc[m - reg_window: m]).values   # (W, N)
-        X = f3.iloc[m - reg_window: m].values                                  # (W, 3)
+        # regression window: months m-reg_window .. m-1 (the 12-1 formation
+        # months m-12..m-2 are INSIDE it, so no extra +12 guard)
+        w0 = m - reg_window
+        Y = (M.iloc[w0: m].values - rf.values[w0: m][:, None])                # (W, N)
+        X = f3.values[w0: m]                                                   # (W, 3)
         ok_names = e.values & ~np.isnan(Y).any(axis=0)
         if ok_names.sum() < 10:
             continue
@@ -197,7 +191,7 @@ def build_resmom(panel, cal, elig, reg_window=36, leg_frac=0.1):
         sig_s = pd.Series(sig, index=M.columns[ok_names])
         w, n_leg = dn_weights(sig_s, leg_frac)
         if w:
-            wdates[key] = w
+            wdates[str(pd.Timestamp(D).date())] = w
             pool_sizes.append(int(ok_names.sum()))
     W = pd.DataFrame(0.0, index=cal, columns=panel["tickers"])
     apply_rebalance(W, cal, reb_dates, wdates)
@@ -215,11 +209,11 @@ def ff_monthly(panel):
     rows = []
     for l in lines[start + 1:]:
         parts = [p.strip() for p in l.split(",")]
-        if len(parts) >= 6 and parts[0].isdigit():
-            rows.append(parts[:6])
+        if len(parts) >= 7 and parts[0].isdigit():
+            rows.append(parts[:7])
         else:
             break
-    df = pd.DataFrame(rows, columns=["date", "MKT", "SMB", "HML", "RMW", "CMA"])
+    df = pd.DataFrame(rows, columns=["date", "MKT", "SMB", "HML", "RMW", "CMA", "RF"])
     df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
     df = df.set_index("date").astype(float) / 100.0
     m = df[["MKT", "SMB", "HML"]].resample("ME").apply(lambda x: (1 + x).prod() - 1)
@@ -305,7 +299,9 @@ def build_cluster(panel, cal, elig, theta=0.6, f_days=5, corr_win=126):
                  if pd.Timestamp(TUNE_LO_G) <= pd.Timestamp(d) <= pd.Timestamp(TUNE_HI_G)]
     all_reb = list(month_ends(cal))
     cum = panel["a"] / panel["a"].shift(f_days) - 1.0
+    cum_v = cum.values
     W = pd.DataFrame(0.0, index=cal, columns=panel["tickers"])
+    W_v = W.values.copy()
     cluster_sizes = []
     for k, D in enumerate(reb_dates):
         e = elig.loc[D]
@@ -329,25 +325,33 @@ def build_cluster(panel, cal, elig, theta=0.6, f_days=5, corr_win=126):
             clusters.append(cl)
         cluster_sizes.append(len(clusters))
         nxt = all_reb[all_reb.index(D) + 1] if k + 1 < len(reb_dates) else cal[-1]
-        span = cal[(cal > D) & (cal <= pd.Timestamp(nxt))]
-        cl_of = {t: i for i, cl in enumerate(clusters) for t in cl}
-        cl_arr = np.array([cl_of.get(t, -1) for t in panel["tickers"]])
-        for t in span:
-            i = cal.get_loc(t)
+        span_idx = np.where((cal > D) & (cal <= pd.Timestamp(nxt)))[0]
+        tix = list(panel["tickers"])
+        pos = {t: j for j, t in enumerate(tix)}
+        cl_arr = np.full(len(tix), -1, dtype=int)
+        for ci, cl in enumerate(clusters):
+            for tkr in cl:
+                cl_arr[pos[tkr]] = ci
+        n_cl = len(clusters)
+        for i in span_idx:
             dec = cal[i - 1]
-            row = cum.loc[dec]
-            valid = row.notna() & (cl_arr >= 0) & elig.loc[dec].values
+            vals = cum_v[i - 1]
+            e_dec = elig.loc[dec].reindex(tix).fillna(False).values
+            valid = ~np.isnan(vals) & (cl_arr >= 0) & e_dec
             if valid.sum() < 10:
                 continue
-            r_tilde = pd.Series(np.nan, index=panel["tickers"])
-            r_tilde[valid] = row[valid]
-            # demean within cluster
-            for cl in set(cl_arr[valid]):
-                mem = valid & (cl_arr == cl)
-                r_tilde[mem] -= r_tilde[mem].mean()
-            mag = r_tilde.abs().sum()
+            cid = cl_arr[valid]
+            v = vals[valid]
+            cnt = np.bincount(cid, minlength=n_cl).astype(float)
+            ssum = np.bincount(cid, weights=v, minlength=n_cl)
+            means = np.where(cnt > 0, ssum / np.maximum(cnt, 1), 0.0)
+            r_tilde = v - means[cid]
+            mag = np.abs(r_tilde).sum()
             if mag > 0:
-                W.loc[t] = (-r_tilde / mag).fillna(0.0)
+                row_w = np.zeros(len(tix))
+                row_w[valid] = -r_tilde / mag
+                W_v[i] = row_w
+    W = pd.DataFrame(W_v, index=cal, columns=panel["tickers"])
     return W, {"reb_dates": [str(pd.Timestamp(d).date()) for d in reb_dates],
                "n_episodes": len(reb_dates), "cluster_sizes": cluster_sizes}
 
@@ -384,7 +388,7 @@ def build_sector(panel, cal, pool, f_months=12, ma_filter=False, dual=False,
     M = monthly_returns(panel)[pool]
     reb_dates = [d for d in month_ends(cal)
                  if pd.Timestamp(TUNE_LO_G) <= pd.Timestamp(d) <= pd.Timestamp(TUNE_HI_G)]
-    wdates = []
+    wdates, pool_sizes = {}, []
     W = pd.DataFrame(0.0, index=cal, columns=pool)
     a = panel["a"][pool]
     spy = panel["a"]["SPY"]
@@ -567,10 +571,9 @@ def build_alpha(panel, cal, elig, n, top_frac=0.3):
     W = pd.DataFrame(0.0, index=cal, columns=panel["tickers"])
     a_lag = alpha.shift(1)                        # decision at close t-1
     e_lag = elig.shift(1).fillna(False).astype(bool)
+    a_masked = a_lag.where(e_lag)                 # ghosts (no bars yet) never enter ranks
     for t in cal:
-        row = a_lag.loc[t]
-        e = e_lag.loc[t]
-        s = row[e & row.notna()].dropna()
+        s = a_masked.loc[t].dropna()
         if len(s) < 10:
             continue
         ranks = s.rank(pct=True)

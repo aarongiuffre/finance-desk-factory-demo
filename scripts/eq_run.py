@@ -133,7 +133,7 @@ def episode_share_max(bt, meta, family_cfg, panel):
 def n_episodes_for(family_cfg, meta, bt, cell, spec):
     kind = family_cfg["kind"]
     if kind == "monthly":
-        return len(meta.get("reb_dates") or [])
+        return int(meta.get("n_episodes") or 0)
     if kind == "pairs":
         return int(meta.get("n_episodes") or 0)
     if kind == "mixed":
@@ -145,19 +145,28 @@ def n_episodes_for(family_cfg, meta, bt, cell, spec):
 def run_family(family, only_cell=None, use_cache=True):
     cfg = FAMILIES[family]
     dirs = cfg["dirs"]
-    extra = tuple(cfg.get("pool") or ())
+    extra = tuple(sorted(set(cfg.get("pool") or ()) | {"SPY"}))
     panel = L.build_panel(dirs, cap=L.TUNE_HI, extra_tickers=extra, cache=use_cache)
     cal = panel["cal"]
+
+    # pools: drop tickers with no bars in the tune panel (e.g. XLC, which starts
+    # 2018-06 and therefore has NO tune-window data at all - documented in prereg)
+    pool_missing, avail = [], []
+    if cfg.get("pool"):
+        avail = [t for t in cfg["pool"] if t in panel["a"].columns]
+        pool_missing = [t for t in cfg["pool"] if t not in avail]
+
     elig = None
     if cfg["dirs"] == L.DIRS_STOCK:
         elig = S.eligibility(panel, cal, min_bars=cfg.get("min_bars", 0))
     elif cfg.get("pool"):
-        elig = pd.DataFrame(True, index=cal, columns=cfg["pool"])
-        elig = elig & panel["a"][cfg["pool"]].notna() & (panel["c"][cfg["pool"]] > 0)
+        elig = pd.DataFrame(True, index=cal, columns=avail)
+        elig = elig & panel["a"][avail].notna() & (panel["c"][avail] > 0)
 
     out = {"family": family, "tune_window": [L.TUNE_LO, L.TUNE_HI],
            "dev_holdout": [L.TUNE_HI, L.DEV_HI], "holdout_read": False,
-           "cap": L.TUNE_HI, "dirs": list(dirs), "cells": []}
+           "cap": L.TUNE_HI, "dirs": list(dirs), "cells": [],
+           "pool_missing_in_tune": pool_missing}
 
     # loader-level replay panel (one shared cut; exercises the file cap itself)
     panel_cut = L.build_panel(dirs, cap=LOADER_CUT, extra_tickers=extra, cache=use_cache)
@@ -166,6 +175,11 @@ def run_family(family, only_cell=None, use_cache=True):
         if only_cell and cell != only_cell:
             continue
         p = dict(params)
+        if cfg.get("pool"):
+            if "pool" in p:
+                p["pool"] = avail
+            if "rank_pool" in p:
+                p["rank_pool"] = [t for t in p["rank_pool"] if t in avail]
         if "ELIG" in str(p.get("elig", "")):
             p["elig"] = elig
         # builders that need elig with family min_bars
@@ -189,8 +203,10 @@ def run_family(family, only_cell=None, use_cache=True):
         # G1 replay: 4 row-slice cuts + 1 loader-level cut
         replay_ok, replay_detail = True, {}
         for cut in REPLAY_CUTS:
-            ps = {k: (v.loc[:cut] if isinstance(v, pd.DataFrame) else v)
-                  for k, v in panel.items() if isinstance(v, pd.DataFrame)}
+            ps = dict(panel)
+            for k, v in panel.items():
+                if isinstance(v, pd.DataFrame):
+                    ps[k] = v.loc[:cut].reindex(cal)
             ps["cal"] = panel["cal"]
             W2, _ = builder(ps, cal, **p)
             a = W.loc[:cut]
@@ -200,7 +216,7 @@ def run_family(family, only_cell=None, use_cache=True):
             replay_ok &= same
         W3, _ = builder({**panel_cut, "cal": panel_cut["cal"]}, panel_cut["cal"], **p)
         a = W.loc[:LOADER_CUT]
-        b = W3.reindex(cal).loc[:LOADER_CUT].fillna(0.0)
+        b = W3.reindex(index=cal, columns=W.columns).fillna(0.0).loc[:LOADER_CUT]
         loader_same = np.allclose(a.values, b.values, atol=1e-12, equal_nan=True)
         replay_detail["loader_cut_" + LOADER_CUT] = bool(loader_same)
         replay_ok &= loader_same

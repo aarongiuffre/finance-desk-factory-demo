@@ -239,3 +239,74 @@ families:
                                # + logs/edge/W2d_skew/BLOCKED.md.
     kind: hypothesis
     hypotheses: [W2d_skew]
+  Eq_price_momentum:           # Soper SECONDARY (equity, Yahoo desk): book 3.1 price momentum
+    retired: true              # 12-1 decile/quintile DN on PIT S&P (fold copy, 2015-2019 dev
+                               # window, tune 2015-01..2017-12).  KILLED at tune 2026-10-28:
+                               # 0/4 - best cell rcum_decile_hold3 net Sharpe 0.42 (11 episodes,
+                               # below its 24 floor); canonical decile net Sharpe -0.24, gross
+                               # 0.02.  Whole window is post-publication.  Prereg committed
+                               # 36a7c11 BEFORE any run.  Evidence logs/edge/Eq_price_momentum/.
+    kind: hypothesis
+    hypotheses: [Eq_price_momentum]
+  Eq_low_vol:                  # Soper SECONDARY: book 3.4 low-volatility anomaly, DN deciles
+    retired: true              # KILLED at tune 2026-10-28: 0/3 - best net Sharpe 0.08
+                               # (vol252 decile), gross 0.22; G5 bar is 0.8.  Evidence
+                               # logs/edge/Eq_low_vol/.
+    kind: hypothesis
+    hypotheses: [Eq_low_vol]
+  Eq_residual_momentum:        # Soper SECONDARY: book 3.7 residual momentum (Blitz et al)
+    retired: true              # FF3-residual 12-1, DN deciles.  KILLED at tune 2026-10-28:
+                               # 0/3 - reg36 (book-canonical) only ~11 episodes on the
+                               # 2014-04-start tape (G4 floor 6, preregistered); net Sharpe
+                               # 0.06.  Evidence logs/edge/Eq_residual_momentum/.
+    kind: hypothesis
+    hypotheses: [Eq_residual_momentum]
+  Eq_pairs:                    # Soper SECONDARY: book 3.8 pairs trading, corr-selected pairs
+    retired: true              # top-50 corr pairs, z60 entry/exit.  KILLED at tune
+                               # 2026-10-28: 0/3 - best net Sharpe -3.28, 294-668 pair trades;
+                               # fee-hostile at desk floor costs.  Evidence
+                               # logs/edge/Eq_pairs/.
+    kind: hypothesis
+    hypotheses: [Eq_pairs]
+  Eq_meanrev_cluster:          # Soper SECONDARY: book 3.9 mean-reversion single cluster
+    retired: true              # corr-threshold clusters, Di = -gamma*Rti DN daily.  KILLED
+                               # at tune 2026-10-28: 0/4 - best net Sharpe -5.86.  Evidence
+                               # logs/edge/Eq_meanrev_cluster/.
+    kind: hypothesis
+    hypotheses: [Eq_meanrev_cluster]
+  Eq_two_ma:                   # Soper SECONDARY: book 3.12 two moving averages
+    retired: true              # SPY MA10/30, 20/50, 50/200 + cross-sectional variant.
+                               # KILLED at tune 2026-10-28: 0/4 - best net Sharpe 0.25
+                               # (spy_20_50), 5-34 flips vs the preregistered 8-trade floor
+                               # (50/200 made only 5).  Evidence logs/edge/Eq_two_ma/.
+    kind: hypothesis
+    hypotheses: [Eq_two_ma]
+  Eq_sector_mom:               # Soper SECONDARY: book 4.1 sector rotation on sector ETFs
+    retired: true              # (+4.1.1 MA filter, 4.1.2 dual momentum).  11-ETF pool, no
+                               # deciles (top-2/bottom-2 documented).  XLC absent in tune
+                               # (starts 2018-06).  KILLED at tune 2026-10-28: 0/4 - best
+                               # net Sharpe 0.25 (f12_dual_tlt).  Evidence
+                               # logs/edge/Eq_sector_mom/.
+    kind: hypothesis
+    hypotheses: [Eq_sector_mom]
+  Eq_ibs_meanrev:              # Soper SECONDARY: book 4.4 IBS mean reversion on ETFs
+    retired: true              # 16-ETF pool (no deciles: top/bottom-k documented).  KILLED
+                               # at tune 2026-10-28: 0/3 - net Sharpe -17.9 to -19.8; daily
+                               # full-leg flips at 30bps/side = fee death, as the prereg
+                               # flagged ("a fee test as much as an edge test").  Evidence
+                               # logs/edge/Eq_ibs_meanrev/.
+    kind: hypothesis
+    hypotheses: [Eq_ibs_meanrev]
+  Eq_alpha101_batch:           # Soper SECONDARY: Alpha#1-#20 (Kakushadze 2015) verbatim,
+    retired: true              # daily top-30/bottom-30 DN ranks on PIT S&P (vwap=(O+H+L+C)/4
+                               # documented).  KILLED at tune 2026-10-28: 0/20 - 19/20 fail
+                               # G5+G6 (net Sharpe -8.6 to -35.9; alpha7 is degenerate under
+                               # the literal adv20<volume units and dies on G4 with 2
+                               # episodes); gross Sharpe up to 0.69 but 165x/yr turnover ->
+                               # ~101%/yr cost drag.  Whole window post-publication.  Ghost
+                               # returns (pre-listing 0-fills) polluted ranks in the first
+                               # pass; caught by the G1 loader-level replay (alpha14), fixed
+                               # in the panel (returns NaN outside a name's tape) and the
+                               # family re-run clean.  Evidence logs/edge/Eq_alpha101_batch/.
+    kind: hypothesis
+    hypotheses: [Eq_alpha101_batch]

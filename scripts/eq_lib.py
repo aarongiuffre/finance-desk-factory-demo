@@ -104,8 +104,8 @@ def load_ticker_bars(t, dirs, cap):
     return None
 
 
-def panel_cache_path(cap, dirs):
-    key = hashlib.sha256(("|".join(dirs) + "|" + cap).encode()).hexdigest()[:16]
+def panel_cache_path(cap, dirs, extra=()):
+    key = hashlib.sha256(("v2|" + "|".join(dirs) + "|" + cap + "|" + ",".join(sorted(extra))).encode()).hexdigest()[:16]
     return os.path.join(ROOT, "scratch", f"eq_panel_{key}.pkl")
 
 
@@ -120,7 +120,7 @@ def build_panel(dirs, cap, cal_start="2013-06-01", extra_tickers=(), cache=True)
       last_bar     Series ticker -> last bar date
       n_files      loaded/dropped counts
     """
-    path = panel_cache_path(cap, dirs)
+    path = panel_cache_path(cap, dirs, extra_tickers)
     if cache and os.path.isfile(path):
         return pickle.load(open(path, "rb"))
 
@@ -131,7 +131,7 @@ def build_panel(dirs, cap, cal_start="2013-06-01", extra_tickers=(), cache=True)
         raise RuntimeError("SPY bars not found")
     cal = cal_src.index[cal_src.index >= pd.Timestamp(cal_start)]
 
-    cols = {k: [] for k in ("o", "h", "l", "c", "a", "v")}
+    cols = {k: {} for k in ("o", "h", "l", "c", "a", "v")}
     r_cols, adv_cols, last_bar, loaded, dropped = {}, {}, {}, 0, []
     for t in tickers:
         df = load_ticker_bars(t, dirs, cap)
@@ -141,7 +141,11 @@ def build_panel(dirs, cap, cal_start="2013-06-01", extra_tickers=(), cache=True)
         loaded += 1
         ret = df["a"].pct_change().clip(-0.98, 25.0)
         ret.iloc[0] = 0.0
-        r_cols[t] = ret.reindex(cal).fillna(0.0)
+        rr = ret.reindex(cal)
+        span = (cal >= df.index[0]) & (cal <= df.index[-1])
+        rr[~span] = np.nan                      # NaN before first / after last bar (ghost rows)
+        rr[span] = rr[span].fillna(0.0)         # 0 only on halt days between bars
+        r_cols[t] = rr
         dollar = (df["c"] * df["v"]).rolling(20, min_periods=10).mean()
         adv_cols[t] = dollar.reindex(cal).ffill()
         last_bar[t] = df.index[-1]
@@ -221,16 +225,15 @@ def backtest(W, panel, cost_mult=1.0, haircut=0.0, borrow_bps_ann=BORROW_BPS_ANN
     side = pd.DataFrame(side_vals, index=adv_dec.index, columns=adv_dec.columns)
     cost = (diff * side / 1e4).sum(axis=1) * cost_mult
 
-    gross = (Wd * r).sum(axis=1)
+    gross = (Wd * r.fillna(0.0)).sum(axis=1)
 
     if haircut > 0.0:
         r_eff = r.copy()
         for t, lb in delist_events:
             lb = pd.Timestamp(lb)
-            nxt = Wd.index[Wd.index > lb]
-            if len(nxt):
-                r_eff.loc[nxt[0], t] -= haircut
-        gross = (Wd * r_eff).sum(axis=1)
+            if lb in r_eff.index:
+                r_eff.loc[lb, t] -= haircut   # last held day: final price unrepresentative
+        gross = (Wd * r_eff.fillna(0.0)).sum(axis=1)
 
     short_notional = (-Wd.clip(upper=0.0)).sum(axis=1)
     borrow = short_notional * borrow_bps_ann / 252.0 / 1e4
