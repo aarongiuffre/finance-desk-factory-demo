@@ -1,0 +1,146 @@
+# PRE-REGISTRATION - H2 Lazy Prices: YoY 10-K/10-Q text similarity
+# (Cohen, Malloy & Nguyen 2020, JF).  Written 2026-10-28 (VP GO H2, 10:17 ET).
+# NOT RUN.  Before the first scored run it must be pushed (nightly sync) and its
+# commit verified on the real remote with `git ls-remote` (fold_gate).
+# This file authorizes DEV-fold work only (2015-2019).  Validation / holdout stay
+# locked behind fold_gate + a signed go file and are NEVER requested by H2 code.
+# H2 is a NEW family: it does not re-open H1_insider or H5_rf_change (both
+# retired).  Unlike H5 (Item 1A TF cosine only), this is the fuller published
+# construction: full document + Item 1A + Item 7, TF cosine AND Jaccard,
+# monthly quintiles, 3-month holds.
+hypothesis: H2_lazy_prices
+family: H2_lazy_prices
+kind: hypothesis
+gate_signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"   # Aaron's signing key (must equal REGISTRY gate.signer_fpr)
+literature: "Cohen, Malloy & Nguyen (2020, JF) Lazy Prices - firms whose YoY
+  filing text changes least (non-changers) earn more than changers over months"
+fold: dev
+window: {lo: "2015-01-01", hi: "2019-12-31"}     # dev period only; parsed corpus starts 2015,
+                                                 # so first YoY pairs (needing a prior filing) rank from ~2016
+
+data:
+  signals: universe/h2_lazy_signals.jsonl        # pair features (fold copy, cut at cutoff via the
+                                                 # sanctioned layer path; date key = filing_date)
+  prices: edge_harness PRICE_DIRS                # standard dev price tiers (PIT S&P + exits + watch names)
+  factors: raw/ff                                # Kenneth French FF5 + UMD
+  acceptance_times: >-
+    ACCEPTANCE-DATETIME from the EDGAR index-headers page
+    (raw/edgar/<ticker>/<form>/<date>-<accn>/<accn>-index-headers.html, ET) -
+    the desk's existing field; when that page is missing the row records
+    acceptance_src=filing_date and falls back to the filing_date (counts reported)
+  rule: >-
+    rows are read through fold_gate.iter_jsonl_in_window on filing_date (the
+    layer cut); the event filter additionally requires the ACCEPTANCE date
+    inside the window; no frame outside the dev window is loaded (fold_data
+    research root); a row accepted in-window but filed after 2019-12-31 is
+    conservatively dropped by the layer cut (count reported)
+
+signal:
+  pairs:
+    - "10-K family: consecutive 10-K/10-K/A filings by filing_date (10-K/A kept
+       in family; prev_form records what was used); a CIK change drops the pair"
+    - "10-Q family: prior 10-Q whose cover-text period END falls in the SAME
+       calendar month as the current period end AND 330 <= period-end gap <= 395
+       days (same fiscal quarter a year earlier; a skipped quarter pairs with the
+       next earlier matching quarter); a CIK change drops the pair"
+  text: >-
+    parsed chunks.jsonl, non-table chunks; full scope = primary document only;
+    tokens lowercase [a-z0-9]+ (same tokenizer family as TRI-2/H5)
+  scopes: "full document, Item 1A (^item 1a), Item 7/MD&A (^item 7 or
+    management's discussion - 10-Qs label MD&A 'Item 2')"
+  scalars: >-
+    TF cosine (primary) AND Jaccard (secondary), computed per scope; the RANKING
+    scalar is the FULL-DOCUMENT value for both variants
+  quality: full_quality == "ok" (both sides >= 200 full-doc tokens)
+  cross-section: >-
+    monthly; pool = each ticker's most recent eligible filing accepted in the
+    trailing 3 calendar months (inclusive of the rebalance month); months with
+    pool < 10 are skipped (counted); quintiles are rank-based within the pool,
+    Q5 = MOST similar (non-changers), Q1 = most changed
+  PIT: >-
+    a pool for month m can only contain filings accepted on or before the
+    month-end of m (guaranteed by the trailing-month construction)
+
+variants:                                         # the WHOLE budget - no other variant may be run
+  primary_full_cos_q5: "long Q5 (most similar), ranked by full-document TF cosine, hold 63 trading days"
+  secondary_full_jac_q5: "long Q5, ranked by full-document Jaccard, hold 63 trading days"
+  note: >-
+    Item 1A / Item 7 similarities are computed and REPORTED as construction
+    outputs (and for the Reg S-K risk check) but are never ranked into a run on
+    this prereg; a Q1 (changers) contrast is NOT run
+
+events:
+  rebalance: >-
+    month-end of each ranking month; one event per (ticker, month) in Q5;
+    overlapping holds across months are allowed (the paper's monthly portfolios);
+    equal weight per event
+  event_time: >-
+    entry = next regular-session OPEN after the month-end (same_day_ok false);
+    the ranking month is the ACCEPTANCE month (ET), not the filing_date
+  hold: 63 trading days (3 months, Lazy Prices accrual)
+
+universe: >-
+  tickers with prices in the standard dev price tiers (PIT S&P members incl.
+  exits and the desk's priced NASDAQ/watch names - matching H5's tradeable set);
+  price >= $5 (harness-enforced); ADV20 >= $1M at entry (pre-filter with the
+  harness entry helpers, dropped counts reported); EW benchmark = point-in-time
+  S&P membership (harness default) + SPY
+weighting: equal weight per event, long-only
+
+execution:
+  hold_trading_days: 63                           # 3 months
+  direction: long
+  same_day_ok: false
+  min_price: 5.0
+  costs:                                          # edge_plan.md section 6, direction-aware (harness)
+    fee_bps: 15
+    half_spread_bps: {large: 5, mid: 15, small: 40}
+    slip_bps: 10
+    large_adv: 50000000
+    mid_adv: 5000000
+    floor_roundtrip_bps: 40                       # small/mid-cap floor
+    borrow_bps_annual: 0                          # long-only
+  delisting: {perf_base: -0.30, other_base: 0.0}  # base -30%; adverse rerun -100% (harness ADVERSE[long])
+
+benchmarks: SPY total return (same fill convention) AND equal-weight PIT universe
+metrics: >-
+  CAGR, vol, Sharpe vs SPY, net excess, max DD, hit rate, turnover, cost drag,
+  FF5+UMD alpha with Newey-West t (lag 6), deflated Sharpe on the alpha series
+
+pass_bar:                                         # ALL must hold, per variant, on the dev fold
+  alpha_t_nw_ge: 3.0                              # FF5+UMD monthly alpha, Newey-West lag 6 (Harvey, Liu & Zhu 2016)
+  dsr_ge: 0.95                                    # deflated Sharpe on the factor-neutral alpha series
+  net_excess_vs_spy_gt: 0
+  net_excess_vs_ew_universe_gt: 0
+  delisting_cases: both -30% (base) and -100% (adverse) keep alpha t >= 3
+  cost_stress: 2x all cost components keeps alpha t >= 3
+  era_max_share_le: 0.40                          # no calendar year > 40% of cumulative alpha
+  min_events: 100
+  min_months: 24                                  # edge_plan section 6 (H2/H3); dev has ~48-60 ranked months
+  holm: adjusted across hypotheses tested (applies once more families run)
+
+decision:
+  pass: >-
+    dev evidence only - eligible to ASK for a validation read, which needs
+    Verifier sign-off, Aaron's steps (ops/edge_threat_model.md) and a frozen,
+    pushed prereg commit
+  fail: >-
+    any pass-bar miss on BOTH variants retires the H2_lazy_prices family
+    permanently (no re-test under a new name; H4 doctrine)
+
+reporting:
+  - headline: primary pass/fail with alpha_t, alpha_m, n_events, n_trades, months
+  - secondary_full_jac_q5 with the same stats
+  - "construction outputs (not gated): i1a/i7 scope correlations with the
+    full-doc scalar; full_new_frac / full_drop_frac distribution"
+  - "section-boundary permutation diagnostic (cheap): Item 1A/Item 7 similarity
+    recomputed with a +/-1 chunk boundary shift on a sample; rank correlation
+    with the unshifted values (section-regex noise check)"
+  - era split by calendar year (stability; era_max_share gate)
+  - acceptance_src counts (index-headers vs filing_date fallback)
+  - "honest caveats: the dev window is largely PRE-publication (JF 2020; working
+    paper ~2018) - publication decay would bite the LATER folds, not this one;
+    the Reg S-K Item 1A change (Nov 2020) is outside this dev window, so no
+    pre/post split applies here (report it if any post-2020 fold ever runs);
+    only ~4-5 annual cross-sections for 10-K pairs, so 10-Q pairs carry most
+    events; section-regex noise (see diagnostic)"

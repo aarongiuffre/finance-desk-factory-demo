@@ -47,3 +47,10 @@ families:
         counted validation read; no re-test under a new name unless Aaron
         explicitly re-opens the family. Off-box path is Ops-advanced docs only
         (ops/edge_threat_model.md), never a Finance Desk prompt.
+  H2_lazy_prices:
+    kind: hypothesis             # registered 2026-10-28 (VP GO H2, 10:17 ET); dev-only;
+                                 # prereg H2_lazy_prices.yaml - the fuller Lazy Prices
+                                 # construction (full doc + 1A + 7, cos+Jaccard, monthly
+                                 # quintiles, 63d hold); scored dev run needs a standing
+                                 # dev go naming the code freeze (none installed yet)
+    hypotheses: [H2_lazy_prices]

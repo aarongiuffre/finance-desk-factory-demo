@@ -70,7 +70,8 @@ FACT_DIRS = ("facts", "facts/dead", "facts/nasdaq", "facts/nasdaq_dead")
 # not PIT tables — NASDAQ membership is approximated from bars at read time)
 UNIVERSE_FILES = ("universe/nasdaq_watchlist.txt", "universe/nasdaq_dead_roster.json")
 JSONL_LAYERS = (("logs/confluence-history.jsonl", "date"), ("universe/lang_shift_signals.jsonl", "filing_date"),
-                ("universe/rf_change_signals.jsonl", "filing_date"))
+                ("universe/rf_change_signals.jsonl", "filing_date"),
+                ("universe/h2_lazy_signals.jsonl", "filing_date"))
 ZIP_LAYERS = (DERA_FSDS, DERA_INSIDER) = ("raw/dera_fsds", "raw/dera_insider")
 MEMBERSHIP = "universe/sp500_ticker_start_end.csv"
 
