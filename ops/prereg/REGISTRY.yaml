@@ -648,6 +648,84 @@ families:
                                # logs/edge/F151_7_3_1_vxx_futures_basket/BLOCKED.md.
     kind: hypothesis
     hypotheses: [F151_7_3_1_vxx_futures_basket]
+  F151_8_1_hp_fx:              # Soper FULL-151 Ch8: book 8.1 MA crossover on
+    retired: true              # the HP-filtered FX spot (Eqs 437-439; distinct
+                               # from H4_hp_filter BTC).  7 Yahoo majors
+                               # (USD-per-foreign), past-only trailing HP windows
+                               # (monthly lambda=14400 {3/12,6/24,12/36}; daily
+                               # lambda=6.3504e6 {20/60,50/200}).  KILLED at tune
+                               # 2026-10-28: 0/5 - no gross edge (net Sharpe
+                               # -0.36..+0.04 vs the 0.8 bar; best cell +0.044);
+                               # G2 fails all 5 on near-zero totals that flip
+                               # sign across years (year share 1.5-8.1); daily
+                               # cells pay 75-91 bp/yr at 1.2-1.5x/yr turnover.
+                               # Evidence logs/edge/F151_8_1_hp_fx/.
+    kind: hypothesis
+    hypotheses: [F151_8_1_hp_fx]
+  F151_8_2_carry:              # Soper FULL-151 Ch8: book 8.2 carry trade sign
+    retired: true              # rule (Eqs 440-441).  D_i = rf_i - rd_us (book's
+                               # own Eq 443 approximation; FRED OECD monthly 3M
+                               # interbank, DE = eurozone proxy; month M reads
+                               # D(M-1)).  KILLED at tune 2026-10-28: 0/3 -
+                               # carry-crash pattern in-window: the high-rate
+                               # legs bought (AUD +2.6/NZD +3.5% differentials)
+                               # depreciated while the shorted low-rate legs
+                               # (CHF/JPY/EUR) appreciated (2015 CHF floor break
+                               # inside the window); net Sharpe -0.58..-0.88,
+                               # costs 4-11 bp/yr only.  G2 (0.57-0.99 yr share)
+                               # + G3 + G5 fail all 3.  Evidence
+                               # logs/edge/F151_8_2_carry/.
+    kind: hypothesis
+    hypotheses: [F151_8_2_carry]
+  F151_8_2_1_hml_carry:        # Soper FULL-151 Ch8: book 8.2.1 high-minus-low
+    retired: true              # carry (rank-based DN, top-k/bottom-k by D_i).
+                               # KILLED at tune 2026-10-28: 0/3 - the ranking is
+                               # a static long-{AUD,NZD}/short-{EUR,CHF} bet
+                               # (membership changes a handful of times in 36
+                               # months) that lost on this tape; net Sharpe
+                               # -0.22/-0.54; G2b episode share 0.90-1.16 vs
+                               # 0.25 cap; G2/G3/G5 fail all 3.  Evidence
+                               # logs/edge/F151_8_2_1_hml_carry/.
+    kind: hypothesis
+    hypotheses: [F151_8_2_1_hml_carry]
+  F151_8_3_dollar_carry:       # Soper FULL-151 Ch8: book 8.3 dollar carry (Eq
+    retired: true              # 444: sign rule on D_bar, ALL majors same side).
+                               # KILLED at tune 2026-10-28: 0/3 - D_bar crosses
+                               # sign mid-window (+1.0%/yr 2015 to -0.5%/yr 2017
+                               # through the Fed hiking cycle), so the rule pays
+                               # 30 bps/side on 7 legs to flip one signed beta
+                               # that was wrong in both regimes; net Sharpe
+                               # -0.23..-0.99; the 25 bp conviction-floor cell
+                               # is WORSE (-0.99).  G2/G3/G5 fail all 3.
+                               # Evidence logs/edge/F151_8_3_dollar_carry/.
+    kind: hypothesis
+    hypotheses: [F151_8_3_dollar_carry]
+  F151_8_4_mom_carry:          # Soper FULL-151 Ch8: book 8.4 momentum & carry
+    retired: true              # combo (Eqs 445-452 min-variance w1/w2; legs =
+                               # preregistered hp_m_3_12 + hml_2v2_m used
+                               # verbatim).  KILLED at tune 2026-10-28: 0/3 -
+                               # nothing to combine: both legs ~zero gross
+                               # (daily leg Sharpe -0.055 / -0.008) and rho
+                               # -0.06/-0.02 (uncorrelated noise), so w1 wanders
+                               # 0.33-0.95 chasing noise and the combo inherits
+                               # the failure (net Sharpe -0.09..-0.18).  G2 + G5
+                               # fail all 3.  Build bug (mode="ew" ignored,
+                               # combo_ew silently ran mv12 weights) caught and
+                               # fixed before the final pass.  Evidence
+                               # logs/edge/F151_8_4_mom_carry/.
+    kind: hypothesis
+    hypotheses: [F151_8_4_mom_carry]
+  F151_8_5_triangular_arb:     # Soper FULL-151 Ch8: book 8.5 FX triangular
+    deferred: true             # arbitrage (Eq 453).  DEFER 2026-10-28 (standing,
+                               # per brief + inventory): needs tick-level
+                               # top-of-book FX bid/ask - no free historical
+                               # tick tape for the tune window (EBS/Refinitiv/
+                               # LMAX paid); the edge is ephemeral and absent
+                               # from daily bars by construction (same finding
+                               # as F151_3_19_mm HFT).  Nothing run.  Evidence
+                               # logs/edge/F151_8_5_triangular_arb/DEFER.md.
+    kind: hypothesis
+    hypotheses: [F151_8_5_triangular_arb]
 
 F151_7_6_variance_swaps:
   status: blocked
