@@ -1,0 +1,135 @@
+# PRE-REGISTRATION - H4_hp_filter (PRIMARY crypto slate, book section 8.1).
+# Written 2026-10-28.  NOT RUN.  New family: it does NOT re-open H4_inventory
+# (retired 2026-10-18) or any equity-primary name; same section number, different
+# hypothesis, per the 2026-10-28 PRIMARY-crypto directive.
+#
+# Crypto paper adaptation of Kakushadze & Serur "151 Trading Strategies" 8.1
+# (Moving averages with HP filter), applied to BTC daily instead of FX spot.
+# All bars come from public exchange APIs via ccxt (paper data only; no orders,
+# no credentials).  Binance.com is geo-blocked from this host, so BTC daily is
+# Coinbase Exchange spot (deepest BTC/USD history) and the 15m tape (H6) and the
+# 10-coin set (H7) are Binance US spot.
+#
+# This prereg authorizes TUNE-window work (model selection grid on the first 60%
+# of bars).  The scored DEV claim (holdout read + KEEP/KILL verdict) additionally
+# requires: (a) a committed code-freeze amendment, (b) a standing dev go signed by
+# Aaron (ssh-keygen -Y sign -n finance-go) at logs/approvals/go/H4_hp_filter.dev.json
+# naming this amendment's freeze_sha.  No validation/holdout through the equity
+# fold_gate is requested anywhere in H4 code.
+hypothesis: H4_hp_filter
+family: H4_hp_filter
+kind: hypothesis
+gate_signer_fpr: "SHA256:sQtZyzHHaokOUdfOZ65gzD0eGHaj+e2qIyyPl6JKBCY"   # Aaron's signing key (must equal REGISTRY gate.signer_fpr)
+literature: "Kakushadze & Serur 151 Trading Strategies section 8.1 (Moving
+  averages with HP filter), after Harris & Yilmaz (2009): filter the noisy
+  spot series to its low-frequency trend S*, then trade two moving averages
+  of S*.  Book has NO backtests; no performance is claimed from the section."
+prior: >-
+  SKEPTICAL.  Two-MA trend rules on BTC are widely published and likely
+  arbitraged; the HP pre-filter plausibly adds lag, not edge.  Expect the
+  grid to look best on 2015-2021 trend regimes and die on 2022+ chop.
+fold: dev
+window:
+  data_start: "2015-07-20"          # first complete Coinbase BTC/USD daily bar
+  data_end:   "2026-10-27"          # last complete bar at pull time
+  split_rule: >-
+    tune = the FIRST 60% of bars by count, holdout = the LAST 40%.  The exact
+    split date is computed by the runner and recorded in the evidence JSON
+    (h4_summary.json: split_date).  The holdout is never read by the tune grid;
+    holdout metrics are computed only inside the scored run.
+
+data:
+  prices: data/crypto/coinbase/BTCUSD-1d.csv   # ts_utc, open, high, low, close, volume
+  venue: coinbase (Coinbase Exchange spot, public ccxt OHLCV, no credentials)
+  bar: UTC daily bar, close = daily close; the forming bar is never used (puller drops it)
+  rule: >-
+    signal at day t reads ONLY bars with ts <= t (enforced structurally: the HP
+    window is a trailing slice ending at t, and tests replay a truncated tape)
+
+signal:
+  hp: >-
+    at each day t, Hodrick-Prescott trend S*(t) is the ENDPOINT of the HP fit
+    on the trailing window of the last W daily closes [t-W+1 .. t] (two-sided
+    within the window, but the window contains no bar after t - no future data
+    touches S*(t)).  lambda = 100 * n^2 with n = 365 (daily frequency, book eq.
+    438 note) => lambda = 13,322,500 for every window size W.
+  ma: >-
+    MA(T1) and MA(T2) are causal rolling means of the S* series (min_periods =
+    T1/T2, so a cell is tradeable only after W + max(T1,T2) warm-up bars).
+  direction: >-
+    book 3.22 rule: pos = +1 (long) if MA(T1) > MA(T2), pos = -1 (short) if
+    MA(T1) < MA(T2)  [primary]
+  secondary: >-
+    long/flat: pos = +1 if MA(T1) > MA(T2) else 0  [same grid, no other change]
+  execution: >-
+    daily close-to-close; the position decided at close t earns the return over
+    [t, t+1] (pos is shifted one bar before applying to returns - never same-bar
+    execution).
+
+variants:                                          # the WHOLE budget - no other variant may be run
+  grid: >-
+    W in {180, 365, 730} x (T1, T2) in {(5,20), (5,30), (5,60), (10,20),
+    (10,30), (10,60), (20,30), (20,60)} = 24 cells per direction rule
+  primary: >-
+    long/short book rule; the selected cell is the one with the highest
+    TUNE-window net Sharpe among cells passing all six gates on TUNE
+  secondary: >-
+    long/flat at the SAME (W, T1, T2) as the selected primary cell
+  selection: tune-only (first 60%); ties broken by fewer trades then earlier W
+
+costs:
+  fee_bps_per_side: 6                              # 0.06% per unit turnover, charged on each fill
+  turnover: "each fill charged at 6 bps of notional; a full long<->short flip costs 12 bps"
+  slippage_stress: "+5 bps per side on top of fee stress"
+  funding: >-
+    n/a for spot daily bars (no perp funding in this tape); the funding gate is
+    satisfied vacuously and the scored runner records it as N/A, not PASS
+
+six_gates:                                         # adversarial KEEP/KILL, evaluated per cell on TUNE
+  G1_lookahead: >-
+    (a) truncated-tape replay: signals through any date D must be byte-identical
+    to signals computed on the tape cut at D (runner-level check on 5 random Ds);
+    (b) mutation kill: an intentionally future-peeking mutant (window includes
+    t+1) MUST fail the replay test - a test that cannot kill the mutant is a
+    failed gate.
+  G2_trade_concentration: >-
+    no single trade > 25% of gross PnL and no calendar year > 40% of cumulative
+    net PnL over the tune window
+  G3_single_regime: >-
+    net PnL > 0 in at least 2 of the 3 equal thirds of the tune window
+  G4_min_trades: ">= 60 completed round trips on the tune window"
+  G5_fees: >-
+    net Sharpe >= 0.8 and net CAGR > 0 at 6 bps/side; still net CAGR > 0 at
+    2x costs (12 bps/side)
+  G6_slippage_funding: >-
+    still net CAGR > 0 with +5 bps/side slippage on top of the 12 bps stress;
+    funding N/A (spot), recorded as such
+
+pass_bar:                                          # scored DEV, both folds reported
+  tune: all six gates KEEP for the selected primary cell
+  holdout: >-
+    net CAGR > 0, net Sharpe > 0, and G2/G3/G4 still KEEP on the holdout
+    (G1 is structural, G5/G6 re-reported at holdout costs)
+  decision: >-
+    pass => eligible to ASK for a validation read (Verifier + Aaron steps);
+    fail => retire the H4_hp_filter family permanently (no re-test under a new
+    name; H3 doctrine).  WITHOUT a standing dev go there is NO scored claim:
+    the run is BLOCKED, tune-window evidence is recorded as diagnostic-only.
+
+metrics: >-
+  CAGR, vol, Sharpe (net of fees), gross Sharpe, max DD, hit rate, trades/yr,
+  avg trade PnL, turnover/yr, cost drag, per-cell gate table, tune/holdout
+  split date, buy-and-hold BTC comparison (not a gate - BTC long bias is the
+  obvious alternative hypothesis)
+
+reporting:
+  - "headline: selected cell (W, T1, T2), tune net Sharpe, holdout net Sharpe"
+  - "full 24-cell gate table (construction output, not gated)"
+  - "long/flat secondary at the same cell"
+  - "honest caveats: single asset, close-to-close fills, exchange-tape close (Coinbase spot) vs tradable price, no funding/borrow modeling, 2015-2021 tune window is one secular bull regime - the G3 era gate is the guard"
+
+evidence: logs/edge/H4_hp_filter/h4_summary.json
+runner: scripts/h4_run.py (grid + backtest + gates)
+signal_module: scripts/h4_hp.py (past-only rolling HP + causal MAs)
+tests: scripts/h4_test.py (HP math, replay truncation, mutant kill, fee accounting)
+python: /data/finance/.venv-crypto/bin/python (ccxt 4.5.90 + numpy/pandas/scipy)

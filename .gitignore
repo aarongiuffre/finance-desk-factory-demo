@@ -30,3 +30,6 @@ folds/
 
 # encrypted full-period archives + moved originals (ops/offbox/encrypt_full_period.sh)
 /offbox/
+
+# crypto paper bars (regenerable via scripts/crypto_pull.py)
+data/

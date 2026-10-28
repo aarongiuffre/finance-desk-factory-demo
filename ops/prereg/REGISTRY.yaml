@@ -61,3 +61,27 @@ families:
                                  # close/52w-high proximity, monthly top-quintile + top-20,
                                  # 21d hold, PIT S&P universe; scored DEV KILLED 2026-10-28
     hypotheses: [H3_52w_high]
+  H4_hp_filter:                # PRIMARY crypto slate (Aaron 2026-10-28): book 8.1, BTC daily,
+    kind: hypothesis           # rolling past-only HP + two-MA on S*; NOT a re-open of retired
+                               # H4_inventory (same section number, different hypothesis).
+                               # Tune-only work authorized by prereg; scored DEV needs a
+                               # standing dev go (none installed - BLOCKED until Aaron signs).
+                               # prereg H4_hp_filter.yaml - ccxt paper data, fee 0.06%/turnover
+    hypotheses: [H4_hp_filter]
+  H5_knn:                      # PRIMARY crypto slate: book 3.17 single-stock KNN on BTC daily,
+    kind: hypothesis           # 60/40 train/val, T/z1/train grid; prereg H5_knn.yaml
+    hypotheses: [H5_knn]
+  H6_nn_quantile:              # PRIMARY crypto slate: book 18.2 ANN quantile classifier on
+    kind: hypothesis           # BTC 15m, ReLU+softmax K=3, retrain daily; prereg H6_nn_quantile.yaml
+    hypotheses: [H6_nn_quantile]
+  H7_statarb_10coin:           # PRIMARY crypto slate: book 3.18 dollar-neutral stat arb over
+    kind: hypothesis           # 10 coins, wi ~ C^-1 E, Ei = d-day MR vs basket; prereg H7_statarb_10coin.yaml
+    hypotheses: [H7_statarb_10coin]
+  H8_tweet_nb:                 # PRIMARY crypto slate: book 18.3 Bernoulli NB tweet sentiment.
+    kind: hypothesis           # BLOCKED: no tweet feed confirmed by VP; do not invent tweets
+                               # or buy the X API. Stub only until the feed exists.
+    hypotheses: [H8_tweet_nb]
+  H9_alpha_combo:              # PRIMARY crypto slate: book 3.20 alpha combo over >= N parameter-
+    kind: hypothesis           # variant alphas from the H4-H7 grids; gated on those grids existing.
+                               # prereg H9_alpha_combo.yaml written when variants exist
+    hypotheses: [H9_alpha_combo]
