@@ -1,0 +1,88 @@
+# PRE-REGISTRATION - F151_3_14_support_resist (Soper 151 Trading Strategies Ch3 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_* all closed 2026-10-28).
+# Book section: 3.14 Support and resistance (pivot point C=(H+L+C)/3, R=2C-PL, S=2C-PH per Eqs 325-328).  The book has NO backtests - no performance claims are
+# attributed to it anywhere below.  Paper / Yahoo public + EDGAR companyfacts
+# (free, already on desk) only; no spend, no paid data.
+hypothesis: F151_3_14_support_resist
+family: F151_3_14_support_resist
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 3.14.  Support S and resistance R from the previous
+  day's high/low/close via the pivot point C = (PH+PL+PC)/3, R = 2C - PL,
+  S = 2C - PH.  Signal (Eq 328): long if P > C, liquidate long if P >= R,
+  short if P < C, liquidate short if P <= S.
+
+prior: >-
+  SKEPTICAL.  The rule as written is structurally churny: after a long is
+  liquidated at P >= R, P > C still holds so the long is re-established the
+  next day - a stop-and-reverse in disguise at daily frequency.  That is a
+  high-turnover daily signal at 20-40 bps/side floors; we expect the cost
+  gates to finish it.  W2b ran a crypto analog (mr_technical) and it died;
+  this is the equity redo under F151_ as the brief allows.
+
+signal: >-
+  Daily, per name.  At close t-1: C,R,S from day t-2's H,L,C; P = close
+  t-1.  State machine: flat -> long if P > C, short if P < C; long ->
+  liquidate when P >= R (then the P > C branch may re-establish next day);
+  short -> liquidate when P <= S.  Time-series cell: SPY full notional.  xs
+  cell: +1 long / -1 short per name, weights sign/sum|sign| gross 1.
+
+cells:
+  spy_pivot: "SPY pivot-point state machine"
+  xs_pivot_dn: "cross-sectional pivot state machine, gross-1 sign weights"
+total_cells: 2 (whole preregistered budget; no post-hoc cells)
+g4_floor: "spy cell >= 8 completed position flips; xs cell >= 250 in-market days"
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing lookback)"
+  data_end: "2019-12-31 (fold-copy cutoff; no row past it is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Cap enforced at the file loader: no bar past the cap
+    date is loaded at all.
+data:
+  prices: >-
+    fold-copy price tiers folds/dev/raw/price/{sp_exits,<tickers>,dead} (PIT S&P
+    snapshot, tape starts 2014-04-21; SPY 2014-01-02), plus main raw/price for
+    ETF tickers where the family uses them (Yahoo chart v8 pulls 2026-10-28,
+    desk price_pull.py).
+  membership: folds/dev/universe/sp500_ticker_start_end.csv (PIT S&P roster incl. exits)
+
+universe: >-
+  PIT S&P members at D with close >= $5, ADV20 >= $1M and the family's history
+  floor (bars counted, not imputed).
+costs: &costs >-
+  Equity desk floors (edge_plan section 6): per side = fee 15 bps + half-spread
+  bucket by ADV20 (large >= $50M: 5, mid >= $5M: 15, small: 40) + slippage 10
+  bps; per-side floor 20 bps (round-trip floor 40).  Short borrow 100 bps/yr on
+  short notional.  Weights held fixed between rebalances (no drift rebalancing).
+  Decision at close t-1 earns day-t adjclose return; costs charged on |dW| with
+  the decision day's ADV bucket.  Delisting: tape-faithful (weight released the
+  day after the last bar, NO trade cost); -30% haircut run as a reported
+  sensitivity, not a gate (dead/sp_exits tapes already carry the final price).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights (detector live).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max episode
+  share of gross <= 0.25 (monthly families: episode = one rebalance; daily
+  families: episode = one calendar month).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (below).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">- 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr"
+  - "benchmarks reported ungated: SPY total return and equal-weight eligible-universe daily return (same convention)"
+  - "era split by calendar year (G2); pool sizes; delist events; haircut-30% CAGR sensitivity"
+  - "honest caveats: whole window is POST-publication for every cited anomaly (decay is IN the test)"

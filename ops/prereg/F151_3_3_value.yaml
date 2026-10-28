@@ -1,0 +1,100 @@
+# PRE-REGISTRATION - F151_3_3_value (Soper 151 Trading Strategies Ch3 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family: does not re-open any
+# retired name (H1-H3, PRIMARY H4-H9, W2a-W2d, Eq_* all closed 2026-10-28).
+# Book section: 3.3 Value (B/P book-to-price decile dollar-neutral L/S).  The book has NO backtests - no performance claims are
+# attributed to it anywhere below.  Paper / Yahoo public + EDGAR companyfacts
+# (free, already on desk) only; no spend, no paid data.
+hypothesis: F151_3_3_value
+family: F151_3_3_value
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 3.3.  Value = Book-to-Price [Rosenberg, Reid,
+  Lanstein 1985]; buy top decile by B/P, short bottom decile.  Holding period
+  1-6 months; B/P variants use current prices (Asness et al 2013) or prices
+  contemporaneous with book value (Fama-French 1992).
+
+prior: >-
+  SKEPTICAL.  Two extra noise sources vs the literature: (a) book value is
+  the latest filed StockholdersEquity (often 1-2 quarters stale at D), and
+  (b) shares outstanding are DERIVED as NetIncomeLoss / EarningsPerShareDiluted
+  of the same filing (2-decimal EPS rounding -> a few percent share-count
+  noise; sanity-banded).  And 2015-2017 was a growth-led tape: the value leg's
+  canonical drawdown years are inside the tune window.  The gates, not the
+  1990s papers, decide.
+
+signal: >-
+  Monthly rebalance at month-end D.  B/P_i(D) = StockholdersEquity of the
+  latest filing with filed <= D (filing end must be >= D - 400 days, stale
+  guard) divided by close(D) x diluted shares(D), where diluted shares are
+  taken from the same quarterly filing (same accn + period end) as
+  NetIncomeLoss / EarningsPerShareDiluted, sanity band 5e6..5e10 shares else
+  NaN.  Long top decile by B/P, short bottom decile, equal-weight legs, gross
+  1, dollar-neutral.
+
+cells:
+  bp_decile_m: "decile L/S by B/P, monthly rebalance (leg_frac 0.1)"
+  bp_quintile_m: "quintile L/S by B/P, monthly (leg_frac 0.2)"
+  bp_decile_hold3: "decile L/S, 3-month holding (leg_frac 0.1, floor 12)"
+total_cells: 3 (whole preregistered budget; no post-hoc cells)
+g4_floor: "monthly cells >= 24 rebalances; hold3 >= 12 (per-cell override)"
+fold: dev
+window:
+  data_start: "2015-01-01 (dev fold; warmup reads pre-2015 bars only as trailing lookback)"
+  data_end: "2019-12-31 (fold-copy cutoff; no row past it is ever loaded)"
+  split_rule: >-
+    tune = FIRST 60% of the dev window: 2015-01-01..2017-12-31 (36 months).
+    Dev holdout 2018-01-01..2019-12-31 NEVER READ this run (no validation or
+    holdout without go).  Cap enforced at the file loader: no bar past the cap
+    date is loaded at all.
+data:
+  prices: >-
+    fold-copy price tiers folds/dev/raw/price/{sp_exits,<tickers>,dead} (PIT S&P
+    snapshot, tape starts 2014-04-21; SPY 2014-01-02), plus main raw/price for
+    ETF tickers where the family uses them (Yahoo chart v8 pulls 2026-10-28,
+    desk price_pull.py).
+  membership: folds/dev/universe/sp500_ticker_start_end.csv (PIT S&P roster incl. exits)
+  fundamentals: >-
+    folds/dev/facts/<TICKER>.json (EDGAR companyfacts snapshot, fold-capped
+    2019-12-31; every row filtered by `filed` <= cap at load).  Announcement
+    date = `filed`.  Quarterly EPS = 10-Q rows with 60-100 day spans, first
+    filed per quarter-end (original announcement, not restatement); Q4 = 10-K
+    full-year EPS minus that fiscal year's Q1-Q3, announced at the 10-K filed
+    date.  Coverage: 306/500 S&P members with facts at 2015-06-30, 351/506 at
+    2017-12-29; 369 tickers have >= 12 quarterly EPS observations before cap.
+
+universe: >-
+  PIT S&P members at D with close >= $5, ADV20 >= $1M and the family's history
+  floor (bars counted, not imputed).  B/P NaN (no equity, no derivable shares, stale) excludes a name that month.
+costs: &costs >-
+  Equity desk floors (edge_plan section 6): per side = fee 15 bps + half-spread
+  bucket by ADV20 (large >= $50M: 5, mid >= $5M: 15, small: 40) + slippage 10
+  bps; per-side floor 20 bps (round-trip floor 40).  Short borrow 100 bps/yr on
+  short notional.  Weights held fixed between rebalances (no drift rebalancing).
+  Decision at close t-1 earns day-t adjclose return; costs charged on |dW| with
+  the decision day's ADV bucket.  Delisting: tape-faithful (weight released the
+  day after the last bar, NO trade cost); -30% haircut run as a reported
+  sensitivity, not a gate (dead/sp_exits tapes already carry the final price).
+gates: &gates >-
+  Six preregistered gates, ALL must hold for a cell to pass on the tune slice:
+  G1 lookahead - replay truncation at 4 row-slice cuts + 1 loader-level cut
+  (fresh panel capped at the cut; weights through the cut identical) AND a
+  decision-early mutant (day-t signal used for day-t return) must produce
+  different weights (detector live).
+  G2 concentration - max calendar-year share of net pnl <= 0.40 AND max episode
+  share of gross <= 0.25 (monthly families: episode = one rebalance; daily
+  families: episode = one calendar month).
+  G3 regime - at least 2 of 3 equal thirds of the tune window net-positive.
+  G4 min trades - family floor (below).
+  G5 fees - tune net Sharpe >= 0.8 (annualized 252, in-market days) AND net
+  CAGR > 0 at base costs.
+  G6 stress - net CAGR > 0 at 2x all per-side costs (3x reported).
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md + REGISTRY retired, no go ask."
+  - ">- 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev go
+    (ops/offbox/aaron_sign_dev_go.py; go file names the code freeze sha and
+    max_dev_trials) before any scored DEV run on the full dev window."
+reporting:
+  - "headline per cell: net Sharpe, net CAGR, max DD, episodes, turnover/yr, cost drag/yr"
+  - "benchmarks reported ungated: SPY total return and equal-weight eligible-universe daily return (same convention)"
+  - "era split by calendar year (G2); pool sizes; delist events; haircut-30% CAGR sensitivity"
+  - "honest caveats: whole window is POST-publication for every cited anomaly (decay is IN the test)"
