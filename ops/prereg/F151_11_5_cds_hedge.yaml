@@ -1,0 +1,28 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_11_5_cds_hedge
+# (Soper 151 Ch11 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 11.5: Carry - CDS hedging (Eq 489).
+hypothesis: F151_11_5_cds_hedge
+family: F151_11_5_cds_hedge
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 11.5: buy a low-quality tranche and Delta-hedge by
+  selling a single-name CDS whose premium is lower than the long tranche's,
+  hedge ratio Eq 489: Delta_CDS = D / D_CDS (tranche risky duration over
+  the CDS risky duration).
+blocked_reason: >-
+  Needs BOTH legs of the paid-data wall at once: the CDX-class tranche
+  spread (Markit tranche product, paid - same wall as F151_11_2/11_3/11_4)
+  AND a single-name CDS curve for the hedge leg with its risky duration
+  D_CDS.  The single-name wall is already documented at prereg in
+  F151_5_14_cds_basis (2026-10-28): per-entity CDS spreads are
+  Markit/ICE paid, FRED carries no per-entity CDS series, and no free
+  public daily source covers 2015-2017.  Nothing to substitute honestly:
+  shorting a credit ETF is not selling single-name protection.
+  Standing paid-feed wall; re-opens only with a free tranche + per-name
+  CDS tape AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_11_5_cds_hedge/BLOCKED.md (this prereg is the record)"

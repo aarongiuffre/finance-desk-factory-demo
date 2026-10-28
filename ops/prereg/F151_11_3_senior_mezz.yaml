@@ -1,0 +1,27 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_11_3_senior_mezz
+# (Soper 151 Ch11 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 11.3: Carry, senior/mezzanine - index hedging (Eq 487).
+hypothesis: F151_11_3_senior_mezz
+family: F151_11_3_senior_mezz
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 11.3: sell (protection buy) a high-quality tranche
+  (senior/mezzanine, e.g. 7-10% or 10-15%) and Delta-hedge by buying the
+  index, hedge ratio Eq 487 (D/D_ix).  Carry direction is opposite 11.2
+  (index premium received exceeds tranche premium paid).
+blocked_reason: >-
+  Same wall as F151_11_2_equity_tranche and then some: needs senior/
+  mezzanine tranche spreads (Markit CDX tranche product, paid), the CDX
+  index spread for D_ix (Markit, paid), and the Eqs 481-486 MTM/risky-
+  duration machinery priced off them.  No free historical source for any
+  tranche spread on a CDS reference pool, 2015-2017.  Bond or credit-ETF
+  proxies are NOT the book's tranche (a senior tranche is a correlation/
+  tail position on a pooled loss distribution; an IG bond fund is not).
+  Standing paid-feed wall; re-opens only with a free tranche + index
+  spread tape AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_11_3_senior_mezz/BLOCKED.md (this prereg is the record)"

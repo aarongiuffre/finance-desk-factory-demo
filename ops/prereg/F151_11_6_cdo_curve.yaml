@@ -1,0 +1,29 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_11_6_cdo_curve
+# (Soper 151 Ch11 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 11.6: CDOs - curve trades (Eqs 490-491).
+hypothesis: F151_11_6_cdo_curve
+family: F151_11_6_cdo_curve
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 11.6: flattener/steepener curve trades on tranches -
+  sell short-term / buy long-term protection (flattener) or the reverse
+  (steepener); carry per Eq 490: C(t, t+dt) = (Mlong*Slong - Mshort*Sshort)*dt
+  under dollar-neutral, risky-duration-neutral, or carry-neutral
+  structuring; P&L per Eq 491 = difference of tranche MTMs (Eq 485).
+blocked_reason: >-
+  Requires a tranche spread CURVE: the same tranche quoted at a short and a
+  long maturity (e.g. 5y vs 10y CDX tranches), plus the MTM machinery
+  Eqs 482-486 priced off those quotes.  CDX tranche quotes at two tenors
+  are Markit paid (the standard product serves 5y; 10y tranche quotes are
+  dealer/markit level); no free historical source serves tranche spreads
+  at ANY tenor, 2015-2017.  The curve dimension (short-vs-long protection)
+  is exactly what no free proxy carries - an ETF spread has no maturity
+  dimension to flatten or steepen.  Standing paid-feed wall (same class as
+  F151_5_13's documented curve walls); re-opens only with a free
+  multi-tenor tranche tape AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_11_6_cdo_curve/BLOCKED.md (this prereg is the record)"

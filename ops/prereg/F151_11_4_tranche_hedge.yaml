@@ -1,0 +1,26 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_11_4_tranche_hedge
+# (Soper 151 Ch11 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 11.4: Carry - tranche hedging (Eq 488).
+hypothesis: F151_11_4_tranche_hedge
+family: F151_11_4_tranche_hedge
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 11.4: buy a low-quality tranche and Delta-hedge by
+  selling a high-quality tranche, hedge ratio Eq 488: Delta_high =
+  D_low / D_high (ratio of the two tranches' risky durations, Eqs 485-486).
+blocked_reason: >-
+  Requires TWO tranche spread curves simultaneously (low- and high-quality
+  tranches of the same CDX pool, each with a risky duration from Eqs
+  482-486).  CDX tranche spreads are a Markit paid product; no free
+  historical source serves even one tranche, let alone a matched pair on
+  the same pool, 2015-2017.  Substitutions fail the honest-test rule:
+  two credit ETFs would be an ETF-vs-ETF spread trade, not the book's
+  tranche-vs-tranche correlation position.  Standing paid-feed wall
+  (same class as F151_5_14, F151_9_6); re-opens only with a free tranche
+  tape AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_11_4_tranche_hedge/BLOCKED.md (this prereg is the record)"

@@ -1,0 +1,123 @@
+# PRE-REGISTRATION - F151_11_7_mbs (Soper 151 Ch11 batch, F151_ prefix).
+# Written 2026-10-28 BEFORE any tune run.  New F151_ family; re-opens nothing.
+# Book section 11.7: Mortgage-backed security (MBS) trading.
+hypothesis: F151_11_7_mbs
+family: F151_11_7_mbs
+kind: carry_hedge
+literature: >-
+  Kakushadze & Serur 11.7: buy MBS passthroughs and duration-hedge their
+  interest-rate exposure with interest rate swaps.  Main risk = prepayment
+  (homeowners refinance when rates drop -> negative convexity of the MBS
+  price vs the rate, e.g. the 5-year swap rate).  Hedge ratios are
+  model-dependent; the book's nonparametric alternative estimates the
+  first derivative dP/dR from historical data with P constrained
+  non-increasing in R (constrained regression, Ait-Sahalia & Duarte 2003).
+prior: >-
+  MODERATE PRIOR that the book's construction is implementable and the
+  hedge is measurable on free proxies, but a WEAK prior on the carried
+  margin: (i) the hedged position is long MBS carry / short 5y rate
+  exposure - in 2015-2017 the Fed hiked once while long yields were
+  range-bound, so the carry side is plausible; (ii) the hedge is a
+  CROSS-BASIS hedge (agency-MBS OAS/convexity vs a Treasury-note future),
+  not the same asset as in the Ch10 IR family, so a large share of
+  variance legitimately remains (pre-prereg descriptive corr of daily
+  VMBS vs ZF=F returns ~0.69, weekly ~0.74 - preregistered BELOW with a
+  partial-de-risk bar, not a same-asset bar); (iii) CMT par yields (H.15)
+  are a smoothed model-extracted curve - daily changes are noisier than
+  true market yields, which degrades the dP/dR estimates.
+signal: >-
+  At the last trading day D of month M: long 1.0 MBS ETF (TOTAL return,
+  adjclose - the book's passthrough receives coupon carry), short h x
+  ZF=F (5y T-note future, the free stand-in for paying fixed on the 5y
+  swap: pay-fixed = short rate exposure), hold one month, re-strike
+  monthly, active from the bar after D.  Hedge ratios, all trailing
+  windows ENDING at D and clipped to [0.2, 3.0]:
+  ols cells: h = cov(r_mbs, r_zf)/var(r_zf) over trailing {63,126,252}
+  business days (the book's "estimate the first derivative from
+  historical data" in returns space);
+  dur cell: Eq 487-analog h = modD_mbs / modD_zf with modD_v =
+  -cov(r_v, dy5)/var(dy5) (return per pp of the 5y CMT; the
+  D/D_ix tranche-hedge structure applied to MBS vs the 5y rate),
+  trailing 252d;
+  iso cell (the book's nonparametric construction): trailing 252d daily
+  obs of (P_mbs adjclose level, R = DGS5 level), pool-adjacent-violators
+  isotonic fit of P on R constrained NON-INCREASING, local derivative
+  dP/dR at the current R = slope between the fitted block centers
+  bracketing R_D; h = (-dP/dR) / modD_zf (modD_zf from the same window;
+  the hybrid is preregistered here: the book gives no second leg).
+  Both legs must have raw bars on D.
+cells:
+  vmbs_zf_h63: "VMBS vs ZF=F, returns-OLS h, trailing 63d"
+  vmbs_zf_h126: "VMBS vs ZF=F, returns-OLS h, trailing 126d"
+  vmbs_zf_h252: "VMBS vs ZF=F, returns-OLS h, trailing 252d"
+  vmbs_zf_dur: "VMBS vs ZF=F, Eq 487-analog duration ratio on dy5, 252d"
+  vmbs_zf_iso: "VMBS vs ZF=F, book nonparametric PAVA dP/dR, 252d"
+  mbb_zf_h126: "MBB vs ZF=F, returns-OLS h, trailing 126d (vehicle control)"
+total_cells: 6 (whole preregistered budget; no post-hoc cells)
+g4_floor: ">= 24 funded monthly episodes"
+
+fold: dev
+window:
+  data_start: "2012-01-01 (iso/ols warmup 252d before the first 2015 tune decision; DGS5/DSWP5 disk pull starts 2010-01)"
+  data_end: "2017-12-31 tune cap (loader cap 2017-12-31; DGS5/DSWP5 disk pull capped coed=2017-12-31)"
+  split_rule: >-
+    tune = 2015-01-01..2017-12-31.  Dev holdout 2018-2019 NEVER READ this
+    run.  Loader hard-caps every series at 2017-12-31 (VMBS/MBB raw bars
+    extend to present; loader cap enforces the split; DGS5/DSWP5 were
+    pulled with coed=2017-12-31 at the REQUEST so no post-split obs lands
+    on disk).
+data:
+  mbs: "raw/price/{VMBS,MBB}.json adjclose 'a' (TOTAL return: the book's passthrough collects coupon carry; VMBS agency passthrough fund, MBB iShares MBS ETF)"
+  hedge: "raw/futures/ZF_F.json close 'c' (price return; 5y T-note future; Ch10 pull, disk-capped 2017-12-29)"
+  rates: "raw/fred/{DGS5,DGS10}.json daily (re-pulled 2026-10-28, 2010-01-04..2017-12-29, free FRED H.15 CMT)"
+proxy_walls: &walls >-
+  (1) Passthrough TOTAL return proxied by agency-MBS ETFs (VMBS expense
+  ~11bp/yr + fund mechanics; the aggregate passthrough index tape is not
+  free).  (2) R = 5y CMT DGS5, NOT the book's 5-year swap rate: the free
+  FRED swap series DSWP5 (ICE 5y swap) is DISCONTINUED at 2016-10-28
+  (verified 2026-10-28 by direct pull) and cannot cover the window; the
+  swap-vs-CMT basis is a documented approximation.  (3) Hedge instrument
+  = ZF=F continuous future (Yahoo unpublished roll method, CME paid),
+  not swaps - a swap tape is paid; pay-fixed/receive-float = short rate
+  exposure is the convention mapping.  (4) No live execution.
+costs: &costs >-
+  Engine side cost by REAL dollar-ADV bucket for the MBS ETF leg; ZF=F
+  adv20 pinned to the LARGE bucket = 30 bp/side (Ch10 mixed-panel
+  convention; conservative vs real 5y-note futures spread ~1bp).  Borrow
+  0 bp/yr: no ETF short in any preregistered cell; the futures short is
+  self-financing (Ch8/Ch10 convention).  Costs are charged on h changes
+  and the initial strike only (monthly re-strike).
+gates: &gates >-
+  Six preregistered gates, CARRY-HEDGE ADAPTATION (this is a carried
+  trade, not a pure risk-reduction trade: the residual pnl IS the
+  book's objective - mortgage carry after the hedge - so G3/G5 score
+  the residual's CARRY, and G5's VR component scores only that the rate
+  exposure was actually removed):
+  G1 lookahead UNCHANGED (4 row-slice cuts + loader cut + decision-early
+  mutant, identical machinery to f151c5..10).
+  G2 concentration on the residual pnl: max |year| share <= 0.60, max
+  episode share of |gross| <= 0.25.
+  G3 persistence: residual net pnl > 0 in >= 2 of 3 thirds of the tune
+  slice (the analog of the hedge families' per-third VR >= 0 - carry
+  must persist, not appear in one lucky third).
+  G4 min trades = floor above (>= 24 funded monthly episodes).
+  G5 effectiveness + carry bar = VR >= 0.30 (cross-basis partial
+  de-risk bar, the F151_10_1_1 convention: MBS-vs-5y-note is a
+  mismatched-basis hedge, pre-prereg corr ~0.69 daily / ~0.74 weekly
+  bounds achievable VR well below the same-asset 0.75 bar; 0.30 is the
+  honest 'the rate exposure was substantially removed' bar) AND
+  residual net CAGR >= +0.50%/yr (CARRY BAR: the book's trade must
+  earn its carry after the engine's conservative costs; 0.50%/yr chosen
+  a priori as the minimum economic margin - below that the hedged
+  position is indistinguishable from nothing) AND cost drag <= 50 bp/yr.
+  G6 stress = VR >= 0.30 AND residual net CAGR > 0 at 2x costs.
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune: KILL.md, no go ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing
+     dev go.  KEEP = the book's hedged-MBS carry measured positive with
+     the rate exposure substantially removed on the tune slice - a carry
+     result, still not a scored-DEV alpha claim."
+reporting:
+  - "headline per cell: VR, residual net Sharpe, residual net CAGR, cost drag/yr, turnover/yr, episodes, h range"
+  - "report-only: unhedged MBS (total return) Sharpe/CAGR per vehicle; corr(r_mbs, r_zf) and corr(r_mbs, dy5) over the tune slice; quadratic convexity coefficient of r_mbs on (dy5, dy5^2) over the tune slice (sign check vs the book's negative-convexity premise); per-year residual pnl; DSWP5 discontinuity note"
+  - "honest caveats: window POST-publication; CMT-vs-swap basis in every dP/dR estimate; ETF fund mechanics in the MBS leg; Yahoo =F roll method unpublished"

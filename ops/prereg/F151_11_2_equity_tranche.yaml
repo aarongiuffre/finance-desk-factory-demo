@@ -1,0 +1,36 @@
+# PRE-REGISTRATION (BLOCKED STUB) - F151_11_2_equity_tranche
+# (Soper 151 Ch11 batch, F151_ prefix).  Written 2026-10-28 BEFORE any tune run.
+# Book section 11.2: Carry, equity tranche - index hedging (Eq 487).
+hypothesis: F151_11_2_equity_tranche
+family: F151_11_2_equity_tranche
+kind: blocked_stub
+literature: >-
+  Kakushadze & Serur 11.2: buy the equity (0-3%) tranche of a synthetic CDO
+  (protection seller, periodic premium) and Delta-hedge it by selling the
+  index.  Hedge ratio Eq 487: Delta_ix = D / D_ix, the ratio of the tranche
+  risky duration (Eq 486, dMTM/dS from Eqs 482-485) to the CDS-index risky
+  duration.  Risk: equity-tranche credit events; carry = tranche premium
+  minus index premium paid.
+blocked_reason: >-
+  The signal REQUIRES mark-to-market tranche economics on a CDX-class
+  reference pool: tranche spreads S (and upfronts) for the equity 0-3%
+  tranche, the CDX index spread for D_ix, and the loss/MTM inputs Eqs
+  481-485 presuppose (premium and default legs priced per Eq 482-484).
+  None of this is free anywhere on this desk:
+  - CDX.NA.IG/HY tranche spreads (0-3% up-front + running) are a Markit
+    paid product; no free historical source serves them for 2015-2017.
+  - The CDX index spread itself (for D_ix) is also Markit-paid.
+  - ETF/credit-fund proxies (HYG, LQD, CORP) are NOT the book's tranche:
+    a 0-3% first-loss tranche is a leveraged correlation position on a
+    CDS pool, not a diversified high-yield fund.  Substituting an ETF
+    would test credit-fund carry, not the book's trade - a different,
+    unregistered hypothesis.
+  The same standing wall as F151_9_6 (no free term structure) and
+  F151_5_14 (no free CDS tape): the input is a PAID market-data product.
+  Re-opens only with a free tranche + index spread tape AND a fresh prereg.
+cells: "NONE - BLOCKED stub (0 preregistered cells)"
+total_cells: 0
+verdict_policy:
+  - "BLOCKED at prereg: no tune run, no gates, no go ask, no holdout read."
+reporting:
+  - "stub evidence in logs/edge/F151_11_2_equity_tranche/BLOCKED.md (this prereg is the record)"
