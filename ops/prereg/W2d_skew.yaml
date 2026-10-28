@@ -1,0 +1,53 @@
+# PRE-REGISTRATION STUB - W2d_skew (Soper WAVE 2d, book section 7.5) - BLOCKED.
+# Written 2026-10-28.  NO tune run exists or will exist until unblocked.
+#
+# Book 7.5 "Volatility skew - long risk reversal": OTM puts price at higher
+# implied volatility than equidistant OTM calls; the long risk reversal (buy
+# OTM call, sell OTM put) captures the skew.  A faithful paper test needs a
+# HISTORY of the put/call IV skew (e.g. 25-delta risk reversal) for BTC.
+#
+# What exists publicly (checked 2026-10-28):
+#   - Deribit DVOL (public API): a single 30d ATM-ish IV index.  No skew
+#     information - one number, not a surface.  Already used by W2d_vol_rp.
+#   - Deribit public API historical option chains/trades: NOT served
+#     (public/get_last_trades_by_currency returns empty beyond the recent
+#     window; no expired-chain history endpoint).
+#   - Tardis.dev CSV datasets (datasets.tardis.dev): gone - every per-symbol
+#     file 404s (verified 2026-10-28 for deribit AND binance); the API is a
+#     paid subscription.
+#   - CryptoDataDownload Deribit options OHLCV by maturity: "Join Plus+"
+#     (paid); free tier is DVOL daily only (same as the API).
+#   - Kaiko / Laevitas / Amberdata historical options: paid.
+#
+# No free, no-credential, ToS-respecting source of historical BTC option IVs
+# exists, and the brief forbids inventing option chains or IV surfaces.
+# Therefore: BLOCKED stub.  Nothing has been run; there is no evidence and no
+# claim.  The book has no backtests for 7.5 either - none will be invented.
+#
+# Unblock condition: any of
+#   (a) a licensed/free historical Deribit options chain or per-instrument IV
+#       dataset becomes accessible (e.g. Tardis CSV datasets restored), or
+#   (b) the VP funds a data subscription (Laevitas/Amberdata/Kaiko/Tardis
+#       tier) and says "go",
+# at which point this stub is replaced with a full prereg (signal: 25-delta
+# risk reversal bands / percentile ranks on BTC, mirroring the W2d_vol_rp
+# gate structure) and the standard tune/scored discipline applies.
+hypothesis: W2d_skew
+family: W2d_skew
+kind: blocked
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies 7.5 (volatility skew - long risk
+  reversal; long OTM call / short OTM put to capture put IV > call IV).
+prior: >-
+  UNTESTABLE NOW.  Skew premia exist in equity index options; crypto skew
+  behavior is regime-dependent (crash fear makes puts expensive, manias make
+  calls expensive).  No claim is made.
+fold: dev
+window: "n/a - blocked before any window is set"
+data: "n/a - required input (historical BTC put/call IV skew) has no free public source (see header)"
+signal: "n/a - blocked stub; no cells preregistered"
+costs: "n/a"
+gates: "n/a"
+verdict_policy:
+  - "BLOCKED - stub only; BLOCKED.md in logs/edge/W2d_skew/ records the unblock
+    condition.  Not a KILL: the family is data-starved, not refuted."

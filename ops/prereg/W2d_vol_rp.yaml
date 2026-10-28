@@ -1,0 +1,133 @@
+# PRE-REGISTRATION - W2d_vol_rp (Soper WAVE 2d, book section 7.4).
+# Written 2026-10-28 BEFORE any tune run.  New family; does not re-open any
+# retired name (PRIMARY H4-H7, W2a, W2b, W2c all retired 2026-10-28).
+#
+# Book 7.4 "Volatility risk premium": implied volatility tends to exceed
+# realized volatility most of the time; the strategy sells volatility when
+# that spread is positive (book example: sell straddles; proxy signal = VIX at
+# the start of the current month minus realized volatility of daily returns
+# since the start of the month; sell the straddle if the spread is positive).
+# Book 7.4.1 (gamma hedging) is a variation, NOT implemented: the daily paper
+# does no continuous delta hedging.
+#
+# Crypto adaptation (paper, single asset BTC):
+#   IV  = Deribit DVOL (BTC 30-day implied volatility index, crypto's VIX
+#         analog), daily close.  Public API public/get_volatility_index_data,
+#         no credentials, no key; pulled by scripts/w2d_pull_dvol.py into
+#         data/crypto/deribit/deribit-dvol-BTC-1d.csv (2017 daily bars
+#         2021-03-24..2026-09-30, no gaps).
+#   RV  = realized volatility of BTC daily log returns from the desk tape
+#         data/crypto/binance/spot-BTC-1d.csv (same tape as W2a/W2b/W2c).
+#
+# P&L accounting (documented adaptation, NOT an option chain): the book sells
+# an ATM straddle, i.e. a delta-neutral short-vol position.  The daily paper
+# replicates that exposure with a variance swap per book 7.6 Eqs (434)-(436):
+# on each decision close where the position changes, the strike is set to the
+# implied variance K = (DVOL/100)^2 (annualized, decimal^2); while the
+# position is held, each day accrues pos*(r_t^2 - K/365), r_t the daily log
+# return (no mean subtraction, per Eq. 435), pos = +1 long vol / -1 short vol.
+# Summed accrual is proportional (factor 365/T) to the variance-swap payoff
+# N*(v(T)-K), so Sharpe/sign/concentration gates are unaffected by the
+# scaling.  The evaluation runs on a synthetic cumulative index
+# P_t = prod(1+vr) with vr the daily variance accrual, so edge_common's
+# pnl_series/evaluate/gates machinery applies UNCHANGED (same fee placement,
+# same trade-segment and concentration definitions as every other family).
+# Fees: 6 bps per fill charged on every position change, in variance-notional
+# units (|Delta pos| = 1 per flip), the desk-wide convention.  A full
+# straddle-BS accounting (strike tenor/exit choices) is deliberately NOT
+# introduced - it would add unpreregistered modeling freedom.
+#
+# Known limits, stated up front: DVOL is a 30-day strip-implied index used as
+# a strike proxy (true variance-swap strikes are quoted off specific maturies);
+# the short-vol position here has no vega MTM between decisions (strike fixed
+# at entry, as a held-to-maturity variance swap); daily r^2 accrual ignores
+# intraday path.  These biases are acknowledged, not tuned around.
+#
+# Data provenance: Deribit public API (no auth) + existing desk tape.  No paid
+# APIs, no credentials, no synthetic chains or IV surfaces anywhere.
+hypothesis: W2d_vol_rp
+family: W2d_vol_rp
+kind: hypothesis
+literature: >-
+  Kakushadze & Serur 151 Trading Strategies 7.4 (volatility risk premium:
+  sell volatility when IV > RV; proxy signal = VIX at month start minus
+  realized vol of daily returns month-to-date) with the variance-swap
+  accounting of 7.6 Eqs (434)-(436).  Literature cited by the book: Bakshi &
+  Kapadia 2003, Carr & Wu 2009, Christensen & Prabhala 1998.
+prior: >-
+  SKEPTICAL.  The VRP is one of the best-documented premia in equity index
+  options, but (a) crypto IV has traded BELOW trailing RV in calm stretches
+  (DVOL range here 32-156 vol pts), so the sell side is not always available;
+  (b) daily r^2 accrual makes the pnl series extremely fat-tailed - a short
+  vol position eats single-day 10%+ moves in full; (c) the window is only
+  ~5.5y (DVOL starts 2021-03-24) and the tune split must not get most of its
+  pnl from the 2021-22 high-vol regime (G2); (d) with fees in
+  variance-notional units, a rule that flips often is fee-dead (G4/G5
+  interaction).  Prior: likely KILL, honestly uncertain.
+fold: dev
+window:
+  data_start: "2021-03-24 (first DVOL bar; cell-specific RV/z/rank warmups run flat before they are computable)"
+  data_end: "2026-09-30 (desk pin, same as W2a/W2b/W2c)"
+  split_rule: >-
+    tune = FIRST 60% of the family's common daily bars (BTC tape restricted
+    to the DVOL span); holdout = last 40%, NEVER read in tune mode.  Selection
+    on tune only.  Exact split date recorded in the run JSON.
+data:
+  implied_vol: data/crypto/deribit/deribit-dvol-BTC-1d.csv (regenerable via
+    scripts/w2d_pull_dvol.py; Deribit public API, no credentials)
+  prices: data/crypto/binance/spot-BTC-1d.csv (00:00 UTC daily closes)
+signal:
+  definitions: >-
+    IV_t = DVOL close at day t (vol pts).  RV variants (annualized,
+    sqrt(365 * mean of r^2)): rv_mtd = month-to-date from the first bar of
+    the calendar month (NaN for the first 2 bars of a month); rv_trail{20,30,60}
+    = trailing window.  IV_ref variants: iv_ms = DVOL close on the first bar
+    of the current calendar month (book's "VIX at the beginning of the current
+    month"); iv_now = DVOL_t.  Spread_t = IV_ref - RV (vol pts).
+  availability: >-
+    DVOL close t and close t are both published at day t's close; the decision
+    close t uses DVOL_t and returns through close t only.  No release lag
+    exists (unlike W2c's COT rule); replay-truncation and the one-day-early
+    mutant in G1 verify this.
+  cells: >-
+    A1 (book-faithful): spread = iv_ms - rv_mtd; pos = -1 when spread > 0,
+    flat otherwise (book sells, never buys).  (1 cell)
+    A2: spread = iv_ms - rv_mtd; pos = -1 when spread > +2, +1 when spread
+    < -2, flat between.  (1 cell)
+    B1: spread = iv_now - rv_trail30; -1 if > +2, +1 if < -2, flat.  (1 cell)
+    B2: spread = iv_now - rv_trail30; -1 if > +5, +1 if < -5, flat.  (1 cell)
+    C1: spread = iv_now - rv_trail60; -1 if > +5, +1 if < -5, flat.  (1 cell)
+    D1: z-score of (iv_now - rv_trail30) over trailing 252 bars; -1 if z > +1,
+    +1 if z < -1, flat.  (1 cell)
+    D2: percentile rank of (iv_now - rv_trail30) over trailing 252 bars;
+    -1 if rank > 0.8, +1 if rank < 0.2, flat.  (1 cell)
+    E1: always-in sign rule on iv_now - rv_trail30: -1 if spread > 0, +1
+    otherwise (no flat band).  (1 cell)
+    TOTAL = 8 cells (whole preregistered budget; no post-hoc cells).
+  position: >-
+    +/-1 unit variance notional or flat; decided at close t, accruing
+    r_{t+1}^2 - K/365 from t+1 (edge_common convention: position decided at
+    close t-1 earns day t).  NaN signal (warmup) = flat.
+costs:
+  fee: >-
+    6 bps per fill (0.06% desk convention) on each position change, charged in
+    the variance-notional units of the accrual (|Delta pos| = 1 per flip).
+  funding: "n/a (variance accrual on the spot tape; no perp carried)."
+  slippage_stress: "G6: same accrual at 2x (12 bps) and 3x (18 bps) fills."
+gates:
+  g1_lookahead: >-
+    replay-truncation on 5 random cuts (position series through D identical
+    when every input (DVOL csv + price tape) is cut at D) + future-peek mutant
+    (decision close uses DVOL_{t+1}) must FAIL the replay check.
+  g2_concentration: >-
+    max single-episode share of gross <= 0.25 AND max calendar-year share of
+    net <= 0.40.
+  g3_regime: "at least 2 of 3 equal thirds of the tune window net-positive."
+  g4_min_trades: ">= 60 completed trade episodes on the tune window (default floor)."
+  g5_fees: "tune net Sharpe >= 0.8 AND CAGR > 0 at 6 bps/fill."
+  g6_stress: "net CAGR > 0 at 12 bps/fill (18 bps reported)."
+verdict_policy:
+  - "0 gate-surviving cells -> KILL at tune, KILL.md + REGISTRY retired, no go
+    ask."
+  - ">= 1 survivor -> KEEP_TUNE: holdout unread; BLOCKED awaiting standing dev
+    go (go file must name the code freeze sha + max_dev_trials)."
