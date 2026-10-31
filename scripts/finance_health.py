@@ -11,7 +11,7 @@ Outbox  /data/finance/alerts/outbox.jsonl   (one JSON object per line)
   {"id": "unit-failed:user:eda-pull.service:2026-10-18T07:40:01-04:00",
    "ts": "2026-10-18T07:40:02-04:00",          # America/New_York, with offset
    "severity": "critical" | "warning" | "info",
-   "check": "failed_units" | "embed_sweep" | "rows_growth" | "search_health"
+   "check": "failed_units" | "embed_sweep" | "rows_growth" | "rows_drop" | "search_health"
             | "quote_health" | "zfs_replicate" | "sec_failures" | "sec_rate",
    "message": "human one-liner",
    "details": {...},                           # check-specific evidence
@@ -72,6 +72,24 @@ SEC_PROGRESS_RE = re.compile(r"10m: ([0-9.]+) req/s")
 SEC_RATE_LIMIT = 9.5
 ROWS_WINDOW_H = 24.0
 SAMPLE_KEEP_D = 10
+# rev4: known, legitimate step-downs of the filings table.  Row samples taken
+# before an event's end are never used as a baseline again (the drop vs them is
+# EXPECTED, not data loss), and the event's post-count is a floor for the drop
+# detector from the moment it ends.  Add a row here only with Aaron's OK.
+ROW_REBASELINES = [
+    {"event": "R8 dedupe run-20261031T121436-2574308",
+     "start": "2026-10-31T12:14:36-04:00", "end": "2026-10-31T12:35:49-04:00",
+     "rows_before": 68079216, "rows_after": 49796336},
+]
+
+
+def _rebaseline():
+    """Latest rebaseline event as (end_ts, event dict), or (None, None)."""
+    evs = sorted(ROW_REBASELINES, key=lambda e: e["end"])
+    if not evs:
+        return None, None
+    e = evs[-1]
+    return dt.datetime.fromisoformat(e["end"]).timestamp(), e
 
 
 def now_et():
@@ -273,20 +291,53 @@ def check_search_and_rows(run, now_ts):
         samples.append([now_ts, int(rows)])
     cutoff = now_ts - SAMPLE_KEEP_D * 86400
     samples[:] = [s for s in samples if s[0] >= cutoff]
-    old = [s for s in samples if now_ts - s[0] >= ROWS_WINDOW_H * 3600]
+    rb_ts, rb_ev = _rebaseline()
+    floor = rb_ts if rb_ts is not None else float("-inf")
+
+    def usable(s):   # pre-event samples never serve as a baseline (rev4)
+        return s[0] >= floor
+
+    old = [s for s in samples if usable(s) and now_ts - s[0] >= ROWS_WINDOW_H * 3600]
     if rows is not None and not old:
         # bootstrap from the sweep's own journal ("... (table now N)") so the
         # first run already has a real >= 24h-old baseline
         for ts, n in _journal_rows():
-            if now_ts - ts >= ROWS_WINDOW_H * 3600 and ts >= cutoff:
+            if now_ts - ts >= ROWS_WINDOW_H * 3600 and ts >= cutoff and ts >= floor:
                 samples.append([ts, n])
         samples.sort()
-        old = [s for s in samples if now_ts - s[0] >= ROWS_WINDOW_H * 3600]
+        old = [s for s in samples if usable(s) and now_ts - s[0] >= ROWS_WINDOW_H * 3600]
         res_src = "journal-bootstrap" if old else None
     else:
         res_src = "state"
     res = {"rows_now": rows, "baseline": None, "evaluated": False, "baseline_source": res_src}
+    if rb_ev is not None:
+        res["rebaseline"] = {"event": rb_ev["event"], "end": rb_ev["end"],
+                             "rows_before": rb_ev["rows_before"], "rows_after": rb_ev["rows_after"]}
     wd = dt.datetime.fromtimestamp(now_ts, TZ).weekday()   # Mon=0 .. Sun=6
+
+    # rev4 drop detector: runs EVERY day (weekends too).  The table only grows
+    # between known events, so any count below the previous usable sample (or
+    # below the latest event's post-count) is a real drop -> critical.
+    if rows is not None:
+        cands = [(s[0], s[1], "previous-sample") for s in samples if usable(s) and s[0] < now_ts]
+        if rb_ev is not None and rb_ts <= now_ts:
+            cands.append((rb_ts, rb_ev["rows_after"], "rebaseline-floor"))
+        ref, ref_src = None, None
+        if cands:
+            t, n, ref_src = max(cands, key=lambda c: c[0])   # newest reference
+            ref = [t, n]
+        drop = {"evaluated": ref is not None, "ok": True}
+        if ref is not None:
+            drop.update({"ref": {"ts": iso(ref[0]), "rows": ref[1], "source": ref_src}})
+            if rows < ref[1]:
+                drop["ok"] = False
+                drop["lost"] = ref[1] - rows
+                run.alert(f"rows-drop:{iso(ref[0])}:{rows}", "critical", "rows_drop",
+                          f"LanceDB filings rows DROPPED: {ref[1]:,} at {iso(ref[0])} -> {rows:,} now "
+                          f"(-{ref[1] - rows:,}; not a known rebaseline event)",
+                          {"then": ref, "now": [now_ts, rows], "ref_source": ref_src})
+        res["drop_check"] = drop
+
     if rows is not None and old:
         base = max(old, key=lambda s: s[0])                  # newest sample >= 24h old
         res["baseline"] = {"ts": iso(base[0]), "rows": base[1]}
@@ -296,17 +347,20 @@ def check_search_and_rows(run, now_ts):
             res["skipped"] = "weekend window (Sun/Mon runs)"
         else:
             res["evaluated"] = True
-            if rows <= base[1]:
+            if rows <= base[1] and res.get("drop_check", {}).get("ok", True):
                 day = dt.datetime.fromtimestamp(now_ts, TZ).date().isoformat()
                 run.alert(f"rows-flat:{day}", "warning", "rows_growth",
                           f"LanceDB filings rows not growing: {base[1]:,} at {iso(base[0])} -> {rows:,} now",
                           {"then": base, "now": [now_ts, rows]})
                 res["ok"] = False
+            elif rows <= base[1]:
+                res["ok"] = False            # already reported by rows_drop
             else:
                 res["ok"] = True
                 res["delta"] = rows - base[1]
     elif rows is not None:
-        res["skipped"] = "no sample >= 24h old yet (baseline building)"
+        res["skipped"] = ("no post-rebaseline sample >= 24h old yet (baseline building)"
+                          if rb_ev is not None else "no sample >= 24h old yet (baseline building)")
     run.results["rows_growth"] = res
 
 
