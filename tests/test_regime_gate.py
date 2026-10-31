@@ -124,7 +124,8 @@ def test_vix_7_days_old_is_still_used():
     assert "vix_data_bad" not in r and r["reasons"] == ["vix_gt_30"]
 
 
-def test_apply_bad_vix_logs_warning(tmp_path, capsys):
+def test_apply_bad_vix_logs_warning(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv("JOURNAL_STREAM", raising=False)
     _write_root(tmp_path, [100 + 0.1 * i for i in range(N)], 15)
     (tmp_path / "raw" / "price" / "^VIX.json").write_text(json.dumps({"bars": _bad_vix("nan")}))
     res, allowed = rg.apply(["AAA"], "test", ASOF, root=str(tmp_path), cfg=dict(rg.DEFAULTS))
@@ -316,3 +317,21 @@ def test_paper_driver_defers_rebalance_on_stale_spy(tmp_path, monkeypatch, capsy
     rec = json.loads((tmp_path / "logs" / "paper-regime-gate.jsonl").read_text().splitlines()[-1])
     assert rec["on"] is True and rec["reasons"] == ["spy_data_stale"]
     assert "rebalance DEFERRED" in capsys.readouterr().out
+
+
+def test_bad_vix_line_has_journald_warning_priority_under_systemd(tmp_path, capsys, monkeypatch):
+    """Under systemd the bad-VIX line must carry the <4> (warning) syslog
+    prefix so journald records it at priority 4, not just a text prefix."""
+    monkeypatch.setenv("JOURNAL_STREAM", "8:12345")
+    _write_root(tmp_path, [100 + 0.1 * i for i in range(N)], 15)
+    (tmp_path / "raw" / "price" / "^VIX.json").write_text(json.dumps({"bars": _bad_vix("stale")}))
+    rg.apply(["AAA"], "test", ASOF, root=str(tmp_path), cfg=dict(rg.DEFAULTS))
+    out = capsys.readouterr().out
+    assert out.startswith("<4>WARNING [regime_gate") and "VIX DATA BAD" in out
+
+
+def test_good_vix_line_has_no_priority_prefix_under_systemd(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("JOURNAL_STREAM", "8:12345")
+    _write_root(tmp_path, [100 + 0.1 * i for i in range(N)], 15)
+    rg.apply(["AAA"], "test", ASOF, root=str(tmp_path), cfg=dict(rg.DEFAULTS))
+    assert capsys.readouterr().out.startswith("[regime_gate")

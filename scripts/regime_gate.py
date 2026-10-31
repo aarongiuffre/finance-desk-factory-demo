@@ -225,8 +225,18 @@ def write_log(res, path=None, caller="?", blocked=None):
         msg = "WARNING " + msg
     if rec.get("blocked"):
         msg += f"  BLOCKED {len(rec['blocked'])} new entry(ies): " + ", ".join(map(str, rec["blocked"]))
-    print(msg, flush=True)
+    print(_journal_prefix(rec["level"]) + msg, flush=True)
     return rec
+
+
+def _journal_prefix(level):
+    """Under systemd (JOURNAL_STREAM set: stdout is a journald stream with
+    SyslogLevelPrefix=yes, the default) a leading "<4>" makes journald store
+    the line at priority 4 = warning, so `journalctl -p warning` shows it.
+    Outside systemd (terminal, pytest, cron) stdout stays plain text."""
+    if level == "WARNING" and os.environ.get("JOURNAL_STREAM"):
+        return "<4>"
+    return ""
 
 
 def apply(candidates, caller, asof=None, root=ROOT, cfg=None, log_path=None):
