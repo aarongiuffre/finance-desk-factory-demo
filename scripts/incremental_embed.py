@@ -26,6 +26,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 BATCH = 64
 YIELD_S = 2.0  # sleep between filings so vLLM gets the GPU back
+FLUSH_ROWS = 50_000  # rows per tbl.add (each add = one LanceDB version)
+
+
+def _flush(db, tbl, buf):
+    """Append buffered rows in one write; returns the (possibly new) table."""
+    if not buf:
+        return tbl
+    import edgar_embed as E  # noqa: E402
+    if tbl is None:
+        tbl = db.create_table(E.TABLE, data=list(buf))
+    else:
+        tbl.add(list(buf))
+    buf.clear()
+    return tbl
 
 
 def main():
@@ -42,9 +56,18 @@ def main():
     db = lancedb.connect(E.DB)
     try:
         tbl = db.open_table(E.TABLE)
-        # full chunk_id ledger via arrow (embed venv has no pandas)
-        at = tbl.search().select(["chunk_id"]).limit(20_000_000).to_arrow()
+        # FULL chunk_id ledger via arrow (embed venv has no pandas).  Do NOT
+        # cap this with a fixed .limit(): the old limit(20_000_000) silently
+        # truncated the ledger once the table passed 20M rows, so every pass
+        # re-embedded and re-appended the same filings (duplicate rows, one
+        # LanceDB version per filing, 85k+ manifests -> lance_cleanup in the
+        # daily refresh ran for hours; root cause of the 2026-10-31 hang).
+        n_rows = tbl.count_rows()
+        at = tbl.search().select(["chunk_id"]).limit(max(n_rows, 1)).to_arrow()
         have = set(at.column("chunk_id").to_pylist())
+        if at.num_rows < n_rows:
+            raise SystemExit(f"chunk_id ledger truncated ({at.num_rows} < "
+                             f"{n_rows} rows) — refusing to append duplicates")
     except Exception as e:  # noqa: BLE001
         print(f"vector table unavailable ({e}); will create via append")
         tbl = None
@@ -85,6 +108,7 @@ def main():
                                 model_kwargs={"torch_dtype": torch.bfloat16} if device == "cuda" else None)
 
     total_new = 0
+    buf = []  # batched appends: one LanceDB version per FLUSH_ROWS, not per filing
     for (ticker, form, accdir, md_path, meta_path, acc) in pend:
         meta = json.load(open(meta_path, encoding="utf-8"))
         src = os.path.abspath(md_path)
@@ -109,13 +133,13 @@ def main():
                             convert_to_numpy=True, show_progress_bar=False)
         for i, r in enumerate(rows):
             r["vector"] = vecs[i].tolist()
-        if tbl is None:
-            tbl = db.create_table(E.TABLE, data=rows)
-        else:
-            tbl.add(rows)
+        buf.extend(rows)
+        if len(buf) >= FLUSH_ROWS:
+            tbl = _flush(db, tbl, buf)
         total_new += len(rows)
         print(f"  embedded {ticker} {form} {os.path.basename(accdir)} (+{len(rows)} chunks)")
         time.sleep(YIELD_S)
+    tbl = _flush(db, tbl, buf)
     print(f"incremental pass done: +{total_new} chunks (table now {tbl.count_rows() if tbl else 0})")
     return 0
 

@@ -84,8 +84,13 @@ fi
 
 # Housekeeping runs EVERY day, new filings or not (version pileup grows on
 # quiet days too — Grok-audit nit, fixed 2026-10-08).
-"$EMBED" "$ROOT/scripts/lance_cleanup.py" --days 7 \
-  || echo "lance cleanup failed (non-fatal)"
+# Bounded: on 2026-10-31 cleanup sat >1.5h in planning over an 85k-manifest
+# version pileup (caused by incremental_embed's truncated ledger, fixed) and
+# held the unit in "activating" — the system unit has no TimeoutStartSec.
+# LANCE_CLEANUP_TIMEOUT (default 45m) caps it; timeout exit is non-fatal.
+timeout --signal=TERM --kill-after=60s "${LANCE_CLEANUP_TIMEOUT:-45m}" \
+  "$EMBED" "$ROOT/scripts/lance_cleanup.py" --days 7 \
+  || echo "WARNING: lance cleanup failed or timed out (rc=$?, non-fatal)"
 
 if [[ $NEED -eq 0 ]]; then
   echo "no new parsed filings; skip embed"
