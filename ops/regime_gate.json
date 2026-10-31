@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "sma_days": 200,
+  "high_days": 252,
+  "dd_pct": 10.0,
+  "vix_max": 30.0,
+  "vix_max_stale_days": 7,
+  "fail_closed": true
+}

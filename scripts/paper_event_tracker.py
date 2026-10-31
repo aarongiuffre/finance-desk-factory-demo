@@ -126,6 +126,13 @@ def main(today=None):
     log(f"universe flagged: {sum(cur_snap.values())} INV-active, "
         f"{len(new_events)} new event(s)")
 
+    # market-regime gate (scripts/regime_gate.py): in a broad drawdown, NEW
+    # sim shorts are blocked (logged to logs/paper-regime-gate.jsonl); open
+    # events keep being marked and close on their normal 63d horizon.
+    import regime_gate as rg
+    gate, allowed = rg.apply([e["t"] for e in new_events], "event_tracker", today)
+    new_events = [e for e in new_events if e["t"] in set(allowed)]
+
     # open new events (dedup: not already open from a previous day)
     open_ev = st.get("open", [])
     have = {(e["t"], e["open_date"]) for e in open_ev}
@@ -174,6 +181,7 @@ def main(today=None):
 
     # status file
     lines = [f"PAPER EVENT TRACKER — {dstr}", "=" * 46,
+             rg.summary(gate) + ("  (new sim shorts BLOCKED)" if gate["on"] else ""),
              f"open simulated INV-shorts: {len(still_open)}"]
     for e in still_open:
         lines.append(f"  {e['t']:6s} opened {e['open_date']}  held {e.get('days_held', 0):3d}d  "

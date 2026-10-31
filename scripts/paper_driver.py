@@ -253,7 +253,18 @@ def main():
             log(f"flag sweep failed: {e}")
 
     reb_report, err = None, None
+    gate = None
     if rebalance_due(st.get("last_rebalance")):
+        # market-regime gate (scripts/regime_gate.py): gate ON -> the whole
+        # rebalance is DEFERRED (no buys = no new entries; no sells = existing
+        # positions kept as-is).  The marker is not advanced, so it retries on
+        # the next scheduled run and executes once the gate is OFF.
+        import regime_gate as rg
+        gate, _ = rg.apply(["monthly rebalance"], "paper_driver.rebalance")
+    if gate is not None and gate["on"]:
+        log("rebalance DEFERRED — regime gate ON (" + ", ".join(gate["reasons"])
+            + "); existing positions kept, retry next run")
+    elif gate is not None:
         try:
             reb_report, err = do_rebalance()
             log(f"rebalance executed: {len(reb_report or [])} orders"
@@ -279,6 +290,9 @@ def main():
         pos = api("/v2/positions")
         lines.append(f"equity ${float(acct['equity']):,.0f}   cash ${float(acct['cash']):,.0f}")
         lines.append(f"last rebalance: {st.get('last_rebalance', 'inception 2026-10-01')}")
+        if gate is not None:
+            import regime_gate as rg
+            lines.append(rg.summary(gate) + ("  -> rebalance DEFERRED" if gate["on"] else ""))
         d0 = datetime.date.today()
         next_first = datetime.date(d0.year + (d0.month == 12),
                                    (d0.month % 12) + 1, 1)
