@@ -361,6 +361,32 @@ def q_by_tag_filed(unit_dict, want=None):
     return out
 
 
+# Post-spin continuing-ops basis overrides (manual, sourced — same doctrine as the
+# SHARES manual-override in edgar_screen).  A spin-off distorts the PRICE (the
+# distributed entity's value leaves the stub) while the as-filed XBRL chain keeps
+# reporting the CONSOLIDATED predecessor until every TTM quarter is post-spin
+# (for CTVA: not until ~Q2 2027 filings).  pe = px/eps on that mix is a phantom
+# multiple (CTVA read 7.7x on consolidated EPS vs 48x true).  When a member
+# completes a spin, add an entry here with the PRO FORMA continuing-ops basis
+# from the separation 8-K, and REMOVE it once the facts TTM chain is
+# continuing-ops-clean (then candidate_value's own freshness gate takes over).
+#   d_from    = the date the stub's as-traded price basis began (use the
+#               separation/distribution date from the 8-K)
+#   eps/ni    = pro forma attributable continuing-ops basis, FY-before-spin
+#   source    = filing path for audit
+SPIN_EPS_BASIS = {
+    "CTVA": {
+        "d_from": "2026-10-01",
+        "eps_cont": 0.24,          # diluted EPS from continuing operations, FY2025 pro forma
+        "ni_cont": 161e6,          # net income attributable to New Corteva, FY2025 pro forma
+        "source": "Corteva 8-K 2026-10-01 (accn 0001755672-26-000028), Ex-99: New Corteva "
+                  "unaudited pro forma combined statement of operations FY2025; separation "
+                  "of the seed business into Vylor Inc. completed 2026-10-01 (record date "
+                  "2026-09-24).  New Corteva = crop protection = continuing CTVA.",
+    },
+}
+
+
 def candidate_value(t, d, px=None):
     """(pe, eps_ttm, ni_ttm, eps_end, qpos, nh) or None — point-in-time, gated.
     pe = px / eps_ttm when px given (the ranking key, UNITS: $/$ — verified
@@ -368,6 +394,21 @@ def candidate_value(t, d, px=None):
     f = facts_of(t)
     if not f:
         return None
+    ov = SPIN_EPS_BASIS.get(t)
+    dd = d.isoformat() if hasattr(d, "isoformat") else str(d)
+    if ov and dd >= ov["d_from"]:
+        # Post-spin stub: the as-filed chain is still the consolidated predecessor
+        # (wrong basis vs the stub price) and stays wrong until every TTM quarter
+        # is post-spin.  Rank on the pro forma continuing-ops basis instead and
+        # BYPASS the freshness gate (the pro forma year-end is deliberately older
+        # than 220d until real post-spin quarters accumulate).  See SPIN_EPS_BASIS.
+        eps, ni = ov["eps_cont"], ov["ni_cont"]
+        if not eps or eps <= 0 or not ni or ni <= 0:
+            return None
+        pe = (px / eps) if (px and px > 0) else None
+        if pe is None or not (1.0 <= pe <= 500.0):
+            return None                 # units guard: same as the normal path
+        return (pe, eps, ni, ov["d_from"], None, None)
     asof = facts_asof(f, d)
     usd = asof.get("units", {}).get("USD")
     ush = asof.get("units", {}).get("USD/shares")
