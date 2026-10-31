@@ -12,7 +12,9 @@ Mechanics (each run):
   1. Compute flags (edgar_screen.compute_flags_for — same engine the screen
      and the holdings sweep use) for every universe name with bars.
   2. Diff vs the previous run's snapshot: name with a NEW INV flag today =
-     event.  Entry = that day's close (sim).  Idempotent per day.
+     event.  Entry = that day's bar as read at run time — the 15:45 ET
+     paper-driver snapshot (intraday, NOT the official close; later runs
+     do not re-price it).  Idempotent per day.
   3. Every open event marked to market each run; closed after 63 SPY
      trading days (or last price if the name stops trading mid-event).
   4. Ledger logs/paper-event-ledger.jsonl; status logs/paper-event-status.txt
@@ -119,6 +121,7 @@ def main(today=None):
         inv_now = classify(fl)
         cur_snap[t] = inv_now
         if inv_now and not prev_snap.get(t, False):
+            # entry = the bar available at run time (15:45 ET snapshot), not the close
             px, pxd = price(t, dstr)
             if px:
                 new_events.append({"t": t, "open_date": dstr, "entry_px": px,

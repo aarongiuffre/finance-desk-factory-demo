@@ -260,7 +260,8 @@ def main():
         # positions kept as-is).  The marker is not advanced, so it retries on
         # the next scheduled run and executes once the gate is OFF.
         import regime_gate as rg
-        gate, _ = rg.apply(["monthly rebalance"], "paper_driver.rebalance")
+        gate, _ = rg.apply(["monthly rebalance"], "paper_driver.rebalance",
+                           asof=datetime.date.today())  # SPY freshness vs today
     if gate is not None and gate["on"]:
         log("rebalance DEFERRED — regime gate ON (" + ", ".join(gate["reasons"])
             + "); existing positions kept, retry next run")

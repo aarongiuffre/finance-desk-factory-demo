@@ -1,12 +1,15 @@
 """regime_gate: synthetic price series, no network, tmp_path only.
 
 Pins the documented rule (SPY < SMA200, SPY >= 10% off 252d high, VIX > 30),
-the missing/stale-data behaviour, config/env overrides, the apply() contract
+the 252-session high window, fail-closed SPY data (short / NaN / stale), the
+loud skip-or-block bad-VIX behaviour, config/env overrides, the apply() contract
 (ON blocks every new candidate and logs it; OFF passes them through), and the
-event-tracker wiring (gate ON -> no new sim shorts, open events kept)."""
+event-tracker and paper-driver wiring (gate ON -> no new sim shorts / rebalance
+deferred, open positions kept)."""
 
 import datetime
 import json
+import pathlib
 
 import pytest
 
@@ -76,13 +79,106 @@ def test_future_bars_are_ignored():
     assert r["on"] is False and r["spy_date"] == ASOF
 
 
-def test_stale_or_missing_vix_skips_vix_leg_only():
-    spy = _bars([100 + 0.1 * i for i in range(N)], DATES)
-    old = _vix(80, DATES[:-20])                       # last VIX bar weeks old
-    r = rg.evaluate(spy, old, ASOF)
-    assert r["on"] is False and r["vix_stale"] is True
-    r = rg.evaluate(spy, [], ASOF)
-    assert r["on"] is False and r["vix_stale"] is True
+def _up():
+    return _bars([100 + 0.1 * i for i in range(N)], DATES)
+
+
+def _shift(d, days):
+    return (datetime.date.fromisoformat(d) + datetime.timedelta(days=days)).isoformat()
+
+
+def _bad_vix(kind):
+    if kind == "missing":
+        return []
+    if kind == "stale":   # last VIX bar 8 calendar days before asof (> 7)
+        return _vix(15, [d for d in DATES if d <= _shift(ASOF, -8)])
+    return _bars([15.0] * (N - 1) + [float("nan")], DATES)          # "nan"
+
+
+@pytest.mark.parametrize("kind", ["missing", "stale", "nan"])
+def test_bad_vix_default_skips_leg_loudly(kind):
+    r = rg.evaluate(_up(), _bad_vix(kind), ASOF)
+    assert r["on"] is False and r["reasons"] == []
+    assert r["vix_data_bad"] is True and r["level"] == "WARNING"
+    assert r["vix_bad_why"].startswith(kind)
+    assert "WARNING: VIX DATA BAD" in rg.summary(r) and "VIX leg skipped" in rg.summary(r)
+
+
+@pytest.mark.parametrize("kind", ["missing", "stale", "nan"])
+def test_bad_vix_block_mode_turns_gate_on(kind):
+    cfg = dict(rg.DEFAULTS, vix_bad_block=True)
+    r = rg.evaluate(_up(), _bad_vix(kind), ASOF, cfg)
+    assert r["on"] is True and r["reasons"] == ["vix_data_bad"] and r["level"] == "WARNING"
+
+
+def test_bad_vix_block_is_off_by_default_and_env_switchable():
+    assert rg.DEFAULTS["vix_bad_block"] is False
+    shipped = json.loads((pathlib.Path(__file__).resolve().parents[1] / "ops" / "regime_gate.json").read_text())
+    assert shipped.get("vix_bad_block", False) is False
+    assert rg.load_config(path="/nonexistent", env={"REGIME_VIX_BAD_BLOCK": "1"})["vix_bad_block"] is True
+
+
+def test_vix_7_days_old_is_still_used():
+    vix = _vix(45, [d for d in DATES if d <= _shift(ASOF, -7)])
+    r = rg.evaluate(_up(), vix, ASOF)
+    assert "vix_data_bad" not in r and r["reasons"] == ["vix_gt_30"]
+
+
+def test_apply_bad_vix_logs_warning(tmp_path, capsys):
+    _write_root(tmp_path, [100 + 0.1 * i for i in range(N)], 15)
+    (tmp_path / "raw" / "price" / "^VIX.json").write_text(json.dumps({"bars": _bad_vix("nan")}))
+    res, allowed = rg.apply(["AAA"], "test", ASOF, root=str(tmp_path), cfg=dict(rg.DEFAULTS))
+    assert res["on"] is False and allowed == ["AAA"]
+    rec = json.loads((tmp_path / "logs" / "paper-regime-gate.jsonl").read_text())
+    assert rec["level"] == "WARNING" and rec["vix_data_bad"] is True
+    out = capsys.readouterr().out
+    assert out.startswith("WARNING [regime_gate") and "VIX DATA BAD" in out
+
+
+def test_high_window_is_252_sessions():
+    """Peak 100 sessions ago, -11% now, still above SMA200: the 252d window
+    sees the drawdown, a 20d window would not.  An older, higher peak (290
+    sessions ago) must NOT count.  Fails if high_days is changed."""
+    assert rg.DEFAULTS["high_days"] == 252
+    shipped = json.loads((pathlib.Path(__file__).resolve().parents[1] / "ops" / "regime_gate.json").read_text())
+    assert shipped["high_days"] == 252 and shipped["sma_days"] == 200
+    closes = [300.0] * 10 + [50.0] * 50 + [50 + (i + 1) * (100 / 140) for i in range(140)] + [133.0] * 100
+    assert len(closes) == N and max(closes[-252:]) == 150.0
+    spy = _bars(closes, DATES)
+    r = rg.evaluate(spy, _vix(15), ASOF)
+    assert r["spy_high"] == 150.0 and r["spy_close"] > r["spy_sma"]
+    assert r["on"] is True and r["reasons"] == ["spy_drawdown_ge_10pct"]
+    r20 = rg.evaluate(spy, _vix(15), ASOF, dict(rg.DEFAULTS, high_days=20))
+    assert r20["on"] is False                      # a 20d window misses it
+    rall = rg.evaluate(spy, _vix(15), ASOF, dict(rg.DEFAULTS, high_days=N))
+    assert rall["spy_high"] == 300.0               # whole history would see the old peak
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), 0.0, None])
+def test_bad_spy_value_in_window_fails_closed(bad):
+    bars = _up()
+    bars[-50]["a"] = bad
+    bars[-50]["c"] = bad
+    r = rg.evaluate(bars, _vix(15), ASOF)
+    assert r["on"] is True and r["reasons"] == ["spy_data_bad_nan"]
+    assert rg.evaluate(bars, _vix(15), ASOF, dict(rg.DEFAULTS, fail_closed=False))["on"] is False
+    bars = _up()
+    bars[-1]["a"] = bad
+    bars[-1]["c"] = bad
+    assert rg.evaluate(bars, _vix(15), ASOF)["reasons"] == ["spy_data_bad_nan"]
+
+
+def test_stale_spy_fails_closed():
+    assert rg.DEFAULTS["spy_max_age_days"] == 5
+    spy = _up()
+    ok = rg.evaluate(spy, _vix(15), _shift(ASOF, 5))     # 5 days old: still fresh
+    assert ok["reasons"] == [] or "spy_data_stale" not in ok["reasons"]
+    r = rg.evaluate(spy, _vix(15), _shift(ASOF, 6))      # 6 days old: stale
+    assert r["on"] is True and r["reasons"] == ["spy_data_stale"] and r["spy_age_days"] == 6
+    cfg = dict(rg.DEFAULTS, fail_closed=False)
+    assert rg.evaluate(spy, _vix(15), _shift(ASOF, 6), cfg)["on"] is False
+    cfg = rg.load_config(path="/nonexistent", env={"REGIME_SPY_MAX_AGE_DAYS": "10"})
+    assert rg.evaluate(spy, _vix(15), _shift(ASOF, 6), cfg)["on"] is False
 
 
 def test_short_spy_history_fails_closed_unless_configured():
@@ -168,3 +264,55 @@ def test_event_tracker_blocks_new_keeps_open(tmp_path, monkeypatch, gate_on):
     assert gl["on"] is gate_on and gl["blocked"] == (["NEW"] if gate_on else [])
     status = (logs / "status.txt").read_text()
     assert ("regime gate ON" in status) is gate_on
+
+
+def test_event_tracker_status_flags_bad_vix(tmp_path, monkeypatch):
+    import paper_event_tracker as pet
+    _write_root(tmp_path, [100 + 0.1 * i for i in range(N)], 15)
+    (tmp_path / "raw" / "price" / "^VIX.json").write_text(json.dumps({"bars": []}))
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    for attr, f in (("ROOT", ""), ("LEDGER", "ledger.jsonl"), ("STATE_F", "state.json"), ("STATUS", "status.txt")):
+        monkeypatch.setattr(pet, attr, str(tmp_path) if not f else str(logs / f))
+    real_apply = rg.apply
+    monkeypatch.setattr(rg, "apply", lambda c, caller, asof=None, **k:
+                        real_apply(c, caller, asof, root=str(tmp_path), cfg=dict(rg.DEFAULTS)))
+    monkeypatch.setattr(pet, "universe_names", lambda: ["NEW"])
+    monkeypatch.setattr(pet, "flags_for", lambda t, d: ["INVENTORY build"])
+    monkeypatch.setattr(pet, "price", lambda t, d: (50.0, ASOF))
+    pet.main(datetime.date.fromisoformat(ASOF))
+    status = (logs / "status.txt").read_text()
+    assert "WARNING: VIX DATA BAD" in status and "regime gate OFF" in status
+
+
+def test_paper_driver_defers_rebalance_on_stale_spy(tmp_path, monkeypatch, capsys):
+    """Driver path: rg.apply gets asof=today, so SPY bars that stopped
+    months ago fail closed -> rebalance DEFERRED, nothing traded."""
+    import paper_driver as pd
+    import paper_event_tracker as pet
+    _write_root(tmp_path, [100 + 0.1 * i for i in range(N)], 15)   # ends early 2026
+    seen = {}
+    real_apply = rg.apply
+
+    def fake_apply(c, caller, asof=None, **k):
+        seen["asof"] = asof
+        return real_apply(c, caller, asof, root=str(tmp_path), cfg=dict(rg.DEFAULTS))
+    monkeypatch.setattr(rg, "apply", fake_apply)
+    monkeypatch.setattr(pd, "STATE_F", str(tmp_path / "state.json"))
+    monkeypatch.setattr(pd, "STATUS_F", str(tmp_path / "status.txt"))
+    monkeypatch.setattr(pd, "market_open_today", lambda: True)
+    monkeypatch.setattr(pd, "load_state", lambda: {"holdings": []})
+    monkeypatch.setattr(pd, "rebalance_due", lambda last: True)
+    called = []
+    monkeypatch.setattr(pd, "do_rebalance", lambda: called.append(1) or ([], None))
+
+    def no_api(*a, **k):
+        raise RuntimeError("no network in tests")
+    monkeypatch.setattr(pd, "api", no_api)
+    monkeypatch.setattr(pet, "main", lambda *a, **k: None)
+    pd.main()
+    assert seen["asof"] == datetime.date.today()
+    assert called == []
+    rec = json.loads((tmp_path / "logs" / "paper-regime-gate.jsonl").read_text().splitlines()[-1])
+    assert rec["on"] is True and rec["reasons"] == ["spy_data_stale"]
+    assert "rebalance DEFERRED" in capsys.readouterr().out

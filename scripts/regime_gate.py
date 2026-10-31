@@ -14,17 +14,25 @@ close "a" from raw/price/SPY.json, ^VIX the index close):
            or  ^VIX close >  vix_max                        [default 30]
   gate OFF otherwise.
 
-Missing data:
-  - SPY missing / shorter than max(sma_days, high_days) -> ON when
-    fail_closed (default true), reason "spy_data_unavailable".
-  - ^VIX missing or its last bar older than vix_max_stale_days calendar days
-    before the SPY bar -> the VIX leg is skipped (logged "vix_stale"); the
-    SPY legs still decide.
+Bad SPY data FAILS CLOSED (gate ON when fail_closed, default true):
+  - SPY missing / shorter than max(sma_days, high_days) -> "spy_data_unavailable"
+  - a NaN / inf / non-positive close in the window used    -> "spy_data_bad_nan"
+  - latest SPY bar more than spy_max_age_days calendar days
+    before the evaluation day [default 5]                   -> "spy_data_stale"
+Bad ^VIX data (missing, NaN/non-positive close, or last bar more than
+vix_max_stale_days calendar days before the evaluation day [default 7]):
+  - default (vix_bad_block=false): the VIX leg is SKIPPED, loudly — the
+    record gets level "WARNING", vix_data_bad=true and vix_bad_why, the
+    journal line starts with "WARNING", and summary() (which both paper
+    status files print) shows "WARNING: VIX DATA BAD (...) — VIX leg skipped".
+    The SPY legs still decide.
+  - vix_bad_block=true: gate ON with reason "vix_data_bad" (same warning).
 
 Config (later wins): built-in DEFAULTS -> JSON file ops/regime_gate.json
 (optional; path override REGIME_GATE_CONFIG) -> env vars
 REGIME_GATE_ENABLED (0/1), REGIME_SMA_DAYS, REGIME_HIGH_DAYS, REGIME_DD_PCT,
-REGIME_VIX_MAX, REGIME_VIX_MAX_STALE_DAYS, REGIME_FAIL_CLOSED (0/1).
+REGIME_VIX_MAX, REGIME_VIX_MAX_STALE_DAYS, REGIME_FAIL_CLOSED (0/1),
+REGIME_SPY_MAX_AGE_DAYS, REGIME_VIX_BAD_BLOCK (0/1).
 enabled=false -> gate always OFF (reason "disabled"), still logged.
 
 Every evaluation appends one JSON line to logs/paper-regime-gate.jsonl
@@ -35,6 +43,7 @@ entries they blocked.
 """
 import datetime
 import json
+import math
 import os
 import sys
 
@@ -50,6 +59,8 @@ DEFAULTS = {
     "vix_max": 30.0,
     "vix_max_stale_days": 7,
     "fail_closed": True,
+    "spy_max_age_days": 5,
+    "vix_bad_block": False,
 }
 _ENV = {
     "enabled": ("REGIME_GATE_ENABLED", "bool"),
@@ -59,6 +70,8 @@ _ENV = {
     "vix_max": ("REGIME_VIX_MAX", float),
     "vix_max_stale_days": ("REGIME_VIX_MAX_STALE_DAYS", int),
     "fail_closed": ("REGIME_FAIL_CLOSED", "bool"),
+    "spy_max_age_days": ("REGIME_SPY_MAX_AGE_DAYS", int),
+    "vix_bad_block": ("REGIME_VIX_BAD_BLOCK", "bool"),
 }
 
 
@@ -81,9 +94,28 @@ def load_config(path=None, env=None):
 
 def _closes(bars, asof):
     """[(date, close)] ascending, dated <= asof; adjusted close when present."""
-    out = [(b["d"], float(b.get("a") or b["c"])) for b in bars if b["d"] <= asof]
+    out = []
+    for b in bars:
+        if b["d"] > asof:
+            continue
+        v = b.get("a")
+        if v is None:
+            v = b.get("c")
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            v = float("nan")
+        out.append((b["d"], v))
     out.sort()
     return out
+
+
+def _good(v):
+    return math.isfinite(v) and v > 0
+
+
+def _age(d, asof):
+    return (datetime.date.fromisoformat(asof) - datetime.date.fromisoformat(d)).days
 
 
 def evaluate(spy_bars, vix_bars, asof, cfg=None):
@@ -101,12 +133,21 @@ def evaluate(spy_bars, vix_bars, asof, cfg=None):
         res["reasons"] = ["spy_data_unavailable"]
         res["spy_bars"] = len(spy)
         return res
+    vals = [c for _, c in spy[-need:]]
     spy_d, spy_c = spy[-1]
-    vals = [c for _, c in spy]
+    res["spy_date"] = spy_d
+    bad = [r for r, hit in (
+        ("spy_data_bad_nan", not all(_good(v) for v in vals)),
+        ("spy_data_stale", _age(spy_d, asof) > cfg["spy_max_age_days"])) if hit]
+    if bad:
+        res["on"] = bool(cfg["fail_closed"])
+        res["reasons"] = bad
+        res["spy_age_days"] = _age(spy_d, asof)
+        return res
     sma = sum(vals[-cfg["sma_days"]:]) / cfg["sma_days"]
     hi = max(vals[-cfg["high_days"]:])
     off_hi = (spy_c / hi - 1) * 100.0
-    res.update({"spy_date": spy_d, "spy_close": round(spy_c, 4),
+    res.update({"spy_close": round(spy_c, 4),
                 "spy_sma": round(sma, 4),
                 "spy_vs_sma_pct": round((spy_c / sma - 1) * 100.0, 3),
                 "spy_high": round(hi, 4), "spy_off_high_pct": round(off_hi, 3)})
@@ -115,17 +156,23 @@ def evaluate(spy_bars, vix_bars, asof, cfg=None):
     if off_hi <= -cfg["dd_pct"]:
         res["reasons"].append(f"spy_drawdown_ge_{cfg['dd_pct']:g}pct")
     vix = _closes(vix_bars or [], asof)
-    stale = True
+    why = "missing"
     if vix:
         vd, vc = vix[-1]
-        lag = (datetime.date.fromisoformat(spy_d) - datetime.date.fromisoformat(vd)).days
-        stale = lag > cfg["vix_max_stale_days"]
-        res.update({"vix_date": vd, "vix_close": round(vc, 4)})
-        if not stale and vc > cfg["vix_max"]:
-            res["reasons"].append(f"vix_gt_{cfg['vix_max']:g}")
-    if stale:
-        res["vix_stale"] = True
-    res["on"] = any(not r.startswith("vix_stale") for r in res["reasons"])
+        res.update({"vix_date": vd, "vix_close": round(vc, 4) if math.isfinite(vc) else None})
+        if not _good(vc):
+            why = "nan"
+        elif _age(vd, asof) > cfg["vix_max_stale_days"]:
+            why = f"stale {_age(vd, asof)}d"
+        else:
+            why = None
+            if vc > cfg["vix_max"]:
+                res["reasons"].append(f"vix_gt_{cfg['vix_max']:g}")
+    if why:
+        res.update({"vix_data_bad": True, "vix_bad_why": why, "level": "WARNING"})
+        if cfg["vix_bad_block"]:
+            res["reasons"].append("vix_data_bad")
+    res["on"] = bool(res["reasons"])
     return res
 
 
@@ -153,11 +200,12 @@ def summary(res):
         parts.append(f"SPY {res['spy_close']:.2f} ({res['spy_date']}) "
                      f"vs SMA{res['config']['sma_days']} {res['spy_vs_sma_pct']:+.2f}%, "
                      f"off {res['config']['high_days']}d high {res['spy_off_high_pct']:+.2f}%")
-    if "vix_close" in res:
-        parts.append(f"VIX {res['vix_close']:.2f} ({res['vix_date']})"
-                     + (" STALE" if res.get("vix_stale") else ""))
-    elif res.get("vix_stale"):
-        parts.append("VIX missing")
+    if res.get("vix_data_bad"):
+        act = ("gate ON (vix_bad_block)" if res["config"].get("vix_bad_block")
+               else "VIX leg skipped")
+        parts.append(f"WARNING: VIX DATA BAD ({res.get('vix_bad_why')}) — {act}")
+    elif res.get("vix_close") is not None:
+        parts.append(f"VIX {res['vix_close']:.2f} ({res['vix_date']})")
     return "  ".join(parts)
 
 
@@ -165,7 +213,7 @@ def write_log(res, path=None, caller="?", blocked=None):
     """Append one JSON line (state, reasons, values, blocked entries) and
     print a journal line.  path defaults to logs/paper-regime-gate.jsonl."""
     path = path or GATE_LOG
-    rec = dict(res, caller=caller,
+    rec = dict(res, caller=caller, level=res.get("level", "INFO"),
                logged_at=datetime.datetime.now().isoformat(timespec="seconds"))
     if blocked is not None:
         rec["blocked"] = list(blocked)
@@ -173,6 +221,8 @@ def write_log(res, path=None, caller="?", blocked=None):
     with open(path, "a") as fh:
         fh.write(json.dumps(rec) + "\n")
     msg = f"[regime_gate {res['asof']}] {caller}: {summary(res)}"
+    if rec["level"] == "WARNING":
+        msg = "WARNING " + msg
     if rec.get("blocked"):
         msg += f"  BLOCKED {len(rec['blocked'])} new entry(ies): " + ", ".join(map(str, rec["blocked"]))
     print(msg, flush=True)

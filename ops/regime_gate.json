@@ -5,5 +5,7 @@
   "dd_pct": 10.0,
   "vix_max": 30.0,
   "vix_max_stale_days": 7,
-  "fail_closed": true
+  "fail_closed": true,
+  "spy_max_age_days": 5,
+  "vix_bad_block": false
 }
