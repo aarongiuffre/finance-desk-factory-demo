@@ -19,7 +19,7 @@ import statistics as st
 import sys
 
 ROOT = "/data/finance"
-FOLD = ("2016-01-01", "2019-12-31")
+FOLD = ("2014-01-01", "2019-12-31")  # bars start ~2014-04; cutoff 2019-12-31
 
 
 def check_stats_block(name, b, failures):
@@ -30,20 +30,17 @@ def check_stats_block(name, b, failures):
     if not (isinstance(n, int) and n > 0):
         failures.append(f"{name}: n={n} not a positive int")
         return
-    if b.get("cagr") is None or b.get("tstat_mo") is None:
-        failures.append(f"{name}: missing cagr/tstat_mo")
+    # monthly blocks carry tstat_mo; daily blocks carry tstat_day
+    tkey = "tstat_mo" if "tstat_mo" in b else (
+        "tstat_day" if "tstat_day" in b else None)
+    if b.get("cagr") is None or tkey is None:
+        failures.append(f"{name}: missing cagr/{tkey}")
         return
-    if not (FOLD[0] <= "2016" <= FOLD[1]):
-        pass
-    # consistency: cagr must match (1+arith_mean)^12 - 1 when vol_ann>0 implies
-    # geometric drift differs from arithmetic compounding only via variance;
-    # exact check needs the series, so bound it: |cagr| <= |mean|*12 + vol^2
-    mean = b.get("rel_mo")  # not the series mean; skip precise recompute
     if b["cagr"] < -1.0:
         failures.append(f"{name}: cagr < -100%")
     sd = b.get("vol_ann", 0.0)
-    if sd and abs(b["tstat_mo"]) > n ** 0.5 * 10:
-        failures.append(f"{name}: tstat {b['tstat_mo']} impossible for n={n}")
+    if sd and abs(b[tkey]) > n ** 0.5 * 10:
+        failures.append(f"{name}: tstat {b[tkey]} impossible for n={n}")
 
 
 def main():
@@ -60,15 +57,24 @@ def main():
         except Exception as e:
             failures.append(f"{base}: JSON parse error {e}")
             continue
-        for k in ("tag", "paper", "window", "params", "caveat"):
+        for k in ("tag", "paper", "params", "caveat"):
             if k not in d:
                 failures.append(f"{base}: missing key {k}")
         w = d.get("window")
-        if isinstance(w, list) and len(w) == 2:
-            def norm(s):
-                return s + "-01" if len(s) == 7 else s
-            if not (norm(w[0]) >= FOLD[0] and norm(w[1]) <= FOLD[1]):
-                failures.append(f"{base}: window {w} outside fold")
+        if w is None and isinstance(d.get("runs"), dict):
+            w = [r.get("window") for r in d["runs"].values()
+                 if isinstance(r, dict) and r.get("window")]
+        if w is not None:
+            for wi in (w if isinstance(w, list) and w and
+                       isinstance(w[0], list) else [w]):
+                if (isinstance(wi, list) and len(wi) == 2
+                        and all(isinstance(s, str) for s in wi)):
+                    def norm(s):
+                        return s + "-01" if len(s) == 7 else s
+                    if not (norm(wi[0]) >= FOLD[0] and norm(wi[1]) <= FOLD[1]):
+                        failures.append(f"{base}: window {wi} outside fold")
+        elif "window" not in d:
+            failures.append(f"{base}: missing key window")
         if "dev diagnostic" not in str(d.get("caveat", "")):
             failures.append(f"{base}: caveat missing dev-diagnostic framing")
         tag = d.get("tag")
