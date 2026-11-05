@@ -383,6 +383,31 @@ nowhere near the rule → **mechanism NOT SUPPORTED; E3 CLOSED**. Short
 interest adds no measurable signal and does not rescue the parked value line
 on the free stack. Evidence: logs/si_fm.json, tlogs/finra_si3.log.
 
+## 2026-11-05 — QS SPY timing batch: ALL FIVE FAIL the pinned rule — publication decay confirmed (dev diagnostic, final)
+
+User-directed (ops/qs_strategy_triage.md): the 5 shortlisted
+QuantifiedStrategies.com SPY index-timing strategies, replicated on OUR
+window (2014-01..2026-11 full SPY daily, 20bps/side, entry-at-signal-close
+convention, one pass). Harness validated against QS's own exposure claims
+(down-week 43.1% vs their 42%). Two implementation bugs caught BEFORE
+trusting numbers (B&H position vector; entry-day return booked for
+close-entry strategies — a systematic negative bias; Fri->Mon week boundary
+needed gap>=3). RESULTS: SPY B&H +11.4% CAGR / -34.1% maxDD / Sharpe 0.72.
+failed bounce -6.6% (claimed +5.8% ann, 77% win — BROKEN on our window,
+article itself admits decay); turn-of-month +1.5% / -18.3% maxDD (claimed
+7.11% since 1960 — the modern decade carries almost none of it); four down
+days +0.8%; down week +2.1% at 43% exposure (claimed 9.3% — decayed);
+RSI(2) classic +0.5% (dead after costs). Post-2024 subwindows all positive
+but dwarfed by SPY's +70.7%. Per the pinned verdict rule (CAGR>=SPY or
+comparable-CAGR maxDD improvement AND post-2024 non-negative): NOTHING
+graduates to a prereg. Standing record: daily SPY mean-reversion/
+seasonality timing claims from the retail-strategy literature decay to
+~zero on the decade after publication, at realistic costs — same doctrine
+the H2 lazy-prices test established for academic publications. The
+turn-of-month maxDD profile (-18.3% at 33% exposure) is the only non-trivial
+survivor, and it is a risk-overlay curiosity, not an alpha. Evidence:
+logs/qs_timing_dev.json, scripts/qs_timing_dev.py.
+
 ## 2026-11-05 — NQ_holdout_final: NOT ESTABLISHED — PROGRAM CLOSED, HOLDOUT SPENT (final)
 
 Prereg 1ad63c2 (pinned before any holdout return was computed; coverage-only
