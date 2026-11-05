@@ -1,0 +1,40 @@
+# PRE-REGISTRATION - NQ_insider_netbuy (NASDAQ insider-trading family, E5).
+# Written 2026-11-05 BEFORE the verdict run.  Authorized by Aaron ("go ahead
+# with all avenues").  Data: facts/insider/<CIK>.json built 2026-11-05 from
+# LOCAL raw/dera_insider form 3/4/5 zips (18,184 issuer files; per-CIK monthly
+# buys/sells in shares and USD, filed months 2006-01..2026-09).  New family -
+# no prior prereg examined insider flows.
+#
+# Signal (fixed NOW): ins = net_usd_3mo / mcap, where net_usd_3mo = sum of
+#   monthly net_usd over the trailing 3 filed months (m-2..m; deriv_net_usd
+#   NOT included - derivative rows are mostly 10b5-1/compensation noise).
+#   Names with NO insider filing in the trailing 3 months are MISSING
+#   (excluded from that month's cross-section for this char), not zero:
+#   no-filing must not be conflated with balanced buying/selling.
+#   mcap = exp(size) from the stage-2 cross-section (PIT month-end).
+# PIT rule: for cross-section month x, only filings with filed month <= x
+#   are used (Form 4 deadline is 2 business days - month-end aggregation is
+#   conservative).  No lookahead anywhere.
+#
+# Window: pooled 2014-07..2024-03 (same as E1); holdout 2024-04+ SEALED.
+# Estimator: fm_controlled (FF49 dummies, r1 winsorized, z +/-3) on plain r1
+#   - PRIMARY; r1_resid (FF5-residualized, PIT expanding betas) - SECONDARY.
+#   Control set: mom, size, FF49 dummies (identical to E1 run).
+#
+# Priors (fixed NOW): net insider BUYING precedes modest positive drift
+#   (literature: Lakonishok-Lee and successors find weak positive); net
+#   SELLING is weak/no signal (diversification motives dominate).  Expect
+#   |t| modest even if real; power is the known enemy of this program.
+#
+# Verdict rules (fixed NOW):
+#   - PRIMARY: pooled FM t of ins on plain r1, |t|>=2 AND positive sign =
+#     ESTABLISHED -> separate follow-up prereg (sleeve/filter test).
+#     |t|<1 = not established; 1<=|t|<2 = gray, report and stop.
+#   - SECONDARY: same on r1_resid; sign split buy-heavy vs sell-heavy deciles.
+#   - Coverage note: insider filings concentrate in small caps - report the
+#     cross-sectional coverage share per month; if median monthly coverage
+#     < 10% of names, the char is coverage-starved and results flagged
+#     accordingly BEFORE looking at t.
+#   - One pass. Report everything, including sign contradictions.
+#
+# Reporting: logs/insider_fm.json, HISTORY.md, finance-desk skill.
