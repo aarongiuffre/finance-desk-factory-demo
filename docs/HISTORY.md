@@ -260,3 +260,19 @@ Prereg a2fa9a3 (written + committed BEFORE the run, Aaron authorized). Window
   a pooled dev+modern test with holdout untouched would need its own prereg.
   Nothing actionable for the live book. Evidence: logs/nasdaq_fm_modern.json
   (+ cs cache regenerable), tlogs/nasdaq_stage2_modern.log.
+
+## 2026-11-05 — NQ_pooled_dev_modern: NOT ESTABLISHED, line parked (final)
+
+Prereg 47a84a2 (committed before the run). Pooled 2014-07..2024-03: 115
+months, 204,797 name-months, one estimator pass, dev spec verbatim. PRIMARY
+pooled cheap_small_3rd rel ONEQ: +95.3bp/mo, t=+0.11 (|t| << 2, same sign as
+both components). Ruling per prereg: NOT ESTABLISHED — and pooling did not
+even raise t above the component windows (0.19/0.09), meaning the monthly
+rel-return series carries essentially zero signal-to-noise; more windows of
+this data cannot change that. Per the prereg this is FINAL for the dataset:
+the NASDAQ cheap-sleeve line is PARKED, not killed-by-refutation — the sign
+was stable in both regimes — but no data source at hand can add power.
+Pooled FM EP -0.18/-0.20 (value mildly negative, consistent with both
+components). Pooled S3 dead-share 40.9% (between components, as expected).
+Holdout 2024-04+ remains sealed. Evidence: logs/nasdaq_fm_pooled.json
+(+ cs cache regenerable), tlogs/nasdaq_stage2_pooled.log.
