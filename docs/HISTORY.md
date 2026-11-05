@@ -383,6 +383,35 @@ nowhere near the rule → **mechanism NOT SUPPORTED; E3 CLOSED**. Short
 interest adds no measurable signal and does not rescue the parked value line
 on the free stack. Evidence: logs/si_fm.json, tlogs/finra_si3.log.
 
+## 2026-11-05 — NQ_holdout_final: NOT ESTABLISHED — PROGRAM CLOSED, HOLDOUT SPENT (final)
+
+Prereg 1ad63c2 (pinned before any holdout return was computed; coverage-only
+checks pre-pin). THE one sealed-holdout read, 2024-04..2026-09, 30 complete
+months, dev-spec verbatim. PRIMARY cheap_small_3rd rel ONEQ: **+159bp/mo
+t=+0.19** (rel SPY +156 t=0.19) — per rule |t|>=2 AND +: NOT ESTABLISHED.
+The sign survives a FOURTH never-touched regime (+88.5 dev / +105.5 modern /
++95.3 pooled / +159 holdout bp/mo), the magnitude is even the largest of the
+four, but t never left [0.09, 0.40] anywhere — the monthly rel series
+carries ~zero signal-to-noise, forever. SECONDARY (report-all): ep FM
+-243.9bp t=-0.39 (value NEGATIVE-sign on ep in the holdout too);
+bm controlled +75.8bp t=+0.53 (ff5-only +0.64 — highest t the program ever
+produced, still |t|<1, sign-stable across every control arrangement);
+bm cheap10 -447.6bp t=-0.57 (bm-cheap NEGATIVE again — the pooled artifact
+finding replicates); mom +46.9 t=0.44; size +77.9 t=1.38 (small-cap
+tailwind in the holdout window — context, not signal); ep cheap sleeves
++136/+148/+74bp all t<=0.24. Junk-pile autopsy: dead-ticker share 2.9%
+(dead arm working), no-shares 22.1%, cheap picks 58.6% large-cap.
+FF5-residualization starved as designed (6,898 rows residualized of 69k).
+Design note: one plumbing retry (stage3 arg-wiring SyntaxError) fixed
+before any stage3 number was read — within the prereg's documented retry
+clause. PER THE PREREG'S FIXED RULE: the NASDAQ edge program is now CLOSED
+— no further value preregs on this dataset, holdout SPENT, no further
+reads. What survives: a sign-stable, unmeasurable cheap+small tilt (the
+honest record on four windows), a complete free-data test stack with
+factor controls, and a dead-price/data-artifact methodology that killed
+every apparent alpha it examined. Evidence: logs/nasdaq_fm_holdout.json,
+logs/nasdaq_fm_holdout_bm.json, tlogs/nasdaq_stage{2,3}_holdout.log.
+
 ## 2026-11-05 — NQ_insider_netbuy: NOT ESTABLISHED (E5, one pass)
 
 Prereg 9094e2e (before the run). Signal ins = net_usd_3mo/mcap (excl.

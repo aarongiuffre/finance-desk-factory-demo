@@ -1573,3 +1573,11 @@ families:
                                # logs/edge/EW3_ch2_skew_smoke/.
     kind: hypothesis
     hypotheses: [EW3_ch2_skew_smoke]
+  NQ_holdout_final:             # THE one sealed NASDAQ holdout read (2024-04..2026-09,
+    spent: true                 # 30mo, ungated regime test, prereg 1ad63c2 2026-11-05).
+                                # cheap_small_3rd rel ONEQ +159bp t=0.19 -> NOT
+                                # ESTABLISHED (rule |t|>=2). Sign-stable 4th regime,
+                                # SNR ~zero. NASDAQ edge program CLOSED, no further
+                                # reads. Evidence logs/nasdaq_fm_holdout*.json.
+    kind: hypothesis
+    hypotheses: [NQ_holdout_final]
