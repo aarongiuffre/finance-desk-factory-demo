@@ -190,6 +190,17 @@ def build_cross_sections():
                 except (OSError, ValueError):
                     f = None
                 break
+        # EPS coverage fallback (Stage 3 fill, facts/nasdaq_eps): f is consumed
+        # only by eps_ttm_at, so if the first-found file lacks the Diluted tag
+        # we may substitute the DERA-derived EPS-only file wholesale.  No
+        # existing facts file is ever modified (PIT rule).
+        if not (f and f.get("units", {}).get("USD/shares", {}).get("EarningsPerShareDiluted")):
+            p = os.path.join(ROOT, "facts/nasdaq_eps", f"{t}.json")
+            if os.path.exists(p):
+                try:
+                    f = json.load(open(p))
+                except (OSError, ValueError):
+                    pass
         prof = profiles.get(cik_of.get(t, ""), {})
         series[t] = {"bars": bars, "facts": f, "shares": prof.get("shares") or [],
                      "sector": prof.get("sector"), "dead": t in dead_names}

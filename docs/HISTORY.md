@@ -191,6 +191,7 @@ One-liners with commit hashes; deep dives live where noted.
 ## 2026-10-28 — EODHD dropped from nightly nasdaq-watch-filings
 
 Aaron via VP: do not renew EODHD. Gate `EODHD_DISABLED=1` in unit drop-in; roster diff via NASDAQ Trader nasdaqlisted.txt (Yahoo 10y init for new listings); no EODHD dead-tier fill on delist. CIK + quarter scan + drain remain. Archive h1_universe + EODHD_MANIFEST kept. Evidence: `/workspace/finance/desk-status-20261028/eodhd-drop/`.
+
 - 2026-10-28 evening — W2d_skew rebuilt and KILLED at tune; thin Ch2 skew smoke KILLED
   (Aaron chat-tap via VP: free MIT options parquet ingest, SPY/QQQ/IWM, QC PASS at
   raw/options/QC.md).  New preregs EW3_w2d_skew + EW3_ch2_skew_smoke committed a15ce2f
@@ -210,3 +211,28 @@ Aaron via VP: do not renew EODHD. Gate `EODHD_DISABLED=1` in unit drop-in; roste
   workdir deliverables VERDICT.md (KILL) + SUMMARY.md.  REGISTRY 135 -> 137 (both new
   families retired).  No KEEP_TUNE -> SURVIVORS.md untouched.  pyarrow 25.0.1 added to
   .venv-crypto for parquet reads.  Session 20261028_191340_9199e9.
+
+## 2026-11-05 — EODHD retirement finished; NASDAQ value verdict closed on every data lever
+
+EODHD retired as a dependency (commits 70d0690, 1265e34): the Oct-28 EODHD-off
+drop-in had never actually been created (watch was still hitting the dead key);
+price gap sweeps from live Yahoo took the live tier to 100.0% (4,069/4,069) and
+dead tier to 97.9% (1,965/2,007), including a name-based resolver for the
+ticker-change class (ASBC->ASB, EK->KODK, AEN->AMC; 23 resolved) and a nightly
+watch duplicate-append bug fix (29 dupes). Remaining 42 dead gaps are
+Yahoo-purged 2000s-2010s delistings — permanent free-stack boundary
+(logs/dead_fill_yahoo.jsonl).
+
+Stage 2 re-run on the repaired tree: the cheap+mid sleeve halved
+(+127 -> +54bp/mo rel ONEQ, t 0.16 -> 0.09) — mid-cap cheap "alpha" was
+substantially dead-price artifact. EPS coverage then filled from local DERA
+zips (scripts/nasdaq_eps_fill.py -> facts/nasdaq_eps/, 564 tickers with series,
+500 diluted + 64 basic; no existing facts file touched, Stage 2 consumes it as
+EPS-only fallback): +63 dev-window EP gains, S3 dead-share 58.6% -> 57.7%, all
+sleeves/FM within noise (ep -0.18/-0.20, |t| <= 0.2). Foreign-filer IFRS EPS is
+not in DERA num.txt (structural boundary); 39 retired tickers unresolvable.
+Verdict: no established cross-sectional value premium on the NASDAQ dev window;
+the apparent one was composition artifact (dead/broken prices + EPS-coverage
+gaps), now tested and closed on both available levers. Pitfall worth keeping:
+Stage 2 silently loads logs/nasdaq_fm_dev.cs.json if present — delete the cache
+before re-running after any upstream data change (bit us once, 2026-11-05).
