@@ -20,6 +20,7 @@ import nasdaq_stage2_fm as s2  # noqa: E402
 
 ROOT = s2.ROOT
 OUT = os.path.join(ROOT, "logs", "nasdaq_fm_bmv_cf.json")
+CS_CACHE = os.path.join(ROOT, "logs", "nasdaq_fm_bmv_base.cs.json")
 START, CUTOFF = "2014-07-01", "2024-03-28"
 
 
@@ -93,7 +94,7 @@ def gross_profit_ttm(f, d):
 def build_rows():
     """Rows = pooled cross-section (stage2 builder) + bm/gpm/roe/acc."""
     s2.START, s2.CUTOFF = START, CUTOFF
-    s2.CS_CACHE = os.path.join(ROOT, "logs", "nasdaq_fm_bmv_base.cs.json")
+    s2.CS_CACHE = CS_CACHE
     if os.path.exists(s2.CS_CACHE):
         cs = json.load(open(s2.CS_CACHE))
         _, _, cik_of, _ = s2.load_universe()
@@ -327,7 +328,25 @@ def fm_controlled(cs, char, use_ff49=True, use_resid=True):
             "t": s2.nw1(betas), "n_months": len(betas)}
 
 
-def main():
+def main(argv=None):
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--start", default=START)
+    ap.add_argument("--cutoff", default=CUTOFF)
+    ap.add_argument("--out", default=OUT)
+    ap.add_argument("--cs-cache", default=None,
+                    help="override the cross-section cache path")
+    ap.add_argument("--rebuild", action="store_true",
+                    help="ignore/delete the cs cache and rebuild")
+    a = ap.parse_args(argv)
+    if a.start != START or a.cutoff != CUTOFF or a.cs_cache or a.rebuild:
+        global START, CUTOFF, OUT, CS_CACHE
+        START, CUTOFF = a.start, a.cutoff
+        OUT = a.out
+        if a.cs_cache:
+            CS_CACHE = a.cs_cache
+            if a.rebuild and os.path.exists(CS_CACHE):
+                os.remove(CS_CACHE)
     cs = build_rows()
     report = {"window": [START, CUTOFF], "months": len(cs),
               "name_months": sum(len(x["rows"]) for x in cs)}

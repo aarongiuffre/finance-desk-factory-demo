@@ -1,0 +1,51 @@
+# PRE-REGISTRATION - NQ_holdout_final (the ONE sealed-holdout read; 2026-11-05).
+# Written BEFORE any holdout return was computed, read, or plotted.
+# Authorized by Aaron ("ok lets do the holdout").  This spends the sealed
+# 2024-04+ holdout — per the program's own doctrine this is the ONLY read it
+# ever gets, whatever the result.  After this run the NASDAQ edge program is
+# definitively closed.
+#
+# ANTI-PEEKING STATEMENT: pre-pin verification touched COVERAGE ONLY (ONEQ
+# max bar date 2026-10-20; 3,137 live + 429 dead price files contain
+# 2024-05..07 bars).  No holdout return, sleeve, or FM number was computed
+# or viewed before this file was committed.
+#
+# Window: 2024-04 .. 2026-09 (30 complete months; October 2026 is partial —
+#   bars only through Oct 20 — and is EXCLUDED, not extended into).
+# Universe machinery: identical to dev/modern/pooled runs (live + dead
+#   rosters, PIT bars, stage2 cross-section builder).  The dead arm matters:
+#   names delisting inside the holdout window are IN until delist
+#   (survivorship-correct by construction).
+#
+# PRIMARY (the surviving lead, one shot): cheap_small_3rd sleeve rel ONEQ,
+#   monthly drift over the 30 holdout months, dev prereg spec VERBATIM
+#   (stage2 builder: chars ep+size+mom+liq, z +/-3, r1 winsorized 1/99,
+#   LIQ orthogonalized, 9-sector dummies in the FM; sleeve = cheap-3rd x
+#   small-3rd, EW, rel ONEQ).  ESTABLISHED iff |t|>=2 AND positive sign —
+#   the first established result of the entire program.  Anything else:
+#   the sign-stability question is answered and the program closes.
+#   Honest expectation, pinned: with ~30 months and the measured
+#   signal-to-noise (~zero: pooled 115mo gave t=0.11), t>=2 is a lottery
+#   ticket (~1-2% even if the point estimate were real).  The REAL
+#   information of this read: (a) does the + sign survive a third,
+#   never-touched regime; (b) is the magnitude in the +50-150bp/mo
+#   ballpark or has it decayed.
+# SECONDARY (report-all, no verdicts): every other sleeve cell (cheap10,
+#   cheap_mid_3rd, each rel ONEQ and SPY), FM ep/gpm/roe/acc plain and
+#   FF49-controlled, dead-share, no-shares share, months count.
+#   bm sign-stability is the named secondary question (the only char whose
+#   t moved with controls: 0.30 -> 0.36).
+# DESIGN BOUNDARY (pinned): FF5-residualized returns are EXCLUDED here —
+#   expanding PIT betas need >=24 in-window prior months; a 30-month window
+#   leaves <=6 usable residualized months (mechanically starved, not a
+#   judgment call).  FF49 dummies are IN (no history needed).
+#
+# Rules (fixed NOW): one pass; no re-run after seeing results except a
+#   plumbing-failure retry documented before any number is read; no
+#   redefinition of primary/secondary; results that contradict priors are
+#   reported identically.  Whatever lands, this file + the run close the
+#   program: no further holdout reads, no further value preregs on this
+#   dataset, holdout marked SPENT in the skill + REGISTRY.
+#
+# Reporting: logs/nasdaq_fm_holdout.json (stage2), logs/nasdaq_fm_holdout_bm.json
+#   (stage3), HISTORY.md, finance-desk skill.
