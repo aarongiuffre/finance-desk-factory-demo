@@ -276,3 +276,29 @@ Pooled FM EP -0.18/-0.20 (value mildly negative, consistent with both
 components). Pooled S3 dead-share 40.9% (between components, as expected).
 Holdout 2024-04+ remains sealed. Evidence: logs/nasdaq_fm_pooled.json
 (+ cs cache regenerable), tlogs/nasdaq_stage2_pooled.log.
+
+## 2026-11-05 — NQ_fundamental_value_chars: bm/gpm/roe/acc all |t|<1 — park HARDENED (final)
+
+Prereg 78e6449 (before the run; implementation note added same day after the
+first build produced zero book coverage — the reduced facts layer carries no
+StockholdersEquity; fix = scripts/nasdaq_fund_fill.py, a DERA USD-tag fill
+(4,755 tickers, facts/nasdaq_fund/, no existing file touched) + stage3
+overlay-in-memory merge). Window = pooled 2014-07..2024-03, one pass.
+
+PRIMARY pooled FM t of bm: +73.4bp/mo, t=+0.30 (sector-demeaned +0.42).
+Per prereg band |t|<1: PARK HARDENED — "the value effect is not present in
+free-data fundamentals" is the standing record. bm's t=0.30 is the highest
+single-char t of the whole NASDAQ program (sign consistent with a small value
+tilt: higher book/market -> higher returns) but nowhere near [1,2) suggestive,
+let alone established. SECONDARY: gpm +27.0bp t=+0.06; roe +37.5bp t=+0.07;
+acc -6.8bp t=-0.02 — all noise. TERTIARY bm-vs-ep sleeve head-to-head
+(recorded, not gated; sleeve bounds conditioned on char coverage so not
+directly comparable to the pooled-run sleeves): bm cheap10 -269.6bp t=-0.18,
+bm cheap_small +64.7 t=+0.03, bm cheap_mid +55.4 t=+0.03 — the bm-based cheap
+sleeves are WEAKER than the ep-based ones; the textbook book-value variable
+does not rescue the line. Verdict: the parked NASDAQ cheap-sleeve line stays
+parked on every measured basis (ep, bm); the sign-stable-but-unmeasurable
+reading stands, now tested against the cleanest free fundamentals available.
+Nothing actionable for the live book. Holdout still sealed. Evidence:
+logs/nasdaq_fm_bmv.json (+ base cs cache regenerable),
+tlogs/nasdaq_stage3_bmv3.log.

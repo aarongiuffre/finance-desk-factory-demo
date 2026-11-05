@@ -53,3 +53,18 @@
 #
 # Reporting: logs/nasdaq_fm_bmv.json, HISTORY.md, finance-desk skill.  The
 #   live book (S&P large-cap value, own pipeline) is untouched either way.
+#
+# IMPLEMENTATION NOTE (added same day, BEFORE the first valid pass): the
+# cross-section facts layer (facts/nasdaq, facts/nasdaq_dead) is the EPS-only
+# REDUCED set - it carries no USD/StockholdersEquity or flow tags, so the
+# first build attempt produced zero bm coverage (144,427 rows book_missing).
+# This is a plumbing failure, not a result; no verdict was formed.  Fix per
+# the prereg's own data source ("all from the same local DERA zips"):
+# scripts/nasdaq_fund_fill.py extracts StockholdersEquity/NetIncomeLoss/
+# OperatingIncomeLoss/Revenues/COGS rows from num.txt for cross-section CIKs
+# into facts/nasdaq_fund/<T>.json (same doctrine as nasdaq_eps_fill: no
+# existing facts file touched, PIT rows with filed, source-tagged).  stage3
+# reads facts/nasdaq_fund as a fallback for the USD-unit tags only.  The
+# analysis below runs ONCE on that completed layer; this note records the
+# fix before any number existed.
+
