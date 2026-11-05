@@ -357,6 +357,32 @@ quarter-starved — treat that family's result as the noisiest of the four).
 The substantive report-all pattern (large negative pre-drift, flat post) was
 consistent across all four families and is robust to the gap.
 
+## 2026-11-05 — NQ_si_mechanism: mechanism NOT SUPPORTED, standalone si noise — E3 CLOSED (final)
+
+Prereg b7a36ea (before the run). SOURCE BREAKTHROUGH: the FINRA short-interest
+data the API gates behind a key (unregistrable from this box — portal
+Cloudflare-blocked) is published FREE on FINRA's public CDN as consolidated
+bi-monthly files: cdn.finra.org/equity/otcmarket/biweekly/shrt<YYYYMMDD>.csv
+(pipe-delimited; short position, ADV, days-to-cover, settlement date; all
+exchanges incl. NYSE). Coverage boundary VERIFIED: files start 2018-01-31 →
+window here = 2018-02..2024-02 (73 months), a modern subwindow, NOT the full
+pooled window. 149 settlement files pulled to raw/finra_si/ (holiday-shifted
+settlements handled by back-stepping candidates; MLK/Good Friday cases).
+PIT rule per prereg: ONLY mid-month settlements ingested (end-of-month files
+disseminate after month end = lookahead — the first distill draft had this
+bug and was fixed BEFORE any verdict; values are the mid-month file).
+Join: exact symbol + class-suffix fallback; 49.3% of pooled rows, median
+monthly join 61.6% (NOT starved — prereg check passed).
+RESULTS (one pass): SECONDARY standalone si: days-to-cover +14.3bp/mo
+t=+0.12, si/mcap +7.0bp t=+0.01 — noise, and the sign is POSITIVE, against
+the informed-short-seller prior. PRIMARY mechanism (prereg rule: t_bm on
+low-si half must exceed t_bm on high-si half by margin AND |t_low|>=1):
+bm low-si +73.1bp t=+0.29 vs bm high-si +36.8bp t=+0.21 — direction matches
+the mechanism prior (value tilt marginally stronger among low-SI names) but
+nowhere near the rule → **mechanism NOT SUPPORTED; E3 CLOSED**. Short
+interest adds no measurable signal and does not rescue the parked value line
+on the free stack. Evidence: logs/si_fm.json, tlogs/finra_si3.log.
+
 ## 2026-11-05 — NQ_insider_netbuy: NOT ESTABLISHED (E5, one pass)
 
 Prereg 9094e2e (before the run). Signal ins = net_usd_3mo/mcap (excl.
