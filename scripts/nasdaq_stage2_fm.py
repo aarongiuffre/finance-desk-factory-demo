@@ -436,6 +436,28 @@ def ann(rets):
 
 # ----------------------------------------------------------------------- main
 def main():
+    import argparse
+    ap = argparse.ArgumentParser(description="NASDAQ Stage 2 Fama-MacBeth (window is preregistered; "
+                                             "default window = the dev prereg 2014-07..2019-12)")
+    ap.add_argument("--start", help="cross-section window start (YYYY-MM)")
+    ap.add_argument("--cutoff", help="cross-section window end (YYYY-MM, PIT: data after this is never read)")
+    ap.add_argument("--out", help="report path override")
+    ap.add_argument("--cs-cache", help="cross-section cache path override (default logs/nasdaq_fm_dev.cs.json)")
+    ap.add_argument("--rebuild", action="store_true", help="ignore/delete the CS cache (it silently masks upstream changes)")
+    a = ap.parse_args()
+
+    global START, CUTOFF, OUT, CS_CACHE
+    if a.start:
+        START = a.start + "-01" if len(a.start) == 7 else a.start
+    if a.cutoff:
+        CUTOFF = a.cutoff + "-28" if len(a.cutoff) == 7 else a.cutoff
+    if a.out:
+        OUT = a.out
+    if a.cs_cache:
+        CS_CACHE = a.cs_cache
+    if a.rebuild and os.path.exists(CS_CACHE):
+        os.remove(CS_CACHE)
+
     if os.path.exists(CS_CACHE):
         print("using cached cross-sections", CS_CACHE)
         cs = json.load(open(CS_CACHE))

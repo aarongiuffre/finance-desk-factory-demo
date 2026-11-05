@@ -1,0 +1,44 @@
+# PRE-REGISTRATION - NQ_modern_replication (NASDAQ Stage 2, modern regime).
+# Written 2026-11-05 BEFORE any 2020+ run.  Authorized by Aaron ("all authorized,
+# go ahead") same day.  Scope: ops/nasdaq_modern_scope.md (commit 11ca64d).
+#
+# This is a REGIME REPLICATION, not a search.  The spec is the dev prereg
+# (c792a0b build) VERBATIM - same estimator, same sleeves, same autopsy, no new
+# factors, no tuning knobs.  Only the window moves and the data layers are the
+# repaired trees (price 100.0%/97.9%, EPS fill facts/nasdaq_eps per 17aee5e).
+#
+# Window: 2020-01 .. 2024-03 (validation-fold cutoff C=2024-03-31).
+#   HOLDOUT 2024-04..present: NEVER READ in this prereg.  Any later use of the
+#   holdout requires a NEW prereg declaring exactly one final pass.
+# Data path: live trees + explicit window filters (nasdaq_stage2_fm.py
+#   precedent - stage2 already reads live trees with explicit cutoff because
+#   the folds/dev split cache is stale).  PIT machinery reused unchanged:
+#   filed<=d facts filter, qtrs==1 TTM, basis_factor split correction, live
+#   split calendar, dead-bar guard (+300%/-80%), EPS fallback to
+#   facts/nasdaq_eps.  CS cache: fresh path logs/nasdaq_fm_modern.cs.json
+#   (2026-11-05 pitfall: a stale cache silently masks upstream data changes).
+#
+# Estimator (verbatim from dev):
+#   chars EP/MOM/SIZE/LIQ; z-scores per month clipped +/-3; r1 winsorized 1/99;
+#   LIQ orthogonalized out of the main spec; Fama-MacBeth monthly with Newey-
+#   West(1); single-sort tercile spreads; conditional long-only top-10 sleeves
+#   20bps/side rel ONEQ and SPY via benchmark_rets(); S3 cheap-10 junk-pile
+#   autopsy (dead-share, size mix, sector mix).
+#
+# Verdict rules (fixed NOW):
+#   - PRIMARY: sign + magnitude replication of the dev weak-positives
+#     (cheap_small_3rd +88bp/mo, cheap_mid_3rd +54bp/mo rel ONEQ post-repair).
+#     Replication = same sign and >= half the dev magnitude.  Sign flip =
+#     non-replication.  "Established" requires |t|>=2 - expected NOT to happen
+#     on ~50 months of one regime, and its absence is a valid verdict.
+#   - SECONDARY: FM EP premium (dev: -0.18/-0.20, no premium).  Consistency
+#     across regimes is the claim being tested.
+#   - TERTIARY: S3 dead-share (dev post-repair 57.7%).  The modern window
+#     should be HIGHER (SPAC/no-CIK structural dead weight) - recorded, not
+#     gated.
+#   - Every result is reported whether it flatters the thesis or not.  A
+#     non-replication kills the modern-window extension of the cheap sleeve
+#     idea; it does NOT reopen the closed dev verdict.
+#
+# Reporting: logs/nasdaq_fm_modern.json + cs cache logs/nasdaq_fm_modern.cs.json
+# (regenerable), write-up in HISTORY.md + finance-desk skill.
