@@ -1,0 +1,45 @@
+# PRE-REGISTRATION - NQ_si_mechanism (NASDAQ short-interest mechanism test, E3).
+# Written 2026-11-05 BEFORE the verdict run.  Authorized by Aaron ("go ahead
+# with all avenues" + "finish the outstanding item").
+#
+# DATA SOURCE (probed live 2026-11-05): FINRA consolidated bi-monthly equity
+# short interest, PUBLIC CDN, no key:
+#   https://cdn.finra.org/equity/otcmarket/biweekly/shrt<YYYYMMDD>.csv
+#   (pipe-delimited; fields used: symbolCode, currentShortPositionQuantity,
+#    averageDailyVolumeQuantity, daysToCoverQuantity, settlementDate).
+# This is the same dataset the FINRA API gates behind a key (which this box
+# cannot register for - portal Cloudflare-blocked).  Coverage boundary
+# VERIFIED: earliest CDN file = 2018-01-31; nothing before.  Therefore the
+# window here is 2018-02..2024-03 (~74 months) - a MODERN-SUBWINDOW test,
+# NOT the full pooled window.  Pre-2018 mechanism questions stay unanswerable
+# on the free stack.
+#
+# PIT rule (fixed): for cross-section month x, use the latest settlement file
+# with settlement_date <= the 15th of month x (mid-month settlement,
+# disseminated ~4 business days later - always known before month x ends).
+# End-of-month settlements are NEVER used for month x (they disseminate after
+# month end = lookahead).  si values: currentShortPositionQuantity (shares),
+# averageDailyVolumeQuantity (adv), daysToCoverQuantity (dc, raw as
+# published; winsorized z +/-3 by the estimator).
+#
+# Join: exact symbolCode -> cross-section ticker; fallback root-symbol strip
+# of class suffixes (one pass, documented).  Coverage-starvation check BEFORE
+# looking at any t: report median monthly join share; <10% = flagged.
+#
+# Window: 2018-02..2024-03, cs = logs/nasdaq_fm_bmv_base.cs.json rows
+# (stage2 base + in-memory ff49 wiring).  Holdout 2024-04+ SEALED.
+# Estimator: fm_controlled verbatim (FF49 dummies, plain r1 primary,
+# FF5-resid secondary).
+#
+# Questions and priors (fixed NOW):
+#   PRIMARY (mechanism): does the value char bm survive/attenuate when short
+#     interest is controlled?  Split rows by month-median si_dc into low-si
+#     vs high-si halves; run bm FM on each.  Mechanism SUPPORTED iff
+#     t_bm(low-si) > t_bm(high-si) by a margin AND |t_bm(low-si)| >= 1.
+#     Otherwise: no short-interest mechanism detectable.
+#   SECONDARY (standalone signal): FM t of si_dc and si_mcap.  Literature
+#     prior: high SI -> NEGATIVE drift (short sellers informed).  ESTABLISHED
+#     iff |t|>=2 AND negative sign.
+#   - No redefinition after the run; one pass; report everything.
+#
+# Reporting: logs/si_fm.json, HISTORY.md, finance-desk skill.
