@@ -1,0 +1,55 @@
+# PRE-REGISTRATION - NQ_fundamental_value_chars (NASDAQ Stage 2, richer value
+# variables).  Written 2026-11-05 BEFORE any run.  Authorized by Aaron ("write
+# it yes") same day, following the recommendation in the 2026-11-05 data-lever
+# discussion (history: dev c792a0b -> repairs 1265e34/17aee5e -> modern
+# a2fa9a3/b104184 -> pooled 47a84a2/35e268d: cheap_small sign-stable, pooled
+# t=+0.11, NOT ESTABLISHED, line parked).
+#
+# Thesis this prereg tests: EP (TTM diluted EPS/price) is a noisy, backward
+# value proxy; if the cheap+small effect is real but EP is too crude to
+# measure it, textbook fundamental value chars built from the SAME local DERA
+# zips should move the pooled t off 0.11.  If every alternative also lands at
+# |t|~0.1, the parked verdict hardens to "not present in free-data
+# fundamentals".
+#
+# Variables (all from local DERA num.txt + PIT shares; zero network, zero new
+# data; everything already on disk):
+#   bm   = log(book equity / PIT mcap); book = StockholdersEquity, most recent
+#          filing end <= d with filed <= d (latest-filed restatement rule);
+#          book<=0 -> excluded (loss-holed firms are a different population,
+#          recorded as a count).
+#   roe  = TTM NetIncomeLoss / book (sign preserved; winsorized like r1).
+#   gpm  = TTM gross profit / PIT mcap, gross profit = Revenues -
+#          COGS (CostOfGoodsAndServicesSold, fallback CostOfRevenue); Novy-
+#          Marx profitability, winsorized.
+#   acc  = (T1 accruals): TTM OperatingIncomeLoss - TTM NetIncomeLoss,
+#          scaled by TTM Revenues; lower accrual quality = higher acc.
+#   TTM sums reuse eps_ttm_at machinery: qtrs==1 (or 0-uniform) rows,
+#          latest-filed per end, filed<=d PIT filter, 4 distinct ends spanning
+#          200..400d, basis_factor split correction where tag is per-share.
+#          Income/flow tags are NOT per-share; basis correction does not
+#          apply to them (they aggregate across the same ends as EPS).
+#
+# Window: 2014-07 .. 2024-03 (the pooled window - this prereg exists to
+#   explain/overturn its verdict; no holdout read, 2024-04+ stays sealed).
+# Estimator: fama_macbeth verbatim (z-scores +/-3, r1 winsorized 1/99, LIQ
+#   orthogonalized, NW1); FM t for each new char ALONE (plus the original four
+#   for continuity); then the SAME conditional sleeves recomputed with bm as
+#   the sort char replacing ep (cheap_small/cheap_mid/etc. by bm terciles) -
+#   the direct preregistered head-to-head vs ep.
+#
+# Verdict rules (fixed NOW):
+#   - PRIMARY: pooled FM t of bm.  |t|>=2 same sign as positive-value
+#     (higher bm -> higher r1) = ESTABLISHED -> the parked cheap+small line
+#     REOPENS on the bm basis (new prereg for sleeves would follow).
+#     |t| in [1, 2) = suggestive, report-only, still parked.
+#     |t|<1 = hardens the park: "value effect not present in free-data
+#     fundamentals" becomes the standing record.
+#   - SECONDARY: gpm and roe FM t (profitability is not a value claim; sign
+#     and |t| recorded, same bands as PRIMARY for reporting only).
+#   - TERTIARY: bm-sleeve head-to-head vs ep-sleeve (recorded, not gated).
+#   - Every result reported regardless of direction; no reruns, no char
+#     additions, no window changes after the first run.  One pass.
+#
+# Reporting: logs/nasdaq_fm_bmv.json, HISTORY.md, finance-desk skill.  The
+#   live book (S&P large-cap value, own pipeline) is untouched either way.
