@@ -331,3 +331,34 @@ dera_insider zips (18,184 issuer files, 12,806 cross-section CIKs, 727k
 monthly filed-month rows, 3.8M events, 2006-01..2026-09) — all free, zero
 new subscriptions. Evidence: logs/nasdaq_fm_bmv_cf.json,
 tlogs/nasdaq_stage3_bmv_cf2.log.
+
+## 2026-11-05 — NQ_fts_event_study: all 4 text families NOT ESTABLISHED (E4, one pass)
+
+Prereg 0e31c18 (before the run). Events = first filing hit per CIK in
+2014-07..2024-03 from the EFTS caches; monthly rel_ONEQ drift +1..+6, NW1 t.
+Results: going_concern 45 events (43 w/ bars) post -476bp/mo t=-0.19,
+pre-drift -866bp/mo; goodwill_impairment 321 events post +15bp t=+0.00
+(pre -352bp); item_4_02 712 events post -66bp t=-0.03 (pre -110bp);
+restatement 36 events (noisy phrase, n=18 post) post +122bp t=+0.21.
+Per prereg |t|>=2 rule: NO family established. Standing pattern (report-all
+finding, not a verdict): LARGE negative pre-drift in every family with flat
+or positive post-drift - the bad news is priced BEFORE the EDGAR filing
+lands, consistent with the market anticipating distress disclosures. No
+exploitable text-signal channel on this dataset. Evidence:
+logs/fts_event_study.json.
+
+## 2026-11-05 — NQ_insider_netbuy: NOT ESTABLISHED (E5, one pass)
+
+Prereg 9094e2e (before the run). Signal ins = net_usd_3mo/mcap (excl.
+derivatives, no-filing=missing, PIT trailing-3mo). Coverage healthy: 59.6%
+of pooled rows, median monthly 61.5% (NOT starved - prereg check passed).
+PRIMARY plain r1 + FF49 dummies: -19.1bp/mo t=-0.06 (sign contradicts the
+buy-positive prior). SECONDARY FF5-residualized: +17.3bp/mo t=+0.05. Both
+far inside the |t|<1 not-established band -> E5 CLOSED. Insider flows carry
+no measurable cross-sectional return signal on this dataset. Evidence:
+logs/insider_fm.json.
+
+Implementation note: the stage-3 cs cache (logs/nasdaq_fm_bmv_base.cs.json)
+holds stage2 rows WITHOUT ff49 - the FF49 field is added by stage3's overlay
+in memory only and never persisted; standalone consumers must wire ff49
+themselves (insider_fm.py does).
