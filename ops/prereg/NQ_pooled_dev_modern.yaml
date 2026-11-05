@@ -1,0 +1,35 @@
+# PRE-REGISTRATION - NQ_pooled_dev_modern (NASDAQ Stage 2, pooled regimes).
+# Written 2026-11-05 BEFORE the pooled run, after BOTH component windows were
+# already examined (dev c792a0b/17aee5e; modern a2fa9a3/b104184).  Authorized
+# by Aaron ("ok do the prereg") same day.  Scope: ops/nasdaq_modern_scope.md.
+#
+# Purpose: power.  Each window alone gives |t|<=0.21 on the cheap+small sleeve;
+# pooled (113 months, ~200k name-months) is the one preregistered attempt to
+# test whether the sign-stable effect is measurable at all.  This is the FINAL
+# analysis of dev+modern data - no further looks, no tuning on either window.
+#
+# Window: 2014-07 .. 2024-03 (dev+modern concatenated, one estimator pass).
+#   HOLDOUT 2024-04..present: NEVER READ.  Still sealed; a future holdout pass
+#   requires a NEW prereg declaring exactly one final test.
+# Data: live trees, explicit window filters, cutoff 2024-03 (PIT).  Spec,
+#   estimator, sleeves, autopsy: dev prereg VERBATIM (no new factors, no
+#   tuning).  EPS fallback facts/nasdaq_eps (17aee5e).  Fresh CS cache
+#   logs/nasdaq_fm_pooled.cs.json (--rebuild).
+#
+# Verdict rules (fixed NOW):
+#   - PRIMARY: pooled cheap_small_3rd rel ONEQ.  ESTABLISHED iff |t|>=2 AND
+#     same sign as both component windows (both currently +).  If |t|<2:
+#     NOT ESTABLISHED - final for this dataset; the idea is parked, not killed
+#     (no data source can add power without new data).
+#   - SECONDARY: pooled FM EP (both regimes negative so far) - consistency
+#     check only.
+#   - TERTIARY: per-regime sleeve split inside the pooled run (recorded, not
+#     gated; component numbers already known - any material divergence from
+#     them flags a data/build issue to investigate BEFORE interpreting).
+#   - Report everything, including whatever refutes the thesis.  A null here
+#     closes the NASDAQ cheap-sleeve line for good: not reopened by more
+#     windows of the same data.
+#
+# Reporting: logs/nasdaq_fm_pooled.json, HISTORY.md, finance-desk skill.
+# Nothing actionable for the live book regardless of outcome; the live book is
+# an S&P large-cap value book on its own pipeline.
