@@ -1,0 +1,42 @@
+# PRE-REGISTRATION - NQ_fts_event_study (NASDAQ text-signal family, E4).
+# Written 2026-11-05 BEFORE the verdict run.  Authorized by Aaron ("go ahead
+# with all avenues").  Data: EDGAR Full-Text Search caches built 2026-11-05
+# (universe/fts/*.jsonl; going_concern 161k, goodwill_impairment 77k,
+# item_4_02 23k, restatement 70k rows, quarterly windows 2009-2024, form
+# families 10-K/10-Q/8-K per phrase).  This is a NEW family - no prior prereg
+# examined filing-text phrases.
+#
+# Window: events with filed date in 2014-07..2024-03 (pooled window; holdout
+#   2024-04+ SEALED - no event after the cutoff is used, no post-2024-03
+#   return is read).
+# Event definition (per CIK, per family): FIRST filing hit in the window
+#   (subsequent repeats ignored - the signal is the disclosure event, not the
+#   chronic condition).  Events joined to cross-section names via CIK.
+# Measurement: monthly equal-weight drift of event names vs ONEQ benchmark
+#   (rel_ONEQ), months +1..+6 after the event month (event month = the month
+#   containing the filed date; returns from the same a-series machinery as
+#   stage2).  Pre-drift months -6..-1 reported as sanity (known bad news
+#   should show NEGATIVE pre-drift; if pre-drift is already deeply negative
+#   the post signal is a reversal candidate, not avoidance).
+#
+# Families and priors (fixed NOW):
+#   going_concern (10-K/10-Q): prior = strong NEGATIVE post-drift
+#     (distress).  Exploitable for the desk only as an AVOIDANCE filter
+#     (long-only book) or short-side research.
+#   goodwill_impairment: prior = negative post-drift, weaker.
+#   item_4_02 (non-reliance 8-K): prior = strongly negative, few events.
+#   restatement (8-K "restated"): prior = negative, noisy phrase (catches
+#     routine "restated" language too - flagged as a WEAK family up front).
+#
+# Verdict rules (fixed NOW):
+#   - PRIMARY per family: mean rel_ONEQ monthly drift over months +1..+6,
+#     pooled across events, NW1 t on the monthly event-time series.
+#     |t|>=2 with the prior sign = family ESTABLISHED as a measurable event
+#     signal -> follow-up (avoidance filter test on the paper engine) gets
+#     its own prereg.  |t|<2 = not established, recorded.
+#   - SECONDARY: pre-drift (-6..-1) sign consistency; event counts per year.
+#   - No family redefinition after the run; the restatement phrase weakness
+#     is acknowledged up front and its result reported regardless.
+#   - Report everything including results that contradict the priors.
+#
+# Reporting: logs/fts_event_study.json, HISTORY.md, finance-desk skill.
