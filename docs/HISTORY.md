@@ -346,6 +346,16 @@ or positive post-drift - the bad news is priced BEFORE the EDGAR filing
 lands, consistent with the market anticipating distress disclosures. No
 exploitable text-signal channel on this dataset. Evidence:
 logs/fts_event_study.json.
+CACHE NOTE (2026-11-05, post-verdict): the EFTS API threw intermittent
+HTTP 500s during the original pull — the verdict run consumed an INCOMPLETE
+cache (restatement had only 69.9k of the 353k rows now present; the other
+families were ~85-95% complete). Cache completed in a resumable repair pass
+(643,850 total rows; restatement 2024-01 window = persistent server-side
+500, known boundary). Verdicts stand as run per one-pass discipline; the
+coverage caveat applies MOST to the restatement family (its 36 events were
+quarter-starved — treat that family's result as the noisiest of the four).
+The substantive report-all pattern (large negative pre-drift, flat post) was
+consistent across all four families and is robust to the gap.
 
 ## 2026-11-05 — NQ_insider_netbuy: NOT ESTABLISHED (E5, one pass)
 
