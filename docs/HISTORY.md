@@ -236,3 +236,27 @@ the apparent one was composition artifact (dead/broken prices + EPS-coverage
 gaps), now tested and closed on both available levers. Pitfall worth keeping:
 Stage 2 silently loads logs/nasdaq_fm_dev.cs.json if present — delete the cache
 before re-running after any upstream data change (bit us once, 2026-11-05).
+
+## 2026-11-05 — NQ_modern_replication: cheap sleeve REPLICATES in sign across regimes (still not established)
+
+Prereg a2fa9a3 (written + committed BEFORE the run, Aaron authorized). Window
+2020-01..2024-03, 49 months, 114,843 name-months (vs dev 64mo/86,050); holdout
+2024-04+ untouched. Spec = dev prereg verbatim; repaired data layers
+(price 100%/97.9%, EPS fill). Results vs dev post-repair:
+
+- PRIMARY (cheap+small): dev +88.5bp/mo t=0.19 -> modern +105.5bp t=0.09.
+  Same sign, magnitude above dev = REPLICATED per prereg rule. cheap+mid:
+  dev +54.0 t=0.09 -> modern +19.1 t=0.02 — same sign, magnitude below the
+  half-dev threshold = NON-replication (mixed verdict, honestly split).
+- FM EP: dev -0.18/-0.20 -> modern -0.21/-0.23. Consistent: value is mildly
+  NEGATIVE on NASDAQ in both regimes; no premium. MOM weakened (modern -0.34).
+- S3 autopsy: dead-share 57.7% (dev) -> 19.8% (modern — dead names in 2020+
+  window were already purged from picks by the +300%/-80% guard + structural
+  delisting, so the modern junk pile is cleaner BY CONSTRUCTION, not because
+  the screen got smarter). no-shares share 16%->21% (SPAC-era).
+- Verdict: the cheap+small effect exists in BOTH regimes in sign and rough
+  magnitude but is nowhere near established (all |t| <= 0.21 modern). Per the
+  prereg: this does NOT reopen the dev verdict and does NOT authorize tuning;
+  a pooled dev+modern test with holdout untouched would need its own prereg.
+  Nothing actionable for the live book. Evidence: logs/nasdaq_fm_modern.json
+  (+ cs cache regenerable), tlogs/nasdaq_stage2_modern.log.
