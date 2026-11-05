@@ -182,14 +182,54 @@ def build_cross_sections():
         if not bars:
             continue
         f = None
-        for base in ("facts/nasdaq", "facts/nasdaq_dead"):
-            p = os.path.join(ROOT, base, f"{t}.json")
-            if os.path.exists(p):
-                try:
-                    f = json.load(open(p))
-                except (OSError, ValueError):
-                    f = None
-                break
+        # E1 layer: SEC companyfacts (full XBRL, PIT filed) converted in-memory
+        # to the reduced shape eps_ttm_at expects (duration facts get qtrs from
+        # start/end span; instant facts qtrs=0).  Preferred when present.
+        cik = cik_of.get(t, "")
+        p = os.path.join(ROOT, "facts/companyfacts", f"{cik}.json") if cik else None
+        if p and os.path.exists(p):
+            try:
+                cf = json.load(open(p))
+                usd, usdsh = {}, {}
+                gaap = (cf.get("facts") or {}).get("us-gaap") or {}
+                for tag, node in gaap.items():
+                    for unit, ents in (node.get("units") or {}).items():
+                        tgt_units = usdsh if unit == "USD/shares" else (usd if unit == "USD" else None)
+                        if tgt_units is None:
+                            continue
+                        out = []
+                        for e in ents:
+                            if not isinstance(e.get("val"), (int, float)) or not e.get("end"):
+                                continue
+                            q = 0
+                            if e.get("start"):
+                                import datetime as _dt
+                                try:
+                                    dur = (_dt.date.fromisoformat(e["end"]) - _dt.date.fromisoformat(e["start"])).days
+                                except ValueError:
+                                    continue
+                                q = 1 if 60 <= dur <= 120 else (4 if 300 <= dur <= 400 else 2)
+                            out.append({"end": e["end"], "val": e["val"],
+                                        "filed": e.get("filed") or "", "qtrs": q})
+                        if out:
+                            tgt_units[tag] = out
+                if usd or usdsh:
+                    f = {"cik": cik, "ticker": t, "source": "companyfacts", "units": {}}
+                    if usd:
+                        f["units"]["USD"] = usd
+                    if usdsh:
+                        f["units"]["USD/shares"] = usdsh
+            except (OSError, ValueError):
+                f = None
+        if f is None:
+            for base in ("facts/nasdaq", "facts/nasdaq_dead"):
+                p = os.path.join(ROOT, base, f"{t}.json")
+                if os.path.exists(p):
+                    try:
+                        f = json.load(open(p))
+                    except (OSError, ValueError):
+                        f = None
+                    break
         # EPS coverage fallback (Stage 3 fill, facts/nasdaq_eps): f is consumed
         # only by eps_ttm_at, so if the first-found file lacks the Diluted tag
         # we may substitute the DERA-derived EPS-only file wholesale.  No

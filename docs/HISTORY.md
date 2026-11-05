@@ -302,3 +302,32 @@ reading stands, now tested against the cleanest free fundamentals available.
 Nothing actionable for the live book. Holdout still sealed. Evidence:
 logs/nasdaq_fm_bmv.json (+ base cs cache regenerable),
 tlogs/nasdaq_stage3_bmv3.log.
+
+## 2026-11-05 — NQ_full_coverage_chars: bm t=+0.36 WITH FF5+FF49 controls — line CLOSED (final)
+
+Prereg 4b9ed3f (before the run; authorized "go ahead with all avenues"). Data
+layer: SEC companyfacts.zip (verified 1.42GB, full XBRL for every filer)
+distilled verbatim per-CIK (5,085 of 5,111 cross-section CIKs present — the
+26 absent are non-XBRL shell/old filers; prior 39-ticker boundary shrunk).
+Adapter converts companyfacts to the reduced shape in memory (duration facts
+get qtrs from start/end span). Cross-check (TERTIARY): companyfacts ep plain
+FM -69.6bp t=-0.18 vs fill-layer -72.0bp t=-0.18 — near-identical, data layer
+validated. PRIMARY: pooled FM t of bm WITH FF5-residualized returns (PIT
+expanding betas, min 24 prior months) + FF49 industry dummies: +73.3bp/mo
+t=+0.36 (ff49-only +0.44, ff5-only +0.26). Per prereg band |t|<1: **line
+CLOSED on all available bases (ep, DERA-zip bm, companyfacts bm ± FF5/FF49
+controls)** — no further value preregs on this dataset. SECONDARY: gpm/roe/
+acc controlled all |t|<=0.14 (noise). bm-based cheap sleeves NEGATIVE
+(cheap10 -372bp t=-0.27) — book value does not rescue the line; the earlier
+bm-cheap sleeve positive was a coverage artifact of the smaller DERA fill.
+Controls note: FF49 dummies RAISE bm t (0.30->0.44) — the value tilt is not
+an industry artifact — but the magnitude is nowhere near established. Also
+landed this session: FF5 monthly factors + 49-industry VW returns
+(raw/ff_monthly, 1926-07..2026-09), FF49 SIC map (598 ranges, canonical
+Siccodes49.zip), submissions.zip (1.57GB) + EFTS full-text caches (330k
+phrase-hit rows: going_concern 161k, goodwill_impairment 77k, item_4_02 23k,
+restatement 70k, 2009-2024 quarters), insider layer from LOCAL
+dera_insider zips (18,184 issuer files, 12,806 cross-section CIKs, 727k
+monthly filed-month rows, 3.8M events, 2006-01..2026-09) — all free, zero
+new subscriptions. Evidence: logs/nasdaq_fm_bmv_cf.json,
+tlogs/nasdaq_stage3_bmv_cf2.log.

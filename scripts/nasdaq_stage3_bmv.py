@@ -12,13 +12,14 @@ sleeve machinery.  Only the char layer is added here.  ONE RUN per prereg.
 import json
 import math
 import os
+import statistics as st
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import nasdaq_stage2_fm as s2  # noqa: E402
 
 ROOT = s2.ROOT
-OUT = os.path.join(ROOT, "logs", "nasdaq_fm_bmv.json")
+OUT = os.path.join(ROOT, "logs", "nasdaq_fm_bmv_cf.json")
 START, CUTOFF = "2014-07-01", "2024-03-28"
 
 
@@ -95,20 +96,68 @@ def build_rows():
     s2.CS_CACHE = os.path.join(ROOT, "logs", "nasdaq_fm_bmv_base.cs.json")
     if os.path.exists(s2.CS_CACHE):
         cs = json.load(open(s2.CS_CACHE))
+        _, _, cik_of, _ = s2.load_universe()
     else:
         cs = s2.build_cross_sections()
+        _, _, cik_of, _ = s2.load_universe()
     out = []
     stats = {"book_neg": 0, "book_missing": 0, "ttm_missing": 0, "rows": 0}
     fcache = {}
+    ff49_map = json.load(open(os.path.join(ROOT, "raw/ff_monthly/ff49_sic_map.json")))
+    _, _, cik_of, profiles = s2.load_universe()
+    sic_of = {t: profiles.get(c, {}).get("sic") for t, c in cik_of.items()}
 
     def facts_of(t):
         if t not in fcache:
             f = None
-            for base in ("facts/nasdaq", "facts/nasdaq_dead"):
-                p = os.path.join(ROOT, base, f"{t}.json")
-                if os.path.exists(p):
-                    f = json.load(open(p))
-                    break
+            # E1 layer: SEC companyfacts (full XBRL, PIT filed dates) converted
+            # in-memory to the reduced shape stage3 helpers expect.  Duration
+            # facts get qtrs from their start/end span (60-120d = quarter);
+            # instant facts (book equity) get qtrs=0.  Preferred over all
+            # reduced layers when present.
+            cik = cik_of.get(t) or ""
+            p = os.path.join(ROOT, "facts/companyfacts", f"{cik}.json") if cik else None
+            if p and os.path.exists(p):
+                try:
+                    cf = json.load(open(p))
+                    usd, usdsh = {}, {}
+                    gaap = (cf.get("facts") or {}).get("us-gaap") or {}
+                    for tag, node in gaap.items():
+                        for unit, ents in (node.get("units") or {}).items():
+                            tgt_units = usdsh if unit == "USD/shares" else (usd if unit == "USD" else None)
+                            if tgt_units is None:
+                                continue
+                            out = []
+                            for e in ents:
+                                if not isinstance(e.get("val"), (int, float)) or not e.get("end"):
+                                    continue
+                                q = 0
+                                if e.get("start"):
+                                    import datetime as _dt
+                                    try:
+                                        dur = (_dt.date.fromisoformat(e["end"]) - _dt.date.fromisoformat(e["start"])).days
+                                    except ValueError:
+                                        continue
+                                    q = 1 if 60 <= dur <= 120 else (4 if 300 <= dur <= 400 else 2)
+                                out.append({"end": e["end"], "val": e["val"],
+                                            "filed": e.get("filed") or "", "qtrs": q})
+                            if out:
+                                tgt_units[tag] = out
+                    if usd or usdsh:
+                        f = {"cik": cik, "ticker": t, "source": "companyfacts",
+                             "units": {}}
+                        if usd:
+                            f["units"]["USD"] = usd
+                        if usdsh:
+                            f["units"]["USD/shares"] = usdsh
+                except (OSError, ValueError):
+                    f = None
+            if f is None:
+                for base in ("facts/nasdaq", "facts/nasdaq_dead"):
+                    p = os.path.join(ROOT, base, f"{t}.json")
+                    if os.path.exists(p):
+                        f = json.load(open(p))
+                        break
             # reduced facts layer is EPS-only (+ a few flow tags, no equity):
             # overlay the DERA fund fill's USD tags (book + flows) when
             # StockholdersEquity is missing, else fall through to the full
@@ -162,7 +211,9 @@ def build_rows():
                     if b["d"][:7] == x["month"]:
                         me_d = b["d"]
             if f is None or me_d is None or r.get("size") is None:
-                rows.append(dict(r))
+                nr = dict(r)
+                nr["ff49"] = _ff49_of(sic_of.get(t), ff49_map)
+                rows.append(nr)
                 continue
             mcap = math.exp(r["size"])
             new = dict(r)
@@ -184,11 +235,96 @@ def build_rows():
                     new["acc"] = (oi - ni) / rev
                 else:
                     stats["ttm_missing"] += 1
+            new["ff49"] = _ff49_of(sic_of.get(t), ff49_map)
             rows.append(new)
             stats["rows"] += 1
         out.append({"month": x["month"], "rows": rows})
     print("stats:", stats, flush=True)
     return out
+
+
+def _ff49_of(sic, ff49_map):
+    try:
+        s = int(sic)
+    except (TypeError, ValueError):
+        return None
+    for ind in ff49_map:
+        for lo, hi in ind["ranges"]:
+            if lo <= s <= hi:
+                return ind["code"]
+    return None
+
+
+def _ff5_residualize(cs, factors):
+    """PIT FF5 residualization: per stock, expanding-window OLS (cap 36 obs,
+    min 24 PRIOR obs, estimated on data strictly before month i) of r1 on
+    [1, mkt_rf, smb, hml, rmw, cma]; r1_resid_i = r1_i - x_i . beta_(i-1).
+    Rows without enough history keep r1 (flagged count)."""
+    import numpy as np
+    by_t = {}
+    for x in cs:
+        for r in x["rows"]:
+            by_t.setdefault(r["t"], []).append((x["month"], r))
+    n_resid = n_keep = 0
+    for t, items in by_t.items():
+        items.sort(key=lambda p: p[0])
+        hist = []                       # (r1, [mkt,smb,hml,rmw,cma])
+        for month, r in items:
+            f = factors.get(month)
+            if f is None:
+                continue
+            x_i = [f["mkt_rf"], f["smb"], f["hml"], f["rmw"], f["cma"]]
+            if len(hist) >= 24:
+                X = np.array([[1.0] + h[1] for h in hist[-36:]])
+                y = np.array([h[0] for h in hist[-36:]])
+                try:
+                    b, *_ = np.linalg.lstsq(X, y, rcond=None)
+                    r["r1_resid"] = r["r1"] - (b[0] + sum(b[j + 1] * x_i[j] for j in range(5)))
+                    n_resid += 1
+                except np.linalg.LinAlgError:
+                    r["r1_resid"] = r["r1"]
+                    n_keep += 1
+            else:
+                r["r1_resid"] = r["r1"]
+                n_keep += 1
+            hist.append((r["r1"], x_i))
+    return n_resid, n_keep
+
+
+def fm_controlled(cs, char, use_ff49=True, use_resid=True):
+    """Prereg estimator with controls: per-month cross-section of
+    [1, char_z, mom_z, size_z] (+ FF49 dummies) on r1 (or r1_resid);
+    NW1 on the char slope.  Mirrors stage2 fama_macbeth (z +/-3, r1
+    winsorized 1/99, LIQ omitted from main spec)."""
+    import numpy as np
+    ret_key = "r1_resid" if use_resid else "r1"
+    secs = sorted({r.get("ff49") for x in cs for r in x["rows"] if r.get("ff49")}) \
+        if use_ff49 else []
+    betas = []
+    for x in cs:
+        rows = [r for r in x["rows"]
+                if r.get(char) is not None and r.get("mom") is not None
+                and r.get("size") is not None and r.get(ret_key) is not None]
+        if use_ff49:
+            rows = [r for r in rows if r.get("ff49")]
+        if len(rows) < 30:
+            continue
+        for r in rows:
+            r["ep"] = r[char]
+        s2.winsor(rows, ret_key)
+        for c in (char, "mom", "size"):
+            s2.zscore(rows, c)
+        X = np.array([[1.0, r[char + "_z"], r["mom_z"], r["size_z"]] +
+                      ([1.0 if r.get("ff49") == s else 0.0 for s in secs[:-1]]
+                       if use_ff49 else []) for r in rows])
+        y = np.array([r[ret_key] for r in rows])
+        try:
+            b, *_ = np.linalg.lstsq(X, y, rcond=None)
+        except np.linalg.LinAlgError:
+            continue
+        betas.append(b[1])
+    return {"mean_mo": st.mean(betas) if betas else None,
+            "t": s2.nw1(betas), "n_months": len(betas)}
 
 
 def main():
@@ -219,6 +355,30 @@ def main():
         else:
             print(f"{col:4s} n/a", flush=True)
     report["fm"] = fm
+
+    # PRIMARY per prereg NQ_full_coverage_chars: pooled FM t of each value char
+    # WITH FF5-residualized returns + FF49 industry dummies.
+    factors = json.load(open(os.path.join(ROOT, "raw/ff_monthly/monthly.json")))["factors"]
+    n_resid, n_keep = _ff5_residualize(cs, factors)
+    print(f"ff5 residualization: {n_resid} rows residualized, {n_keep} kept raw (<24mo history)", flush=True)
+    controlled = {}
+    for col in ("bm", "gpm", "roe", "acc", "ep"):
+        use = [x for x in cs if any(r.get(col) is not None for r in x["rows"])]
+        if not use:
+            continue
+        proj = [{"month": x["month"],
+                 "rows": [dict(r, mom=r.get("mom"), size=r.get("size")) for r in x["rows"]]}
+                for x in use]
+        ctrl = fm_controlled(proj, col, use_ff49=True, use_resid=True)
+        dummies_only = fm_controlled(proj, col, use_ff49=True, use_resid=False)
+        resid_only = fm_controlled(proj, col, use_ff49=False, use_resid=True)
+        controlled[col] = {"ff5_ff49": ctrl, "ff49_only": dummies_only, "ff5_only": resid_only}
+        if ctrl.get("t") is not None:
+            print(f"{col:4s} CTRL {ctrl['mean_mo']*1e4:+8.1f} bp/mo  t={ctrl['t']:+5.2f}  "
+                  f"(ff49-only t={dummies_only.get('t', 0) if dummies_only.get('t') is not None else float('nan'):+5.2f}, "
+                  f"ff5-only t={resid_only.get('t', 0) if resid_only.get('t') is not None else float('nan'):+5.2f})",
+                  flush=True)
+    report["fm_controlled"] = controlled
 
     # TERTIARY: bm-vs-ep sleeve head-to-head (same machinery, sort char swap)
     def make_sleeve(cs_sorted_key):
