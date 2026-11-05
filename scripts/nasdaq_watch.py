@@ -194,6 +194,8 @@ def cmd_filings():
         if live_eq is not None:
             # Add equity-like names not yet on roster/dead.
             new_listings = sorted(live_eq - rost_codes - dead_codes)
+            watch_lines = ({l.strip() for l in open(WATCH) if l.strip()}
+                           if os.path.exists(WATCH) else set())
             for t in new_listings:
                 roster.append({"ticker": t, "symbol": f"{t}.US", "dead": False})
                 dead[:] = [x for x in dead if x["ticker"] != t]
@@ -201,8 +203,11 @@ def cmd_filings():
                     tkset.add(t)
                     tk.append(t)
                     m.setdefault(t, m.get(t, ""))
-                with open(WATCH, "a") as f:
-                    f.write(t + "\n")
+                # idempotent append (same killed-run re-append guard as below)
+                if t not in watch_lines:
+                    with open(WATCH, "a") as f:
+                        f.write(t + "\n")
+                    watch_lines.add(t)
                 note(f"NEW LISTING {t}: added to live roster+watchlist "
                      f"(10y Yahoo init; source=nasdaqlisted)")
                 os.system(f"cd {ROOT} && python3 scripts/price_pull.py pull {t} "
@@ -238,6 +243,7 @@ def cmd_filings():
             timeout=120).read().decode())
         live_set = {x["Code"].upper() for x in dl_live
                     if x.get("Exchange") == "NASDAQ" and x.get("Type") in ("Common Stock",)}
+        watch_lines = {l.strip() for l in open(WATCH) if l.strip()} if os.path.exists(WATCH) else set()
         roster = load_json(ROSTER, [])
         rost_codes = {x["ticker"] for x in roster}
         dead = load_json(DEAD_ROSTER, [])
@@ -255,8 +261,13 @@ def cmd_filings():
                 tkset.add(t)
                 tk.append(t)
                 m.setdefault(t, m.get(t, ""))
-            with open(WATCH, "a") as f:
-                f.write(t + "\n")
+            # idempotent append: the roster save lands only at the end of the
+            # pass, so a killed run re-fired "new listing" on the next pass and
+            # duplicated watchlist lines (29 dupes found 2026-10-31)
+            if t not in watch_lines:
+                with open(WATCH, "a") as f:
+                    f.write(t + "\n")
+                watch_lines.add(t)
             note(f"NEW LISTING {t}: added to live roster+watchlist (10y Yahoo init)")
             os.system(f"cd {ROOT} && python3 scripts/price_pull.py pull {t} --backfill 10y "
                       ">> logs/nasdaq-price-new.log 2>&1")
