@@ -1,0 +1,43 @@
+# PRE-REGISTRATION - NQ_full_coverage_chars (NASDAQ Stage 2/3, companyfacts layer).
+# Written 2026-11-05 BEFORE the companyfacts-powered re-run.  Authorized by
+# Aaron ("go ahead with all avenues") same day.  Builds on:
+#   - NQ_fundamental_value_chars (78e6449): DERA-zip fill gave bm t=+0.30 on
+#     ~93% of name-months; prereg band |t|<1 -> park HARDENED.
+#   - NQ_pooled_dev_modern (47a84a2): pooled cheap_small t=+0.11.
+# This prereg exists because 78e6449 was a ONE-PASS prereg: a better data
+# layer changes the population (full coverage, cleaner TTM chains, more
+# filers) and must be preregistered separately, not silently re-run.
+#
+# New data layer: SEC companyfacts.zip (verified 2026-11-05, 1.42 GB, full
+# XBRL fact set for every filer, PIT filed dates, standardized frames).
+# Distilled per-CIK for cross-section CIKs into facts/companyfacts/<CIK>.json
+# (tag -> [{end, val, fy, fp, form, filed, frame}]).  No existing facts file
+# modified.  Ticker->CIK joins stay local (dead roster + ticker map + class
+# roots); the 39 retired-ticker boundary may shrink where CIKs are known.
+#
+# Window: pooled 2014-07..2024-03 (same as both predecessor preregs).
+#   HOLDOUT 2024-04..present: NEVER READ.
+# Chars: bm, gpm, roe, acc (same definitions as 78e6449) + ep (companyfacts
+#   EarningsPerShareDiluted cross-check against the fill layer), mom/size/liq
+#   unchanged (price layer untouched).  FM estimator verbatim (z +/-3, r1
+#   winsorized 1/99, LIQ orthogonalized, NW1).  Plus Fama-French 5-factor +
+#   49-industry controls (E2, merged into this run per authorization):
+#   FM with HML/RMW/CMA controls and sector = FF49 industry classification
+#   (mapped from SIC via the FF breakpoint mapping) - this tests whether the
+#   chars survive proper value/profitability/investment controls rather than
+#   9 SIC divisions.
+#
+# Verdict rules (fixed NOW):
+#   - PRIMARY: pooled FM t of bm with FF5+FF49 controls.  ESTABLISHED iff
+#     |t|>=2 AND positive (higher bm -> higher r1).  [1,2) = suggestive,
+#     report-only, line still parked.  <1 = line CLOSED on all available
+#     bases (ep, DERA-zip bm, companyfacts bm) - no further value preregs on
+#     this dataset.
+#   - SECONDARY: gpm/roe/acc controlled t (recorded, bands as PRIMARY).
+#   - TERTIARY: ep-fill vs companyfacts-ep coverage + value agreement
+#     (data-quality check; material disagreement = investigate BEFORE
+#     interpreting any other number).
+#   - One pass on the completed layer; report everything including
+#     refutations.  Live book untouched.
+#
+# Reporting: logs/nasdaq_fm_bmv_cf.json, HISTORY.md, finance-desk skill.
