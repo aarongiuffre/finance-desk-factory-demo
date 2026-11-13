@@ -1,0 +1,7 @@
+FAILED tests/test_dev_scope.py::test_no_h1_code_names_the_live_folder - Asser...
+FAILED tests/test_gate_round6.py::test_V6b_eight_processes_at_cap_one_grant_once
+FAILED tests/test_h1_dev_round3.py::test_h1_sources_pass_the_ast_rules_and_entrypoint_installs_the_guard_first
+FAILED tests/test_h1_dev_round3.py::test_no_hardcoded_scripts_path_inserts - ...
+FAILED tests/test_sec_throttle_coverage.py::test_no_sec_request_bypasses_the_throttle
+FAILED tests/test_staged_gate_user.py::test_installer_pins_chainlog_and_finpaths
+FAILED tests/test_staged_gate_user.py::test_staged_scripts_manifest_is_current

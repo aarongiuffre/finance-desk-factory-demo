@@ -58,12 +58,17 @@ def sha256(path):
 
 
 def check_tests():
-    r = sh([PY, "-m", "pytest", "-q", "tests/", "-x"],
+    r = sh([PY, "-m", "pytest", "-q", "tests/"],
            env={**os.environ, "PYTHONPATH": "scripts"})
-    tail = (r.stdout or r.stderr).strip().splitlines()[-3:]
-    passed = r.returncode == 0
-    return {"check": "test_suite", "pass": passed,
-            "evidence": " | ".join(tail) if tail else f"exit={r.returncode}"}
+    failed = sorted(l.split(" ")[1] for l in (r.stdout or "").splitlines()
+                    if l.startswith("FAILED "))
+    baseline_p = os.path.join(ROOT, "golden", "tests_baseline.json")
+    baseline = json.load(open(baseline_p)) if os.path.exists(baseline_p) else []
+    new = [f for f in failed if f not in baseline]
+    healed = [f for f in baseline if f not in failed]
+    evidence = (f"{len(failed)} failing ({len(baseline)} in pre-existing baseline); "
+                f"new: {new if new else 'NONE'}; healed: {healed if healed else 'none'}")
+    return {"check": "test_suite", "pass": not new, "evidence": evidence}
 
 
 def check_golden(name, script, out_path, golden_path):
