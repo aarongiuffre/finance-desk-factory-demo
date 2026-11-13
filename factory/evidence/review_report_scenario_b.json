@@ -1,0 +1,18 @@
+{
+ "verdict": "FAIL",
+ "findings": [
+  {
+   "claim": "Changing the slice index alters the lookback window size for lo5, introducing a logic change that fails golden backtests.",
+   "evidence": "scripts/qs_timing_dev.py: line 123 changed `min(l[i - 6:i - 1])` to `min(l[i - 5:i - 1])`, causing golden_qs_timing check failure with CAGR mismatch (-6.5 vs -7.5).",
+   "severity": "critical"
+  },
+  {
+   "claim": "Gate failure overrides reviewer verdict (hard rule)",
+   "evidence": "golden_qs_timing",
+   "severity": "critical"
+  }
+ ],
+ "gemini_raw_ok": true,
+ "gate_all_pass": false,
+ "model": "gemini-3.5-flash"
+}

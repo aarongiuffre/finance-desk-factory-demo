@@ -1,0 +1,13 @@
+[16:27:25] TICKET T-102: looks-plausible refactor with a subtle off-by-one planted
+[16:27:25]   branch: factory/qs-timing-bad
+[16:27:25]   refactor applied + committed on factory/qs-timing-bad: factory/planted_bug.diff
+[16:27:25]   GATE: running (test suite + golden backtests)…
+[16:28:57]   [PASS] test_suite: 7 failing (7 in pre-existing baseline); new: NONE; healed: none
+    [PASS] golden_attention: exact match (<=1e-9 numeric tolerance); golden sha256 4459fce03ce34a2a…
+    [FAIL] golden_qs_timing: 6 diffs; first: $.failed_bounce.cagr: -6.5 vs -7.5 (diff 1.000000e+00 > 1e-09)
+  GATE: FAIL -> /data/finance/factory-demo-20261113/factory/gate_report.json
+[16:28:57]   GEMINI REVIEW: …
+[16:29:17]   GEMINI: FAIL (2 findings) -> /data/finance/factory-demo-20261113/factory/review_report.json
+    [critical] Changing the slice index alters the lookback window size for lo5, introducing a logic change that fails golden
+    [critical] Gate failure overrides reviewer verdict (hard rule)
+[16:29:17]   REJECTED (gate_pass=False, gemini=FAIL)

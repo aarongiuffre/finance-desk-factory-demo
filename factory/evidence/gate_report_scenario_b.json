@@ -1,0 +1,21 @@
+{
+ "gate_version": 1,
+ "checks": [
+  {
+   "check": "test_suite",
+   "pass": true,
+   "evidence": "7 failing (7 in pre-existing baseline); new: NONE; healed: none"
+  },
+  {
+   "check": "golden_attention",
+   "pass": true,
+   "evidence": "exact match (<=1e-9 numeric tolerance); golden sha256 4459fce03ce34a2a\u2026"
+  },
+  {
+   "check": "golden_qs_timing",
+   "pass": false,
+   "evidence": "6 diffs; first: $.failed_bounce.cagr: -6.5 vs -7.5 (diff 1.000000e+00 > 1e-09)"
+  }
+ ],
+ "all_pass": false
+}
