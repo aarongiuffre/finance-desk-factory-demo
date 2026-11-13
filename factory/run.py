@@ -48,6 +48,11 @@ def run(ticket, branch, patch=None, description=""):
     if rc != 0:
         log(f"  FATAL: cannot create branch: {out[-200:]}")
         return False
+    dirty_rc, dirty = sh(["git", "status", "--porcelain", "--", "scripts/", "tests/"])
+    if dirty.strip():
+        log(f"  FATAL: working tree has uncommitted changes under scripts//tests/ "
+            f"(refusing to build on a dirty tree):\n{dirty.strip()[:400]}")
+        return False
     if patch:
         rc, out = sh(["git", "apply", patch])
         if rc != 0:
