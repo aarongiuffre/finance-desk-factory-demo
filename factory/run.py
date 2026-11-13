@@ -58,7 +58,13 @@ def run(ticket, branch, patch=None, description=""):
         if rc != 0:
             log(f"  FATAL: patch {patch} failed to apply: {out[-300:]}")
             return False
-        log(f"  refactor applied: {patch}")
+        rc, out = sh(["git", "add", "-A"])
+        rc, out = sh(["git", "commit", "-q", "-m",
+                      f"Ticket {ticket}: refactor applied from {patch}"])
+        if rc != 0:
+            log(f"  FATAL: could not commit refactor on {branch}: {out[-300:]}")
+            return False
+        log(f"  refactor applied + committed on {branch}: {patch}")
 
     log("  GATE: running (test suite + golden backtests)…")
     rc, out = sh([PY, "factory/gate.py"])
