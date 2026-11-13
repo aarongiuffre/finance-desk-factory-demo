@@ -54,17 +54,33 @@ def run(ticket, branch, patch=None, description=""):
             f"(refusing to build on a dirty tree):\n{dirty.strip()[:400]}")
         return False
     if patch:
-        rc, out = sh(["git", "apply", patch])
+        rc, out = sh(["git", "apply", "--check", patch])
         if rc != 0:
-            log(f"  FATAL: patch {patch} failed to apply: {out[-300:]}")
-            return False
-        rc, out = sh(["git", "add", "-A"])
-        rc, out = sh(["git", "commit", "-q", "-m",
-                      f"Ticket {ticket}: refactor applied from {patch}"])
-        if rc != 0:
-            log(f"  FATAL: could not commit refactor on {branch}: {out[-300:]}")
-            return False
-        log(f"  refactor applied + committed on {branch}: {patch}")
+            # Is the refactor already in the base? (one-shot demo: scenario (a)
+            # merges the refactor into main, so a re-run cannot re-apply it)
+            probe = "week_ends(bars)" if "refactor_qs" in (patch or "") else None
+            already = False
+            if probe:
+                rc2, out2 = sh(["git", "grep", "-q", probe, "--", "scripts/qs_timing_dev.py"])
+                already = (rc2 == 0)
+            if already:
+                log(f"  refactor already merged (idempotent re-run): {patch}")
+                patch = None
+            else:
+                log(f"  FATAL: patch {patch} failed to apply and refactor NOT in base: {out[-300:]}")
+                return False
+        else:
+            rc, out = sh(["git", "apply", patch])
+            if rc != 0:
+                log(f"  FATAL: patch {patch} failed to apply: {out[-300:]}")
+                return False
+            rc, out = sh(["git", "add", "-A"])
+            rc, out = sh(["git", "commit", "-q", "-m",
+                          f"Ticket {ticket}: refactor applied from {patch}"])
+            if rc != 0:
+                log(f"  FATAL: could not commit refactor on {branch}: {out[-300:]}")
+                return False
+            log(f"  refactor applied + committed on {branch}: {patch}")
 
     log("  GATE: running (test suite + golden backtests)…")
     rc, out = sh([PY, "factory/gate.py"])
@@ -72,7 +88,7 @@ def run(ticket, branch, patch=None, description=""):
     gate_pass = rc == 0
 
     log("  GEMINI REVIEW: …")
-    rc2, out2 = sh([PY, "factory/review.py", patch or "factory/refactor.diff"])
+    rc2, out2 = sh([PY, "factory/review.py", patch or "factory/refactor_qs.diff"])
     log("  " + "\n  ".join(l for l in out2.strip().splitlines() if l.strip()))
     review_pass = rc2 == 0
     try:
