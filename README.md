@@ -40,25 +40,30 @@ redacted from all error paths in `factory/review.py`.
 
 ## Demo outputs (as run 2026-11-13)
 
-**Scenario (a) — good refactor → MERGED** (`factory/run_log.txt`):
+**Scenario (a) — good refactor → MERGED** (`factory/evidence/run_log.txt`):
 - patch `factory/refactor_qs.diff` (dead O(n²) `rest` computation removed,
-  `week_ends()` helper extracted, `datetime` import moved to top) applied clean.
-- Gate: test_suite PASS (7 failing = exactly the 7 in the pre-existing baseline,
-  new: NONE); golden_attention PASS; golden_qs_timing PASS (exact match, 1e-9).
-- Gemini: **PASS**, 1 finding (info): "Clean refactor extracting week_ends helper
-  and removing dead unused variables… without behavior change".
-- Merge: main → `cc1914f`.
+  `week_ends()` helper extracted, `datetime` import moved to top) applied
+  and committed on ticket branch.
+- Gate: test_suite PASS (6 failing vs 7 in the pre-existing baseline — one
+  flaky baseline test happened to heal, reported as `healed`); golden_attention
+  PASS; golden_qs_timing PASS (exact match, 1e-9).
+- Gemini: **PASS**, 0 findings.
+- Merge: real merge commit `687c2a6` "Factory merge: T-101 (gate PASS, Gemini PASS)";
+  post-merge main verified to contain the refactor
+  (`factory/evidence/main_qs_timing_post_merge.py`).
 
-**Scenario (b) — planted bad refactor → REJECTED** (`factory/run_log.txt`):
+**Scenario (b) — planted bad refactor → REJECTED** (`factory/evidence/run_log_scenario_b.txt`):
 - patch `factory/planted_bug.diff` changes `min(l[i-6:i-1])` → `min(l[i-5:i-1])`
   (off-by-one in the failed-bounce rolling-low window; commit message reads
   plausibly: "simplify failed-bounce lookback window").
 - Unit tests: PASS (nothing covers this script — this is the point).
-- Gate: **FAIL** — `golden_qs_timing: 6 diffs; first: $.failed_bounce.cagr: -6.5 vs -7.5`.
-- Gemini: **FAIL** — independently flagged "[critical] Slice range for calculating
-  lo5 in scripts/qs_timing_dev.py was altered, changing backtest signal generation";
-  plus the hard-rule finding (gate failure forces FAIL).
-- Rejected; not merged. `factory/fail_counts.json` records T-102: 1.
+- Gate: **FAIL** — `golden_qs_timing: 6 diffs; first: $.failed_bounce.cagr: -6.5 vs -7.5`
+  (`factory/evidence/gate_report_scenario_b.json`).
+- Gemini: **FAIL** — independently flagged "[critical] Changing the slice index
+  alters the lookback window size for lo5, introducing a logic change that fails
+  golden…"; plus the hard-rule finding (gate failure forces FAIL)
+  (`factory/evidence/review_report_scenario_b.json`).
+- Rejected; not merged; `T-102: 1` recorded in fail_counts.
 
 ## Files
 
