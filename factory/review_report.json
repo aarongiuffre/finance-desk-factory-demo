@@ -1,0 +1,18 @@
+{
+ "verdict": "FAIL",
+ "findings": [
+  {
+   "claim": "Slice range for calculating lo5 in scripts/qs_timing_dev.py was altered, changing backtest signal generation logic.",
+   "evidence": "scripts/qs_timing_dev.py line 123 changed `min(l[i - 6:i - 1])` to `min(l[i - 5:i - 1])`, causing golden_qs_timing backtest failure with 6 diffs (e.g. $.failed_bounce.cagr diff 1.0).",
+   "severity": "critical"
+  },
+  {
+   "claim": "Gate failure overrides reviewer verdict (hard rule)",
+   "evidence": "golden_qs_timing",
+   "severity": "critical"
+  }
+ ],
+ "gemini_raw_ok": true,
+ "gate_all_pass": false,
+ "model": "gemini-3.5-flash"
+}
