@@ -1,0 +1,21 @@
+{
+ "gate_version": 1,
+ "checks": [
+  {
+   "check": "test_suite",
+   "pass": false,
+   "evidence": "python -m pytest: error: unrecognized arguments: --timeout=300 |   inifile: /data/finance/factory-demo-20261113/pytest.ini |   rootdir: /data/finance/factory-demo-20261113"
+  },
+  {
+   "check": "golden_attention",
+   "pass": true,
+   "evidence": "exact match (<=1e-9 numeric tolerance); golden sha256 4459fce03ce34a2a\u2026"
+  },
+  {
+   "check": "golden_qs_timing",
+   "pass": true,
+   "evidence": "exact match (<=1e-9 numeric tolerance); golden sha256 508eb21ee17fb8ef\u2026"
+  }
+ ],
+ "all_pass": false
+}
