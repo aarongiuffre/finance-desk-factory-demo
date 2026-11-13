@@ -1,0 +1,62 @@
+{
+ "spy_bh": {
+  "label": "SPY buy&hold",
+  "trades": 1,
+  "exposure": 1.0,
+  "cagr": 11.6,
+  "maxdd": -34.1,
+  "sharpe": 0.73,
+  "post24_cagr": 71.5,
+  "post24_maxdd": -19.0
+ },
+ "failed_bounce": {
+  "label": "failed bounce",
+  "trades": 72,
+  "exposure": 0.065,
+  "cagr": -6.5,
+  "maxdd": -58.8,
+  "sharpe": -1.52,
+  "post24_cagr": -28.2,
+  "post24_maxdd": -5.4
+ },
+ "turn_of_month": {
+  "label": "turn of month",
+  "trades": 154,
+  "exposure": 0.333,
+  "cagr": 1.5,
+  "maxdd": -18.3,
+  "sharpe": 0.2,
+  "post24_cagr": 7.5,
+  "post24_maxdd": -18.3
+ },
+ "four_down_days": {
+  "label": "four down days",
+  "trades": 66,
+  "exposure": 0.032,
+  "cagr": 0.8,
+  "maxdd": -18.0,
+  "sharpe": 0.17,
+  "post24_cagr": 3.8,
+  "post24_maxdd": -2.0
+ },
+ "down_week": {
+  "label": "down week",
+  "trades": 168,
+  "exposure": 0.432,
+  "cagr": 2.3,
+  "maxdd": -30.6,
+  "sharpe": 0.24,
+  "post24_cagr": 11.9,
+  "post24_maxdd": -18.0
+ },
+ "rsi2_classic": {
+  "label": "RSI(2) classic",
+  "trades": 178,
+  "exposure": 0.216,
+  "cagr": 0.5,
+  "maxdd": -38.0,
+  "sharpe": 0.1,
+  "post24_cagr": 2.3,
+  "post24_maxdd": -8.5
+ }
+}

@@ -1,0 +1,18 @@
+{
+ "threshold_z": 2.0,
+ "window_days": 5,
+ "cost_rt_bp": 40.0,
+ "n_events_total": 540,
+ "is": {
+  "n": 378,
+  "mean_bp": -16.7,
+  "t": -0.63
+ },
+ "oos": {
+  "n": 162,
+  "mean_bp": 19.9,
+  "t": 0.42
+ },
+ "leakage_rule": "entry at close of first trading day AFTER the event day (pageviews complete only next UTC day)",
+ "verdict": "KILL"
+}
