@@ -105,7 +105,7 @@ def main():
                 pos[i] = 1.0
         else:
             ibs = (c[i - 1] - l[i - 1]) / max(1e-9, h[i - 1] - l[i - 1])
-            lo5 = min(l[i - 5:i - 1])
+            lo5 = min(l[i - 6:i - 1])
             if ibs >= 0.6 and l[i - 1] < lo5 and c[i - 1] < c[i - 2]:
                 inpos = True
                 pos[i] = 1.0
