@@ -61,10 +61,15 @@ def run(ticket, branch, patch=None, description=""):
     gate_pass = rc == 0
 
     log("  GEMINI REVIEW: …")
-    rc2, out2 = sh([PY, "factory/review.py", "factory/refactor.diff"])
+    rc2, out2 = sh([PY, "factory/review.py", patch or "factory/refactor.diff"])
     log("  " + "\n  ".join(l for l in out2.strip().splitlines() if l.strip()))
     review_pass = rc2 == 0
-    review = json.load(open(os.path.join(ROOT, "factory", "review_report.json")))
+    try:
+        review = json.load(open(os.path.join(ROOT, "factory", "review_report.json")))
+    except (OSError, ValueError):
+        review = {"verdict": "FAIL", "findings": [
+            {"claim": "review_report.json missing", "evidence": out2[-200:],
+             "severity": "critical"}]}
 
     if not gate_pass or not review_pass:
         verdict = review.get("verdict", "?")
