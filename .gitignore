@@ -33,3 +33,4 @@ folds/
 
 # crypto paper bars (regenerable via scripts/crypto_pull.py)
 data/
+__pycache__/
