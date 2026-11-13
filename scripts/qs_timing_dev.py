@@ -15,6 +15,7 @@ return chain.
 import json
 import math
 import os
+from datetime import date
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPY = os.path.join(ROOT, "raw", "price", "SPY.json")
@@ -27,6 +28,20 @@ def load_spy():
     bars = [b for b in bars if b.get("d") and all(
         b.get(k) is not None for k in ("o", "h", "l", "c"))]
     return bars
+
+
+def week_ends(bars):
+    """Last trading-day index of each ISO week: the day before a calendar
+    gap >= 3 (Fri->Mon = 3 days; >=4 would miss regular weekends), plus the
+    final bar."""
+    out = []
+    for i in range(len(bars) - 1):
+        d0 = date.fromisoformat(bars[i]["d"])
+        d1 = date.fromisoformat(bars[i + 1]["d"])
+        if (d1 - d0).days >= 3:
+            out.append(i)
+    out.append(len(bars) - 1)
+    return out
 
 
 def rsi2(closes):
@@ -115,7 +130,6 @@ def main():
     pos = [0.0] * n
     for i in range(n - 1):
         mi = bars[i]["d"][:7]
-        rest = [b["d"][:7] for b in bars[i + 1:]]
         if mi != bars[i + 1]["d"][:7]:
             # last trading day of month
             for k in range(4):
@@ -153,17 +167,7 @@ def main():
     #    last trading day close, exited after 5 trading days (or at next
     #    week-end close).
     pos = [0.0] * n
-    fri = [i for i in range(n) if i + 1 >= n or bars[i + 1]["d"][:7] != bars[i]["d"][:7]]
-    # simpler: last trading day of each ISO week (Fri-ish) = last day before
-    # a gap >= 4 calendar days OR last bar
-    week_end = []
-    for i in range(n - 1):
-        from datetime import date
-        d0 = date.fromisoformat(bars[i]["d"])
-        d1 = date.fromisoformat(bars[i + 1]["d"])
-        if (d1 - d0).days >= 3:  # Fri->Mon = 3 days; >=4 missed regular weekends
-            week_end.append(i)
-    week_end.append(n - 1)
+    week_end = week_ends(bars)
     for wi in range(1, len(week_end)):
         pe, ce = week_end[wi - 1], week_end[wi]
         if c[ce] < c[pe]:
