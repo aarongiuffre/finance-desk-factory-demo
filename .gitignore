@@ -34,3 +34,8 @@ folds/
 # crypto paper bars (regenerable via scripts/crypto_pull.py)
 data/
 __pycache__/
+factory/run_log.txt
+factory/gate_report.json
+factory/review_report.json
+factory/fail_counts.json
+factory/__pycache__/
