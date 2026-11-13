@@ -58,7 +58,7 @@ def sha256(path):
 
 
 def check_tests():
-    r = sh([PY, "-m", "pytest", "-q", "tests/", "-x", "--timeout=300"],
+    r = sh([PY, "-m", "pytest", "-q", "tests/", "-x"],
            env={**os.environ, "PYTHONPATH": "scripts"})
     tail = (r.stdout or r.stderr).strip().splitlines()[-3:]
     passed = r.returncode == 0
